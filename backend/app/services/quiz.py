@@ -36,41 +36,60 @@ logger = logging.getLogger(__name__)
 
 QUIZ_PROMPT = """You are an expert educator. Based on the following text, generate exactly {num_questions} quiz questions.
 
-Requirements:
-- Mix question types: mostly multiple_choice, some true_false, optionally checkbox
-- Test understanding and critical thinking, not just memory
-- Options must be plausible (no obviously wrong answers)
-- For the "explanation" field, write a COMPREHENSIVE explanation that:
-  1. Clearly states WHY the correct answer is right (with reference to the text)
-  2. For multiple_choice: briefly explains why each WRONG option is incorrect
-  3. For true_false: explains the reasoning behind the correct value
-  Keep the explanation concise but educational (2-5 sentences).
+QUESTION TYPE DISTRIBUTION (strictly follow this):
+- ~50% multiple_choice  — exactly 1 correct answer, 4 options
+- ~30% checkbox         — 2 or more correct answers, 4 options (select ALL that apply)
+- ~20% true_false       — Tačno / Netačno
+
+CRITICAL RULES FOR OPTIONS:
+1. Options MUST be COMPLETE MEANINGFUL SENTENCES or PHRASES — NEVER single letters like "A", "B", "C", "D"
+2. For multiple_choice and checkbox: write 4 plausible options as full text
+3. For checkbox: correct_answer MUST be exactly 2 or more comma-separated option values that EXACTLY match text in options array
+4. correct_answer must EXACTLY match the text of the option(s) — case-sensitive, word-for-word
+5. Options must test real understanding — distractors should be plausible but clearly wrong on close reading
+
+EXPLANATION RULES:
+- Clearly state WHY each correct answer is right (cite the text)
+- For multiple_choice: briefly explain why each wrong option is incorrect
+- For checkbox: explain why each correct option qualifies AND why wrong ones don't
+- For true_false: explain what makes the statement true or false
+- 2-5 sentences, educational tone
 - Use the SAME LANGUAGE as the text
 
 Return ONLY a valid JSON array — no markdown, no extra text:
 [
   {{
-    "question_text": "Question?",
+    "question_text": "What is the primary purpose of the layer mode feature?",
     "question_type": "multiple_choice",
-    "options": ["A", "B", "C", "D"],
-    "correct_answer": "A",
-    "explanation": "A is correct because [reason from text]. B is wrong because [reason]. C is wrong because [reason]. D is wrong because [reason].",
+    "options": [
+      "To control laser speed and power per layer",
+      "To import files from external applications",
+      "To set the workspace background color",
+      "To manage user account settings"
+    ],
+    "correct_answer": "To control laser speed and power per layer",
+    "explanation": "Layer modes allow assigning different speed and power settings to each layer, enabling precise control over cutting and engraving operations. The other options describe unrelated features not associated with layer modes.",
     "points": 1
   }},
   {{
-    "question_text": "True or false?",
+    "question_text": "Is it true that open shapes cannot be filled with the fill tool?",
     "question_type": "true_false",
     "options": ["Tačno", "Netačno"],
     "correct_answer": "Tačno",
-    "explanation": "Tačno, because [specific reason from text]. The opposite would mean [why false is wrong].",
+    "explanation": "Tačno — the fill tool only works on closed shapes because filling requires a fully enclosed boundary. Open paths have no enclosed area to fill.",
     "points": 1
   }},
   {{
-    "question_text": "Which are correct? (select all)",
+    "question_text": "Which of the following are valid reasons to use overscanning? (select all that apply)",
     "question_type": "checkbox",
-    "options": ["A", "B", "C", "D"],
-    "correct_answer": "A,C",
-    "explanation": "A and C are correct because [reason]. B is incorrect because [reason]. D is incorrect because [reason].",
+    "options": [
+      "To prevent burnt edges at the start and end of each scan line",
+      "To allow the laser head to accelerate before reaching the work area",
+      "To increase the total file size of the project",
+      "To compensate for mechanical inertia at direction changes"
+    ],
+    "correct_answer": "To prevent burnt edges at the start and end of each scan line,To allow the laser head to accelerate before reaching the work area,To compensate for mechanical inertia at direction changes",
+    "explanation": "Overscanning extends the laser path beyond the design edges so the head reaches full speed before engraving begins, preventing burnt edges and compensating for inertia. Increasing file size is not a purpose of overscanning.",
     "points": 2
   }}
 ]
@@ -348,6 +367,7 @@ def _parse_questions(raw: str) -> List[dict]:
 
 
 def _validate_questions(data: list) -> List[dict]:
+    """Validira i čisti pitanja koja dolaze od AI providera."""
     required = ("question_text", "question_type", "options", "correct_answer")
     valid = []
     for i, q in enumerate(data):
@@ -355,8 +375,26 @@ def _validate_questions(data: list) -> List[dict]:
             continue
         if not all(k in q for k in required):
             continue
+        # Reject single-letter placeholder options (AI ignored the instructions)
+        options = q.get("options", [])
+        if isinstance(options, list) and options:
+            if all(len(str(o).strip()) <= 1 for o in options):
+                logger.warning(f"Pitanje {i} ima samo-slova opcije, preskačem: {options}")
+                continue
         q.setdefault("explanation", "")
         q.setdefault("points", 1)
+        # Ensure checkbox has at least 2 correct answers and points >= 2
+        if q.get("question_type") == "checkbox":
+            correct = q.get("correct_answer", "")
+            correct_parts = [p.strip() for p in correct.split(",") if p.strip()]
+            if len(correct_parts) < 2:
+                logger.warning(f"Pitanje {i} je checkbox ali ima samo 1 tačan odgovor, skidam na multiple_choice")
+                q["question_type"] = "multiple_choice"
+                q["correct_answer"] = correct_parts[0] if correct_parts else correct
+            else:
+                # Ensure checkbox scores at least 2 points
+                if q.get("points", 1) < 2:
+                    q["points"] = 2
         q["order_index"] = i
         valid.append(q)
     return valid
