@@ -54,7 +54,7 @@ fi
 
 # ── 4. Run unit tests ──────────────────────────────────────────────────────────
 echo -e "\n${YELLOW}[4/5] Pokretanje unit testova...${NC}"
-DATABASE_URL="sqlite:///./test_local.db" PYTHONPATH=. python3 -m pytest app/tests/unit/ \
+SQLALCHEMY_DATABASE_URI="sqlite:///./test_local.db" PYTHONPATH=. .venv/bin/pytest app/tests/unit/ \
     -v --timeout=30 -q 2>&1 | tail -20
 rm -f test_local.db
 echo ""
