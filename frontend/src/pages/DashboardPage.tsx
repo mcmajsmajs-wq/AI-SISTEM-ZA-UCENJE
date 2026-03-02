@@ -84,11 +84,11 @@ export default function DashboardPage() {
       lightBg: 'bg-violet-50',
       iconBg: 'bg-gradient-to-br from-violet-500 to-violet-600',
       iconColor: 'text-violet-600',
-      trend: `${translationPct}% ukupno`,
+      trend: `${translationDisplay} ukupno`,
     },
     {
       name: 'Napredak prevoda',
-      value: `${translationPct}%`,
+      value: translationDisplay,
       icon: TrendingUp,
       gradient: 'from-cyan-500 to-cyan-600',
       lightBg: 'bg-cyan-50',
@@ -317,7 +317,7 @@ export default function DashboardPage() {
                   />
                 </div>
                 <div className="flex justify-between items-end">
-                  <span className="text-2xl font-extrabold text-gray-900">{translationPct}%</span>
+                  <span className="text-2xl font-extrabold text-gray-900">{translationDisplay}</span>
                   <span className="text-xs text-gray-400 mb-1">
                     {translationPct === 100 ? '✓ Sve prevedeno' : `${userStats.total_chunks - userStats.translated_chunks} odlomaka preostalo`}
                   </span>
