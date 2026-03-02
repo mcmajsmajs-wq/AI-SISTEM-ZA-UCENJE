@@ -526,21 +526,34 @@ async def get_document_progress(
     pages_total = proc_progress.get("pages_total", document.total_pages or 0)
     chunks_so_far = proc_progress.get("chunks_so_far", 0)
     elapsed_seconds = proc_progress.get("elapsed_seconds", 0)
-    
+    # last_activity_at: from processing or translation progress
+    trans_progress = meta.get("translation_progress", {})
+    last_activity_at = (
+        proc_progress.get("last_activity_at")
+        or trans_progress.get("last_activity_at")
+    )
+
     progress_percentage = 0
     current_phase = "waiting"
     phase_label = "Čekanje na obradu"
-    
+
     if document.status == "processing":
         current_phase = "extracting_text"
-        phase_label = "Ekstrakcija teksta i kreiranje odlomaka"
-        if pages_total > 0:
+        if pages_total > 0 and pages_done > 0:
+            phase_label = f"Ekstrakcija teksta — strana {pages_done}/{pages_total}"
             progress_percentage = int((pages_done / pages_total) * 85)  # 0-85%
+        elif pages_total > 0:
+            phase_label = "Pokretanje procesora PDF-a..."
+            progress_percentage = 5
         else:
-            progress_percentage = 10  # unknown, show something
+            phase_label = "Pokretanje procesora PDF-a..."
+            progress_percentage = 5
     elif document.status == "translating":
         current_phase = "translating"
-        phase_label = "Prevođenje odlomaka"
+        if translated_chunks > 0:
+            phase_label = f"Prevođenje — {translated_chunks}/{total_chunks} odlomaka"
+        else:
+            phase_label = "Pokretanje prevodioca..."
         # Use 0-100% range for translation (not 85-100%) so progress bar is meaningful
         progress_percentage = int(translated_chunks / total_chunks * 100) if total_chunks > 0 else 0
     elif document.status == "completed":
@@ -551,7 +564,7 @@ async def get_document_progress(
         current_phase = "error"
         phase_label = "Greška pri obradi"
         progress_percentage = 0
-    
+
     return {
         "document_id": document_id,
         "status": document.status,
@@ -566,6 +579,7 @@ async def get_document_progress(
         "pages_total": pages_total,
         "chunks_so_far": chunks_so_far,
         "elapsed_seconds": elapsed_seconds,
+        "last_activity_at": last_activity_at,
         "message": f"Document is {document.status}"
     }
 

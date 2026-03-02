@@ -45,13 +45,13 @@ export default function DashboardPage() {
     queryFn: () => aiSettingsApi.get().then(r => r.data),
   })
 
-  const userStats = stats?.data || {
-    total_documents: 0,
-    total_chunks: 0,
-    translated_chunks: 0,
-    total_quizzes: 0,
-    average_score: 0,
-    study_streak: 0,
+  const userStats = {
+    total_documents: stats?.data?.total_documents ?? 0,
+    total_chunks: stats?.data?.total_chunks ?? 0,
+    translated_chunks: stats?.data?.translated_chunks ?? 0,
+    total_quizzes_taken: stats?.data?.total_quizzes_taken ?? 0,
+    average_score: stats?.data?.average_score ?? 0,
+    study_streak: stats?.data?.study_streak ?? stats?.data?.current_streak_days ?? 0,
   }
 
   const analytics = (analyticsData as any)?.data
@@ -59,6 +59,9 @@ export default function DashboardPage() {
   const translationPct = userStats.total_chunks > 0
     ? Math.round((userStats.translated_chunks / userStats.total_chunks) * 100)
     : 0
+  const translationDisplay = translationPct === 0 && userStats.translated_chunks > 0
+    ? '< 1%'
+    : `${translationPct}%`
 
   const today = new Date().toLocaleDateString('sr-RS', { weekday: 'long', day: 'numeric', month: 'long' })
 
@@ -268,8 +271,8 @@ export default function DashboardPage() {
                   <Trophy className="w-4 h-4 text-white" />
                 </div>
                 <span className="text-sm font-semibold text-emerald-700">Kvizovi</span>
-                {userStats.total_quizzes > 0 && (
-                  <span className="text-xs text-emerald-500 ml-auto">{userStats.total_quizzes} kvizova</span>
+                {userStats.total_quizzes_taken > 0 && (
+                  <span className="text-xs text-emerald-500 ml-auto">{userStats.total_quizzes_taken} kvizova</span>
                 )}
                 <ArrowRight className="w-4 h-4 text-emerald-400 ml-auto group-hover:translate-x-0.5 transition-transform" />
               </Link>
@@ -292,20 +295,35 @@ export default function DashboardPage() {
           {/* Translation progress */}
           <div className="card p-5">
             <h3 className="text-sm font-bold text-gray-900 mb-4">Napredak prevoda</h3>
-            <div className="flex items-center justify-between mb-2">
-              <span className="text-xs text-gray-500">Prevedeni odlomci</span>
-              <span className="text-xs font-bold text-gray-900">{userStats.translated_chunks}/{userStats.total_chunks}</span>
-            </div>
-            <div className="progress-bar mb-3">
-              <div
-                className="progress-fill bg-gradient-to-r from-indigo-500 to-violet-500"
-                style={{ width: `${translationPct}%` }}
-              />
-            </div>
-            <div className="flex justify-between">
-              <span className="text-2xl font-extrabold text-gray-900">{translationPct}%</span>
-              <span className="text-xs text-gray-400 self-end mb-1">završeno</span>
-            </div>
+            {userStats.total_chunks === 0 ? (
+              <div className="text-center py-3">
+                <p className="text-sm text-gray-400">Još nema obrađenih dokumenata</p>
+                <Link to="/documents" className="text-xs text-indigo-500 hover:underline mt-1 inline-block">
+                  Dodaj dokument →
+                </Link>
+              </div>
+            ) : (
+              <>
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-gray-500">Prevedeni odlomci</span>
+                  <span className="text-xs font-bold text-gray-900">
+                    {userStats.translated_chunks} / {userStats.total_chunks}
+                  </span>
+                </div>
+                <div className="progress-bar mb-3">
+                  <div
+                    className="progress-fill bg-gradient-to-r from-indigo-500 to-violet-500"
+                    style={{ width: `${translationPct}%` }}
+                  />
+                </div>
+                <div className="flex justify-between items-end">
+                  <span className="text-2xl font-extrabold text-gray-900">{translationPct}%</span>
+                  <span className="text-xs text-gray-400 mb-1">
+                    {translationPct === 100 ? '✓ Sve prevedeno' : `${userStats.total_chunks - userStats.translated_chunks} odlomaka preostalo`}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
 
           {/* AI Provider Card */}

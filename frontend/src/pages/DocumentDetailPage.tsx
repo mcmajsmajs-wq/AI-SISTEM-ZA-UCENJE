@@ -1,6 +1,6 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { documentsApi } from '@/services/api'
 import { 
   BookOpen, 
@@ -14,7 +14,9 @@ import {
   Circle,
   Hash,
   Zap,
-  Download
+  Download,
+  AlertTriangle,
+  Activity
 } from 'lucide-react'
 import clsx from 'clsx'
 import PipelineModal from '@/components/PipelineModal'
@@ -46,6 +48,10 @@ export default function DocumentDetailPage() {
 
   const activeStatuses = ['pending', 'processing', 'translating']
 
+  // Track seconds since last worker activity
+  const [secondsSinceActivity, setSecondsSinceActivity] = useState<number | null>(null)
+  const activityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const { data: docQueryData, isLoading } = useQuery({
     queryKey: ['document', docId],
     queryFn: () => documentsApi.get(docId),
@@ -64,6 +70,21 @@ export default function DocumentDetailPage() {
     refetchInterval: 2000,
   })
   const progress = (progressData as any)?.data
+
+  // Update "seconds since last activity" counter every second
+  useEffect(() => {
+    if (!progress?.last_activity_at) {
+      setSecondsSinceActivity(null)
+      return
+    }
+    const update = () => {
+      const diff = Math.floor((Date.now() - new Date(progress.last_activity_at).getTime()) / 1000)
+      setSecondsSinceActivity(diff)
+    }
+    update()
+    activityTimerRef.current = setInterval(update, 1000)
+    return () => { if (activityTimerRef.current) clearInterval(activityTimerRef.current) }
+  }, [progress?.last_activity_at])
 
   const { data: chunks } = useQuery({
     queryKey: ['document-chunks', docId],
@@ -186,12 +207,26 @@ export default function DocumentDetailPage() {
               )}>
                 {progress?.phase_label || (
                   doc.status === 'pending' ? 'Dokument čeka na obradu...' :
-                  doc.status === 'processing' ? 'Ekstrakcija teksta i kreiranje odlomaka' :
-                  'Prevođenje odlomaka'
+                  doc.status === 'processing' ? 'Pokretanje procesora PDF-a...' :
+                  'Pokretanje prevodioca...'
                 )}
               </p>
-              <p className={clsx('text-xs', doc.status === 'translating' ? 'text-violet-500' : 'text-indigo-400')}>
-                Osvežava se automatski svake 2s
+              <p className={clsx('text-xs flex items-center gap-1.5', doc.status === 'translating' ? 'text-violet-500' : 'text-indigo-400')}>
+                {secondsSinceActivity !== null ? (
+                  secondsSinceActivity > 30 ? (
+                    <span className="flex items-center gap-1 text-amber-600 font-medium">
+                      <AlertTriangle className="w-3 h-3" />
+                      Nema aktivnosti već {secondsSinceActivity}s — worker možda nije pokrenut
+                    </span>
+                  ) : (
+                    <span className="flex items-center gap-1 text-emerald-600">
+                      <Activity className="w-3 h-3" />
+                      Aktivan · pre {secondsSinceActivity}s
+                    </span>
+                  )
+                ) : (
+                  <span>Čekanje na radnika...</span>
+                )}
                 {progress?.elapsed_seconds ? ` · ${Math.floor(progress.elapsed_seconds / 60)}m ${progress.elapsed_seconds % 60}s` : ''}
               </p>
             </div>

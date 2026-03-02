@@ -3,11 +3,45 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { quizzesApi } from '@/services/api'
 import { QuizWithQuestions, Question } from '@/types'
-import { Clock, ChevronRight, CheckSquare, AlertCircle, Loader2, CheckCircle2, XCircle, BookOpen, MessageCircle, Send } from 'lucide-react'
+import { Clock, ChevronRight, CheckSquare, AlertCircle, Loader2, CheckCircle2, XCircle, BookOpen, MessageCircle, Send, LogOut, Play, Save } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
 type Answer = { question_id: string; user_answer: string }
+
+interface SavedProgress {
+  attemptId: string
+  answers: Record<string, string>
+  currentIdx: number
+  confirmed: string[]
+  savedAt: string
+}
+
+const STORAGE_KEY = (quizId: string) => `quiz_progress_${quizId}`
+
+function loadProgress(quizId: string): SavedProgress | null {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY(quizId))
+    if (!raw) return null
+    const data: SavedProgress = JSON.parse(raw)
+    // Odbaci staro stanje starije od 7 dana
+    if (Date.now() - new Date(data.savedAt).getTime() > 7 * 86400_000) {
+      localStorage.removeItem(STORAGE_KEY(quizId))
+      return null
+    }
+    return data
+  } catch { return null }
+}
+
+function saveProgress(quizId: string, data: Omit<SavedProgress, 'savedAt'>) {
+  try {
+    localStorage.setItem(STORAGE_KEY(quizId), JSON.stringify({ ...data, savedAt: new Date().toISOString() }))
+  } catch {}
+}
+
+function clearProgress(quizId: string) {
+  localStorage.removeItem(STORAGE_KEY(quizId))
+}
 
 export default function QuizPlayPage() {
   const { quizId } = useParams<{ quizId: string }>()
@@ -19,6 +53,13 @@ export default function QuizPlayPage() {
   const [confirmed, setConfirmed] = useState<Set<string>>(new Set()) // potvrđena pitanja
   const [timeLeft, setTimeLeft] = useState<number | null>(null)
   const [started, setStarted] = useState(false)
+  const [showQuitConfirm, setShowQuitConfirm] = useState(false)
+  const [savedProgress, setSavedProgress] = useState<SavedProgress | null>(null)
+
+  // Učitaj sačuvani napredak pri montiranju
+  useEffect(() => {
+    if (quizId) setSavedProgress(loadProgress(quizId))
+  }, [quizId])
 
   // Auto-generated AI explanations per question
   const [autoExplanations, setAutoExplanations] = useState<Record<string, string>>({})
@@ -51,7 +92,7 @@ export default function QuizPlayPage() {
   const questions: Question[] = quiz?.questions ?? []
   const currentQ = questions[currentIdx]
 
-  // Start attempt
+  // Start attempt (novi)
   const startMutation = useMutation({
     mutationFn: () => quizzesApi.startAttempt(quizId!),
     onSuccess: (res) => {
@@ -62,15 +103,52 @@ export default function QuizPlayPage() {
     onError: () => toast.error('Greška pri pokretanju kviza'),
   })
 
-  // Submit
+  // Nastavi sačuvani pokušaj
+  const handleResume = () => {
+    if (!savedProgress) return
+    setAttemptId(savedProgress.attemptId)
+    setAnswers(savedProgress.answers)
+    setCurrentIdx(savedProgress.currentIdx)
+    setConfirmed(new Set(savedProgress.confirmed))
+    setStarted(true)
+    setSavedProgress(null)
+  }
+
+  // Submit (kraj ili delimičan)
   const submitMutation = useMutation({
     mutationFn: (ans: Answer[]) => quizzesApi.submitAttempt(quizId!, attemptId!, ans),
     onSuccess: (res) => {
+      clearProgress(quizId!)
       const result = (res as any).data
       navigate(`/quizzes/${quizId}/results/${attemptId}`, { state: { result } })
     },
     onError: () => toast.error('Greška pri submitovanju'),
   })
+
+  // Sačuvaj i izađi
+  const handleSaveAndExit = () => {
+    if (quizId && attemptId) {
+      saveProgress(quizId, {
+        attemptId,
+        answers,
+        currentIdx,
+        confirmed: Array.from(confirmed),
+      })
+      toast.success('Napredak sačuvan — možeš nastaviti kasnije')
+    }
+    setShowQuitConfirm(false)
+    navigate('/quizzes')
+  }
+
+  // Predaj delimično i izađi
+  const handleSubmitAndExit = () => {
+    setShowQuitConfirm(false)
+    const ans: Answer[] = questions.map((q) => ({
+      question_id: q.id,
+      user_answer: answers[q.id] ?? '',
+    }))
+    submitMutation.mutate(ans)
+  }
 
   // Timer
   useEffect(() => {
@@ -113,7 +191,18 @@ export default function QuizPlayPage() {
       toast.error('Izaberi odgovor pre potvrde')
       return
     }
-    setConfirmed((prev) => new Set([...prev, questionId]))
+    const newConfirmed = new Set([...confirmed, questionId])
+    setConfirmed(newConfirmed)
+
+    // Auto-save napredak posle svake potvrde
+    if (quizId && attemptId) {
+      saveProgress(quizId, {
+        attemptId,
+        answers,
+        currentIdx,
+        confirmed: Array.from(newConfirmed),
+      })
+    }
 
     // Auto-generate AI explanation if the stored one is missing or is the generic fallback
     const q = questions.find(q => q.id === questionId)
@@ -176,8 +265,9 @@ export default function QuizPlayPage() {
       question_id: q.id,
       user_answer: answers[q.id] ?? '',
     }))
+    clearProgress(quizId!)
     submitMutation.mutate(ans)
-  }, [questions, answers, submitMutation])
+  }, [questions, answers, submitMutation, quizId])
 
   const formatTime = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
   const progress = questions.length > 0 ? ((currentIdx + 1) / questions.length) * 100 : 0
@@ -229,13 +319,34 @@ export default function QuizPlayPage() {
               </div>
             )}
           </div>
+
+          {/* Nastavi sačuvani pokušaj */}
+          {savedProgress && (
+            <div className="bg-amber-50 border border-amber-200 rounded-xl p-4 text-left space-y-3">
+              <p className="text-sm font-semibold text-amber-800">
+                📌 Imaš sačuvan napredak — pitanje {savedProgress.currentIdx + 1} od {quiz.total_questions}
+              </p>
+              <p className="text-xs text-amber-600">
+                Sačuvano: {new Date(savedProgress.savedAt).toLocaleString('sr-RS')}
+              </p>
+              <button
+                onClick={handleResume}
+                className="w-full py-2.5 rounded-xl text-white font-semibold flex items-center justify-center gap-2"
+                style={{ background: 'linear-gradient(135deg, #f59e0b, #d97706)' }}
+              >
+                <Play className="w-4 h-4" />
+                Nastavi od pitanja {savedProgress.currentIdx + 1}
+              </button>
+            </div>
+          )}
+
           <button
             onClick={() => startMutation.mutate()}
             disabled={startMutation.isPending}
             className="w-full py-3 rounded-xl text-white font-semibold flex items-center justify-center gap-2"
             style={{ background: 'linear-gradient(135deg, #6366f1, #8b5cf6)' }}
           >
-            {startMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : 'Počni kviz'}
+            {startMutation.isPending ? <Loader2 className="w-5 h-5 animate-spin" /> : (savedProgress ? 'Počni ispočetka' : 'Počni kviz')}
           </button>
         </div>
       </div>
@@ -251,6 +362,50 @@ export default function QuizPlayPage() {
 
   return (
     <div className="max-w-2xl mx-auto space-y-4">
+      {/* Confirm quit modal */}
+      {showQuitConfirm && (
+        <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl shadow-2xl p-6 max-w-sm w-full space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-xl bg-red-50 flex items-center justify-center">
+                <LogOut className="w-5 h-5 text-red-500" />
+              </div>
+              <div>
+                <h3 className="font-bold text-gray-900">Izlaz iz kviza</h3>
+                <p className="text-sm text-gray-500">Pitanje {currentIdx + 1} od {questions.length}</p>
+              </div>
+            </div>
+            <p className="text-sm text-gray-600">
+              Odgovoreno je na <strong>{confirmed.size} od {questions.length}</strong> pitanja. Šta želiš da uradiš?
+            </p>
+            <div className="space-y-2">
+              <button
+                onClick={handleSaveAndExit}
+                className="w-full py-2.5 rounded-xl border-2 border-amber-400 bg-amber-50 text-amber-800 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-amber-100 transition-colors"
+              >
+                <Save className="w-4 h-4" />
+                Sačuvaj i izađi — nastavi kasnije
+              </button>
+              <button
+                onClick={handleSubmitAndExit}
+                disabled={submitMutation.isPending}
+                className="w-full py-2.5 rounded-xl border-2 border-red-300 bg-red-50 text-red-700 font-semibold text-sm flex items-center justify-center gap-2 hover:bg-red-100 transition-colors"
+              >
+                {submitMutation.isPending ? <Loader2 className="w-4 h-4 animate-spin" /> : <XCircle className="w-4 h-4" />}
+                Predaj delimično i pogledaj rezultate
+              </button>
+              <button
+                onClick={() => setShowQuitConfirm(false)}
+                className="w-full py-2.5 rounded-xl bg-indigo-600 text-white font-semibold text-sm flex items-center justify-center gap-2 hover:bg-indigo-700 transition-colors"
+              >
+                <Play className="w-4 h-4" />
+                Nastavi kviz
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Progress bar */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm px-5 py-3 flex items-center gap-4">
         <span className="text-sm font-medium text-gray-500 whitespace-nowrap">
@@ -271,6 +426,14 @@ export default function QuizPlayPage() {
             {formatTime(timeLeft)}
           </span>
         )}
+        <button
+          onClick={() => setShowQuitConfirm(true)}
+          className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-medium text-red-500 border border-red-200 hover:bg-red-50 transition-colors"
+          title="Odustani od kviza"
+        >
+          <LogOut className="w-3.5 h-3.5" />
+          Odustani
+        </button>
       </div>
 
       {/* Question card */}

@@ -11,6 +11,7 @@ Verzija: 1.2.0
 
 from celery import shared_task
 from sqlalchemy.orm import sessionmaker
+from sqlalchemy.orm.attributes import flag_modified
 import logging
 from typing import Dict, Any, Optional
 
@@ -76,12 +77,14 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
             _pdb = None
             try:
                 elapsed = int(_time.time() - _started_at)
+                import datetime as _dt
                 patch = __import__('json').dumps({
                     "processing_progress": {
                         "pages_done": pages_done,
                         "pages_total": pages_total,
                         "chunks_so_far": chunks_so_far,
                         "elapsed_seconds": elapsed,
+                        "last_activity_at": _dt.datetime.utcnow().isoformat() + "Z",
                     }
                 })
                 _pdb = get_db_session()
@@ -118,6 +121,7 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
             "is_scanned": result.metadata.is_scanned,
             "total_chars": result.metadata.total_chars
         }
+        flag_modified(document, "file_metadata")
         
         for chunk_data in result.chunks:
             chunk = Chunk(
@@ -305,13 +309,16 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
 
             # Commit after every batch so progress endpoint reflects real-time count
             db.commit()
-            # Write incremental progress to metadata so UI can show X/Y
-            _meta = document.file_metadata or {}
+            # Write incremental progress + heartbeat to metadata
+            import datetime as _dt
+            _meta = dict(document.file_metadata or {})
             _meta["translation_progress"] = {
                 "translated_chunks": translated_count,
                 "total_chunks": total_chunks,
+                "last_activity_at": _dt.datetime.utcnow().isoformat() + "Z",
             }
             document.file_metadata = _meta
+            flag_modified(document, "file_metadata")
             db.commit()
             logger.info(f"Translated {translated_count}/{total_chunks} chunks")
 
@@ -576,12 +583,13 @@ def auto_pipeline_task(
 
                 # Commit after every batch for real-time progress tracking
                 db.commit()
-                _meta = document.file_metadata or {}
+                _meta = dict(document.file_metadata or {})
                 _meta["translation_progress"] = {
                     "translated_chunks": translated_count,
                     "total_chunks": len(chunks),
                 }
                 document.file_metadata = _meta
+                flag_modified(document, "file_metadata")
                 db.commit()
                 _ptime.sleep(0.3)
 

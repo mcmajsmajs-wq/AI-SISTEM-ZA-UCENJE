@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
 from typing import List
+from datetime import date, timedelta
 import logging
 
 from app.db.session import get_db
@@ -153,12 +154,37 @@ async def get_user_stats(
 
     # Quiz attempts
     attempts = db.query(QuizAttempt).filter(QuizAttempt.user_id == uid).all()
-    total_quizzes_taken = len(attempts)
+    total_quizzes_taken = len([a for a in attempts if a.completed_at is not None])
     if attempts:
-        scores = [a.score / a.total_points * 100 for a in attempts if (a.total_points or 0) > 0]
+        scores = [a.score / a.total_points * 100 for a in attempts if (a.total_points or 0) > 0 and a.completed_at]
         average_score = round(sum(scores) / len(scores), 1) if scores else 0.0
     else:
         average_score = 0.0
+
+    # Calculate study streak from ALL attempts (including partial) by started_at date
+    activity_dates_raw = (
+        db.query(func.date(QuizAttempt.started_at))
+        .filter(QuizAttempt.user_id == uid)
+        .distinct()
+        .all()
+    )
+    streak = 0
+    if activity_dates_raw:
+        today = date.today()
+        parsed = set()
+        for (d,) in activity_dates_raw:
+            if d is None:
+                continue
+            if isinstance(d, str):
+                d = date.fromisoformat(d)
+            parsed.add(d)
+        check = today
+        for _ in range(len(parsed) + 1):
+            if check in parsed:
+                streak += 1
+                check -= timedelta(days=1)
+            else:
+                break
 
     return UserStats(
         total_documents=total_documents,
@@ -167,9 +193,9 @@ async def get_user_stats(
         total_quizzes_taken=total_quizzes_taken,
         average_score=average_score,
         total_study_time_minutes=0,
-        current_streak_days=0,
-        longest_streak_days=0,
-        study_streak=0,
+        current_streak_days=streak,
+        longest_streak_days=streak,
+        study_streak=streak,
     )
 
 

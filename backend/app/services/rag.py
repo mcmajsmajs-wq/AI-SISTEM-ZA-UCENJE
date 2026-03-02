@@ -185,9 +185,11 @@ async def rag_query(db, query: str, user=None, top_k: int = 5, provider_override
     import httpx
     from app.core.config import settings
     
-    # 1. Pronađi relevantne chunk-ove
-    chunks = similarity_search(db, query, top_k=top_k)
-    
+    # 1. Pronađi relevantne chunk-ove (samo sa dovoljnom sličnošću)
+    all_chunks = similarity_search(db, query, top_k=top_k)
+    SIMILARITY_THRESHOLD = 0.45
+    chunks = [c for c in all_chunks if c.get("similarity", 0) >= SIMILARITY_THRESHOLD]
+
     has_context = bool(chunks)
     
     # 2. Pripremi poruke za LLM
@@ -348,13 +350,15 @@ Budi edukativan, detaljan i jasan."""
             continue
     
     if not answer:
-        if has_context:
-            # LLM failed but we have context — show raw context as fallback
-            answer = "Pronašao sam relevantne informacije:\n\n" + "\n\n".join(
-                f"**{c['source_name']}**: {c['content'][:400]}..." for c in chunks[:3]
-            )
-        else:
-            answer = "Trenutno nije dostupan AI provajder za odgovor. Proveri podešavanja API ključeva u Settings."
+        # Svi AI provajderi su pali — prikaži jasnu grešku, NE sirove chunk-ove
+        used_provider_label = provider_override or (getattr(user, 'ai_provider', 'auto') if user else 'auto')
+        answer = (
+            f"⚠️ AI provajder **{used_provider_label}** trenutno nije dostupan ili API ključ nije ispravan.\n\n"
+            "**Šta da uradiš:**\n"
+            "1. Idi u **Settings → AI Podešavanja** i provjeri API ključ\n"
+            "2. Pokušaj drugi provajder (Groq, Mistral, OpenAI)\n"
+            "3. Ako koristiš Ollama, provjeri da li je servis pokrenut lokalno"
+        )
     
     sources = list({c['source_name']: c for c in chunks}.values())  # deduplicate
     
