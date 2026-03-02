@@ -64,4 +64,4 @@ openai==1.35.0
 
 # Async
 aiofiles==23.2.1
-anyio==4.0.0
+anyio>=4.0.0
