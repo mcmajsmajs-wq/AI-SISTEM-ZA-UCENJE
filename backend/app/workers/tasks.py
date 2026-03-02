@@ -303,15 +303,23 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
                     # Small delay to avoid rate limits on individual fallback
                     _ttime.sleep(0.5)
 
-            if (batch_start // BATCH_SIZE + 1) % 5 == 0:
-                db.commit()
-                logger.info(f"Translated {translated_count}/{total_chunks} chunks")
+            # Commit after every batch so progress endpoint reflects real-time count
+            db.commit()
+            # Write incremental progress to metadata so UI can show X/Y
+            _meta = document.file_metadata or {}
+            _meta["translation_progress"] = {
+                "translated_chunks": translated_count,
+                "total_chunks": total_chunks,
+            }
+            document.file_metadata = _meta
+            db.commit()
+            logger.info(f"Translated {translated_count}/{total_chunks} chunks")
 
             # Brief pause between batches to respect rate limits
             _ttime.sleep(0.3)
-        
+
         db.commit()
-        
+
         document.file_metadata = document.file_metadata or {}
         document.file_metadata["translation"] = {
             "provider": provider or "auto",
@@ -566,8 +574,15 @@ def auto_pipeline_task(
                             logger.warning(f"[PIPELINE] Chunk {chunk.sequence_number} prevod neuspešan: {single.error}")
                         _ptime.sleep(0.5)
 
-                if (batch_start // BATCH_SIZE + 1) % 5 == 0:
-                    db.commit()
+                # Commit after every batch for real-time progress tracking
+                db.commit()
+                _meta = document.file_metadata or {}
+                _meta["translation_progress"] = {
+                    "translated_chunks": translated_count,
+                    "total_chunks": len(chunks),
+                }
+                document.file_metadata = _meta
+                db.commit()
                 _ptime.sleep(0.3)
 
             db.commit()

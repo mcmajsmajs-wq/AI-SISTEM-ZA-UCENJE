@@ -541,7 +541,8 @@ async def get_document_progress(
     elif document.status == "translating":
         current_phase = "translating"
         phase_label = "Prevođenje odlomaka"
-        progress_percentage = 85 + int((translated_chunks / total_chunks * 15)) if total_chunks > 0 else 85
+        # Use 0-100% range for translation (not 85-100%) so progress bar is meaningful
+        progress_percentage = int(translated_chunks / total_chunks * 100) if total_chunks > 0 else 0
     elif document.status == "completed":
         current_phase = "completed"
         phase_label = "Obrada završena"

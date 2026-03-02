@@ -7,10 +7,15 @@ export default function TranslationsPage() {
   const { data, isLoading } = useQuery({
     queryKey: ['documents', 0, 100],
     queryFn: () => documentsApi.list(0, 100),
+    // Poll every 3s if any document is currently translating
+    refetchInterval: (query) => {
+      const items: any[] = query.state.data?.data?.items || []
+      return items.some((d) => d.status === 'translating') ? 3000 : false
+    },
   })
 
   const allDocs: any[] = data?.data?.items || []
-  const translatedDocs = allDocs.filter((d: any) => (d.translated_chunks || 0) > 0)
+  const translatedDocs = allDocs.filter((d: any) => (d.translated_chunks || 0) > 0 || d.status === 'translating')
 
   return (
     <div className="max-w-5xl mx-auto py-8 px-4">
@@ -46,16 +51,27 @@ export default function TranslationsPage() {
             const pct = doc.total_chunks > 0
               ? Math.round(((doc.translated_chunks || 0) / doc.total_chunks) * 100)
               : 0
+            const isTranslating = doc.status === 'translating'
             return (
               <div key={doc.id} className="course-card hover:shadow-xl hover:-translate-y-0.5 transition-all duration-200">
                 <div className="h-20 bg-gradient-to-r from-violet-500 to-purple-600 relative flex items-end px-4 pb-3">
                   <div className="w-10 h-10 rounded-xl bg-white/20 backdrop-blur flex items-center justify-center">
-                    <BookOpen className="w-5 h-5 text-white" />
+                    {isTranslating
+                      ? <Loader2 className="w-5 h-5 text-white animate-spin" />
+                      : <BookOpen className="w-5 h-5 text-white" />
+                    }
                   </div>
                   <div className="absolute top-3 right-3">
-                    <span className="badge bg-white/90 backdrop-blur text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-full">
-                      {pct}% prevedeno
-                    </span>
+                    {isTranslating ? (
+                      <span className="badge bg-yellow-100 text-yellow-800 text-xs font-semibold px-2 py-0.5 rounded-full flex items-center gap-1">
+                        <Loader2 className="w-3 h-3 animate-spin" />
+                        Prevodi se...
+                      </span>
+                    ) : (
+                      <span className="badge bg-white/90 backdrop-blur text-violet-700 text-xs font-semibold px-2 py-0.5 rounded-full">
+                        {pct}% prevedeno
+                      </span>
+                    )}
                   </div>
                 </div>
                 <div className="p-4">
@@ -65,22 +81,25 @@ export default function TranslationsPage() {
                     </h3>
                   </Link>
                   <p className="text-xs text-gray-400 mb-3">
-                    {doc.translated_chunks} / {doc.total_chunks} odlomaka prevedeno
+                    {isTranslating
+                      ? <span className="text-yellow-600 font-medium">{doc.translated_chunks || 0} / {doc.total_chunks} odlomaka prevedeno</span>
+                      : `${doc.translated_chunks} / ${doc.total_chunks} odlomaka prevedeno`
+                    }
                   </p>
                   <div className="mb-3">
                     <div className="progress-bar">
                       <div
-                        className="progress-fill bg-gradient-to-r from-violet-500 to-purple-500"
-                        style={{ width: `${pct}%` }}
+                        className={`progress-fill ${isTranslating ? 'bg-gradient-to-r from-yellow-400 to-orange-400' : 'bg-gradient-to-r from-violet-500 to-purple-500'}`}
+                        style={{ width: `${isTranslating ? Math.max(pct, 2) : pct}%` }}
                       />
                     </div>
                   </div>
                   <Link
-                    to={`/review/${doc.id}`}
+                    to={`/documents/${doc.id}`}
                     className="btn btn-secondary btn-xs w-full flex items-center justify-center gap-1.5"
                   >
-                    <Eye className="w-3.5 h-3.5" />
-                    Pregledaj prevod
+                    {isTranslating ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Eye className="w-3.5 h-3.5" />}
+                    {isTranslating ? 'Prati napredak' : 'Pregledaj prevod'}
                   </Link>
                 </div>
               </div>
