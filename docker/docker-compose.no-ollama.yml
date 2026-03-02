@@ -1,0 +1,46 @@
+# ================================================================================
+# DOCKER COMPOSE OVERRIDE — BEZ OLLAMA (OpenAI mode)
+# ================================================================================
+# Koristi OpenAI umesto lokalnog Ollama servera.
+#
+# Pokretanje:
+#   docker compose -f docker-compose.yml -f docker-compose.no-ollama.yml up -d --build
+#
+# Ili: postaviti alias u .env → vidi setup_openai.sh
+# ================================================================================
+
+services:
+
+  # Uklanjamo Ollama dependency iz app servisa
+  app:
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      minio:
+        condition: service_healthy
+    environment:
+      - OLLAMA_HOST=     # prazno — Ollama nije aktivan
+      - DEFAULT_AI_PROVIDER=openai
+
+  # Uklanjamo Ollama dependency iz worker servisa
+  worker:
+    depends_on:
+      - db
+      - redis
+      - minio
+    environment:
+      - OLLAMA_HOST=
+      - DEFAULT_AI_PROVIDER=openai
+
+  # Beat nema Ollama dependency — ali dodajemo env radi konzistentnosti
+  beat:
+    environment:
+      - OLLAMA_HOST=
+      - DEFAULT_AI_PROVIDER=openai
+
+  # Ollama servis NIJE uključen (profile ga isključuje)
+  ollama:
+    profiles:
+      - ollama-only   # neće se pokrenuti bez --profile ollama-only

@@ -1,0 +1,168 @@
+# -*- coding: utf-8 -*-
+"""
+================================================================================
+CLOUD STORAGE SERVICE — S3 / MinIO / AWS
+================================================================================
+Opciona cloud implementacija StorageService interfejsa.
+
+Koristi boto3 (S3-compatible API) i radi sa:
+  - AWS S3
+  - MinIO (self-hosted)
+  - DigitalOcean Spaces
+  - Backblaze B2
+  - Bilo koji S3-compatible cloud storage
+
+UPOTREBA:
+    Zamijeniti u storage.py:
+        from app.services.storage_cloud import StorageService
+    umjesto:
+        from app.services.storage import StorageService
+
+ZAHTEVI:
+    pip install boto3
+
+KONFIGURACIJA (.env):
+    STORAGE_BACKEND=s3
+    MINIO_ENDPOINT=minio:9000          # ili s3.amazonaws.com za AWS
+    MINIO_ACCESS_KEY=your_access_key
+    MINIO_SECRET_KEY=your_secret_key
+    MINIO_BUCKET_NAME=ai-learning-uploads
+    MINIO_USE_SSL=false                # true za produkciju / AWS
+
+Verzija: 1.0.0
+================================================================================
+"""
+
+import io
+import hashlib
+import logging
+from pathlib import Path
+from typing import Optional, BinaryIO, Dict, Any
+
+import boto3
+from botocore.client import Config
+from botocore.exceptions import ClientError
+
+from app.core.config import settings
+
+logger = logging.getLogger(__name__)
+
+
+class CloudStorageService:
+    """
+    S3-compatible cloud storage (AWS S3 / MinIO / DigitalOcean Spaces).
+
+    Isti interfejs kao lokalni StorageService — zamenjivost bez izmena koda.
+    """
+
+    def __init__(
+        self,
+        endpoint: Optional[str] = None,
+        access_key: Optional[str] = None,
+        secret_key: Optional[str] = None,
+        bucket_name: Optional[str] = None,
+        use_ssl: bool = False
+    ):
+        self.bucket_name = bucket_name or settings.MINIO_BUCKET_NAME
+        _endpoint = endpoint or getattr(settings, 'MINIO_ENDPOINT', None)
+        _endpoint_url = (
+            f"{'https' if use_ssl else 'http'}://{_endpoint}"
+            if _endpoint else None
+        )
+
+        self.client = boto3.client(
+            's3',
+            endpoint_url=_endpoint_url,
+            aws_access_key_id=access_key or getattr(settings, 'MINIO_ACCESS_KEY', None),
+            aws_secret_access_key=secret_key or getattr(settings, 'MINIO_SECRET_KEY', None),
+            config=Config(
+                signature_version='s3v4',
+                connect_timeout=5,
+                read_timeout=30,
+                retries={'max_attempts': 3, 'mode': 'standard'}
+            )
+        )
+        self._bucket_ready = False
+        try:
+            self._ensure_bucket_exists()
+        except Exception as e:
+            logger.warning(f"Cloud storage not ready at startup: {e}")
+
+    def _ensure_bucket_exists(self) -> None:
+        """Kreira bucket ako ne postoji."""
+        try:
+            self.client.head_bucket(Bucket=self.bucket_name)
+            self._bucket_ready = True
+            logger.info(f"S3 bucket '{self.bucket_name}' OK")
+        except ClientError as e:
+            if e.response['Error']['Code'] == '404':
+                self.client.create_bucket(Bucket=self.bucket_name)
+                self._bucket_ready = True
+                logger.info(f"Created S3 bucket '{self.bucket_name}'")
+            else:
+                raise
+
+    @staticmethod
+    def calculate_checksum(file_content: bytes) -> str:
+        return hashlib.sha256(file_content).hexdigest()
+
+    def upload_file(
+        self,
+        file_content: BinaryIO,
+        filename: str,
+        user_id: str,
+        content_type: str = "application/octet-stream",
+        metadata: Optional[Dict[str, Any]] = None
+    ) -> Dict[str, Any]:
+        content = file_content.read()
+        checksum = self.calculate_checksum(content)
+        ext = Path(filename).suffix.lower()
+        storage_path = f"{user_id}/{checksum}{ext}"
+
+        s3_metadata = {'original-filename': filename, 'user-id': user_id}
+        if metadata:
+            s3_metadata.update({k: str(v) for k, v in metadata.items()})
+
+        self.client.put_object(
+            Bucket=self.bucket_name,
+            Key=storage_path,
+            Body=io.BytesIO(content),
+            ContentLength=len(content),
+            ContentType=content_type,
+            Metadata=s3_metadata
+        )
+        logger.info(f"[S3] Uploaded: {storage_path} ({len(content)} bytes)")
+        return {'storage_path': storage_path, 'checksum': checksum, 'size': len(content)}
+
+    def download_file(self, storage_path: str) -> bytes:
+        response = self.client.get_object(Bucket=self.bucket_name, Key=storage_path)
+        return response['Body'].read()
+
+    def delete_file(self, storage_path: str) -> bool:
+        self.client.delete_object(Bucket=self.bucket_name, Key=storage_path)
+        logger.info(f"[S3] Deleted: {storage_path}")
+        return True
+
+    def get_presigned_url(self, storage_path: str, expiration: int = 3600) -> str:
+        """Generiše S3 pre-signed URL za direktan download."""
+        return self.client.generate_presigned_url(
+            'get_object',
+            Params={'Bucket': self.bucket_name, 'Key': storage_path},
+            ExpiresIn=expiration
+        )
+
+    def file_exists(self, storage_path: str) -> bool:
+        try:
+            self.client.head_object(Bucket=self.bucket_name, Key=storage_path)
+            return True
+        except ClientError:
+            return False
+
+    def get_file_metadata(self, storage_path: str) -> Dict[str, Any]:
+        response = self.client.head_object(Bucket=self.bucket_name, Key=storage_path)
+        return {
+            'size': response.get('ContentLength'),
+            'content_type': response.get('ContentType'),
+            'last_modified': response.get('LastModified'),
+            'metadata': response.get('Metadata', {})
+        }

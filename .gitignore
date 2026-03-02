@@ -1,0 +1,61 @@
+# ================================================================================
+# .gitignore — AI LEARNING SYSTEM
+# ================================================================================
+
+# Environment varijable (NIKADA ne commitovati!)
+.env
+.env.local
+.env.*.local
+docker/.env
+
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+.Python
+venv/
+.venv/
+env/
+*.egg-info/
+dist/
+build/
+.pytest_cache/
+htmlcov/
+.coverage
+*.cover
+.mypy_cache/
+
+# Node.js
+node_modules/
+frontend/dist/
+frontend/build/
+
+# Logs
+logs/
+*.log
+
+# Docker volumes / data
+docker/postgres-data/
+docker/redis-data/
+
+# Uploads (lokalni storage - ne commitovati)
+uploads/
+backend/uploads/
+
+# Zone.Identifier fajlovi (Windows)
+*.Identifier
+
+# OS
+.DS_Store
+Thumbs.db
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Backup fajlovi
+backups/
+*.bak
