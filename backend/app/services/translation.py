@@ -330,7 +330,8 @@ class OpenAIClient(BaseTranslationClient):
 1. Maintaining the original formatting and structure
 2. Preserving technical terms in their original form if they are standard terminology
 3. Keeping any code snippets, URLs, or special markers unchanged
-4. Providing only the translation, no explanations"""
+4. Providing only the translation, no explanations
+5. If the input contains section markers like "### 1", "### 2" etc., preserve them exactly in the output so each translated section can be identified"""
     
     COST_PER_1K_TOKENS = {
         "gpt-4": 0.03,
@@ -386,29 +387,42 @@ class OpenAIClient(BaseTranslationClient):
             user_message = f"Context: {context}\n\n{user_message}"
         
         try:
-            response = httpx.post(
-                "https://api.openai.com/v1/chat/completions",
-                headers={
-                    "Authorization": f"Bearer {self.api_key}",
-                    "Content-Type": "application/json"
-                },
-                json={
-                    "model": self.model,
-                    "messages": [
-                        {"role": "system", "content": self.TRANSLATION_SYSTEM_PROMPT},
-                        {"role": "user", "content": user_message}
-                    ],
-                    "temperature": 0.3,
-                    "top_p": 0.9
-                },
-                timeout=self.timeout
-            )
+            # Retry up to 3 times on 429 rate limit
+            max_retries = 3
+            for attempt in range(max_retries):
+                response = httpx.post(
+                    "https://api.openai.com/v1/chat/completions",
+                    headers={
+                        "Authorization": f"Bearer {self.api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "model": self.model,
+                        "messages": [
+                            {"role": "system", "content": self.TRANSLATION_SYSTEM_PROMPT},
+                            {"role": "user", "content": user_message}
+                        ],
+                        "temperature": 0.3,
+                        "top_p": 0.9
+                    },
+                    timeout=self.timeout
+                )
+
+                if response.status_code == 429:
+                    # Rate limited — respect Retry-After header or exponential backoff
+                    retry_after = int(response.headers.get("Retry-After", 2 ** attempt * 5))
+                    retry_after = min(retry_after, 60)  # cap at 60s
+                    logger.warning(f"OpenAI rate limited (429), retrying in {retry_after}s (attempt {attempt+1}/{max_retries})")
+                    time.sleep(retry_after)
+                    continue
+
+                if response.status_code != 200:
+                    raise Exception(f"OpenAI API error: {response.status_code}")
+                break
+            else:
+                raise Exception("OpenAI API error: 429 rate limit — all retries exhausted")
             
             duration_ms = (time.time() - start_time) * 1000
-            
-            if response.status_code != 200:
-                raise Exception(f"OpenAI API error: {response.status_code}")
-            
             data = response.json()
             translated_text = data["choices"][0]["message"]["content"].strip()
             

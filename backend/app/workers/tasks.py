@@ -238,39 +238,77 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
 
         logger.info(f"Translating {total_chunks} chunks for document {document_id}")
 
-        for i, chunk in enumerate(chunks):
-            if chunk.is_translated:
-                translated_count += 1
-                continue
+        # Group untranslated chunks into batches (reduce API calls)
+        BATCH_SIZE = 8  # 8 chunks per request → ~10x fewer API calls
+        untranslated = [c for c in chunks if not c.is_translated]
+        translated_count += total_chunks - len(untranslated)  # already translated
 
-            # Use per-user client if available, otherwise global service
-            if _provider_client:
-                result = _provider_client.translate(
-                    text=chunk.content,
-                    source_language=document.source_language,
-                    target_language=document.target_language,
-                )
-            else:
-                result = translation_service.translate(
-                    text=chunk.content,
+        import time as _ttime
+
+        for batch_start in range(0, len(untranslated), BATCH_SIZE):
+            batch = untranslated[batch_start:batch_start + BATCH_SIZE]
+
+            # Build numbered batch text: "### 1\n<chunk>\n### 2\n<chunk>\n..."
+            separator = "\n\n### {}\n"
+            batch_text = ""
+            for idx, chunk in enumerate(batch):
+                batch_text += separator.format(idx + 1) + chunk.content
+
+            # Translate full batch as one request
+            def _do_translate(text):
+                if _provider_client:
+                    return _provider_client.translate(
+                        text=text,
+                        source_language=document.source_language,
+                        target_language=document.target_language,
+                    )
+                return translation_service.translate(
+                    text=text,
                     source_language=document.source_language,
                     target_language=document.target_language,
                     provider=provider
                 )
-            
+
+            result = _do_translate(batch_text)
+
             if result.success:
-                chunk.translated_content = result.translated_text
-                chunk.is_translated = 1
+                # Split translated batch back into individual chunks
+                import re as _re
+                parts = _re.split(r'\n\n?###\s+\d+\n', result.translated_text)
+                # Remove leading empty part if split creates one
+                parts = [p.strip() for p in parts if p.strip()]
+
+                for idx, chunk in enumerate(batch):
+                    translated_part = parts[idx] if idx < len(parts) else result.translated_text
+                    chunk.translated_content = translated_part
+                    chunk.is_translated = 1
+                    translated_count += 1
+
                 total_cost += result.cost
                 total_tokens += result.tokens_used
-                translated_count += 1
-                
-                if (i + 1) % 10 == 0:
-                    db.commit()
-                    logger.info(f"Translated {i + 1}/{total_chunks} chunks")
             else:
-                errors.append(f"Chunk {chunk.sequence_number}: {result.error}")
-                logger.error(f"Failed to translate chunk {chunk.sequence_number}: {result.error}")
+                # Batch failed — fall back to individual translation for this batch
+                logger.warning(f"Batch translation failed, trying individually: {result.error}")
+                for chunk in batch:
+                    single_result = _do_translate(chunk.content)
+                    if single_result.success:
+                        chunk.translated_content = single_result.translated_text
+                        chunk.is_translated = 1
+                        translated_count += 1
+                        total_cost += single_result.cost
+                        total_tokens += single_result.tokens_used
+                    else:
+                        errors.append(f"Chunk {chunk.sequence_number}: {single_result.error}")
+                        logger.error(f"Failed to translate chunk {chunk.sequence_number}: {single_result.error}")
+                    # Small delay to avoid rate limits on individual fallback
+                    _ttime.sleep(0.5)
+
+            if (batch_start // BATCH_SIZE + 1) % 5 == 0:
+                db.commit()
+                logger.info(f"Translated {translated_count}/{total_chunks} chunks")
+
+            # Brief pause between batches to respect rate limits
+            _ttime.sleep(0.3)
         
         db.commit()
         
@@ -486,23 +524,51 @@ def auto_pipeline_task(
 
             total_cost = 0.0
             translated_count = 0
+            BATCH_SIZE = 8
+            import time as _ptime
+            import re as _pre
 
-            for i, chunk in enumerate(chunks):
+            for batch_start in range(0, len(chunks), BATCH_SIZE):
+                batch = chunks[batch_start:batch_start + BATCH_SIZE]
+                batch_text = ""
+                for idx, chunk in enumerate(batch):
+                    batch_text += f"\n\n### {idx + 1}\n" + chunk.content
+
                 trans_result = translation_service.translate(
-                    text=chunk.content,
+                    text=batch_text,
                     source_language=source_language,
                     target_language=target_language,
                     provider=translation_provider,
                 )
                 if trans_result.success:
-                    chunk.translated_content = trans_result.translated_text
-                    chunk.is_translated = 1
+                    parts = _pre.split(r'\n\n?###\s+\d+\n', trans_result.translated_text)
+                    parts = [p.strip() for p in parts if p.strip()]
+                    for idx, chunk in enumerate(batch):
+                        chunk.translated_content = parts[idx] if idx < len(parts) else trans_result.translated_text
+                        chunk.is_translated = 1
+                        translated_count += 1
                     total_cost += trans_result.cost
-                    translated_count += 1
-                    if (i + 1) % 10 == 0:
-                        db.commit()
                 else:
-                    logger.warning(f"[PIPELINE] Chunk {chunk.sequence_number} prevod neuspešan: {trans_result.error}")
+                    # Fallback: translate individually
+                    for chunk in batch:
+                        single = translation_service.translate(
+                            text=chunk.content,
+                            source_language=source_language,
+                            target_language=target_language,
+                            provider=translation_provider,
+                        )
+                        if single.success:
+                            chunk.translated_content = single.translated_text
+                            chunk.is_translated = 1
+                            translated_count += 1
+                            total_cost += single.cost
+                        else:
+                            logger.warning(f"[PIPELINE] Chunk {chunk.sequence_number} prevod neuspešan: {single.error}")
+                        _ptime.sleep(0.5)
+
+                if (batch_start // BATCH_SIZE + 1) % 5 == 0:
+                    db.commit()
+                _ptime.sleep(0.3)
 
             db.commit()
             document.file_metadata = document.file_metadata or {}

@@ -19,6 +19,9 @@ const TRANSLATION_PROVIDERS = [
   { id: 'deepl', label: 'DeepL' },
   { id: 'google', label: 'Google Translate' },
   { id: 'claude', label: 'Claude (Anthropic)' },
+  { id: 'gemini', label: 'Google Gemini' },
+  { id: 'groq', label: 'Groq' },
+  { id: 'mistral', label: 'Mistral' },
 ]
 
 const QUIZ_PROVIDERS = [
@@ -26,6 +29,9 @@ const QUIZ_PROVIDERS = [
   { id: 'ollama', label: 'Ollama (lokalni)' },
   { id: 'openai', label: 'OpenAI GPT' },
   { id: 'claude', label: 'Claude (Anthropic)' },
+  { id: 'gemini', label: 'Google Gemini' },
+  { id: 'groq', label: 'Groq' },
+  { id: 'mistral', label: 'Mistral' },
 ]
 
 const LANGUAGES = [

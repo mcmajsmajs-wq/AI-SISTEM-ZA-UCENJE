@@ -175,9 +175,10 @@ def similarity_search(db, query: str, top_k: int = 5, source_type: Optional[str]
 async def rag_query(db, query: str, user=None, top_k: int = 5, provider_override: str = None) -> dict:
     """
     Kompletna RAG pipeline:
-    1. Embedding upita
-    2. Similarity search
-    3. LLM synthesis sa pronađenim kontekstom
+    1. Embedding upita + similarity search
+    2. LLM synthesis — koristi kontekst iz baze znanja ALI može da dopuni
+       sopstvenim znanjem kada kontekst nije dovoljan
+    3. Ako baza znanja nema relevantnih chunk-ova, AI daje direktan odgovor
     
     Vraća: { "answer": str, "sources": list, "chunks_used": int }
     """
@@ -187,36 +188,41 @@ async def rag_query(db, query: str, user=None, top_k: int = 5, provider_override
     # 1. Pronađi relevantne chunk-ove
     chunks = similarity_search(db, query, top_k=top_k)
     
-    if not chunks:
-        return {
-            "answer": "Nisam pronašao relevantne informacije u bazi znanja. Pokušaj da dodaš dokumentaciju ili PDF fajlove.",
-            "sources": [],
-            "chunks_used": 0
-        }
+    has_context = bool(chunks)
     
-    # 2. Pripremi kontekst za LLM
-    context = "\n\n---\n\n".join([
-        f"[Izvor: {c['source_name']}]\n{c['content']}"
-        for c in chunks
-    ])
-    
-    system_prompt = f"""Ti si AI asistent za učenje koji odgovara na pitanja na osnovu dostupne dokumentacije i materijala.
+    # 2. Pripremi poruke za LLM
+    if has_context:
+        context = "\n\n---\n\n".join([
+            f"[Izvor: {c['source_name']}]\n{c['content']}"
+            for c in chunks
+        ])
+        system_prompt = f"""Ti si AI asistent za učenje koji pomaže korisnicima da razumeju materijale.
 
-Koristi ISKLJUČIVO informacije iz priloženog konteksta za odgovor.
-Ako informacija nije u kontekstu, jasno reci da ne znaš.
-Odgovaraj na jeziku na kom je postavljeno pitanje (srpski ili engleski).
-Budi koncizan ali potpun.
+Imaš pristup sledećem kontekstu iz baze znanja korisnika:
 
 === KONTEKST IZ BAZE ZNANJA ===
 {context}
-=============================="""
+==============================
+
+Uputstvo:
+- Prvo iskoristi informacije iz gornjeg konteksta kada su relevantne
+- Ako kontekst ne pokriva pitanje potpuno ili uopšte, SLOBODNO koristi sopstveno znanje da daš korisnik odgovor
+- NIKADA ne govori "nemam informacije" ako možeš odgovoriti na osnovu opšteg znanja
+- Odgovaraj na jeziku na kom je postavljeno pitanje (srpski ili engleski)
+- Budi detaljan i edukativan — objasni koncepte, ne samo cituj tekst"""
+    else:
+        # Nema konteksta iz baze — AI daje direktan odgovor
+        system_prompt = """Ti si AI asistent za učenje. Odgovaraj na pitanja korisnika koristeći sopstveno znanje.
+Baza znanja trenutno nema relevantnih dokumenata za ovo pitanje, ali ti svejedno odgovaraj korisno i detaljno.
+Odgovaraj na jeziku na kom je postavljeno pitanje (srpski ili engleski).
+Budi edukativan, detaljan i jasan."""
 
     messages = [
         {"role": "system", "content": system_prompt},
         {"role": "user", "content": query}
     ]
     
-    # 3. Pozovi LLM (isto kao quiz chat)
+    # 3. Pozovi LLM
     provider = provider_override or (getattr(user, 'ai_provider', 'auto') if user else 'auto')
     user_openai_key  = getattr(user, 'ai_api_key_openai',  None) if user else None
     user_gemini_key  = getattr(user, 'ai_api_key_gemini',  None) if user else None
@@ -238,13 +244,14 @@ Budi koncizan ali potpun.
     else:
         providers_to_try = [provider]
     answer = None
+    used_provider = None
 
     async def _call_openai_compat(base_url: str, api_key: str, model: str) -> str | None:
         async with httpx.AsyncClient(timeout=60.0) as client:
             resp = await client.post(
                 f"{base_url}/chat/completions",
                 headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-                json={"model": model, "messages": messages, "max_tokens": 800}
+                json={"model": model, "messages": messages, "max_tokens": 1200}
             )
             if resp.status_code == 200:
                 return resp.json()["choices"][0]["message"]["content"].strip()
@@ -256,13 +263,14 @@ Budi koncizan ali potpun.
             if p == 'ollama':
                 ollama_host = getattr(settings, 'OLLAMA_HOST', 'http://ollama:11434')
                 ollama_model = getattr(settings, 'OLLAMA_MODEL', 'llama3.1')
-                async with httpx.AsyncClient(timeout=60.0) as client:
+                async with httpx.AsyncClient(timeout=90.0) as client:
                     resp = await client.post(
                         f"{ollama_host}/api/chat",
                         json={"model": ollama_model, "messages": messages, "stream": False}
                     )
                     if resp.status_code == 200:
                         answer = resp.json().get("message", {}).get("content", "").strip()
+                        used_provider = 'ollama'
                         break
             elif p == 'openai':
                 api_key = user_openai_key or getattr(settings, 'OPENAI_API_KEY', '')
@@ -271,6 +279,7 @@ Budi koncizan ali potpun.
                 openai_model = getattr(settings, 'OPENAI_MODEL', 'gpt-4o-mini')
                 answer = await _call_openai_compat("https://api.openai.com/v1", api_key, openai_model)
                 if answer:
+                    used_provider = 'openai'
                     break
             elif p == 'gemini':
                 api_key = user_gemini_key or getattr(settings, 'GEMINI_API_KEY', '')
@@ -284,6 +293,7 @@ Budi koncizan ali potpun.
                     if answer:
                         break
                 if answer:
+                    used_provider = 'gemini'
                     break
             elif p == 'groq':
                 api_key = user_groq_key or getattr(settings, 'GROQ_API_KEY', '')
@@ -297,6 +307,7 @@ Budi koncizan ali potpun.
                     if answer:
                         break
                 if answer:
+                    used_provider = 'groq'
                     break
             elif p == 'mistral':
                 api_key = user_mistral_key or getattr(settings, 'MISTRAL_API_KEY', '')
@@ -307,6 +318,7 @@ Budi koncizan ali potpun.
                     api_key, "mistral-small-latest"
                 )
                 if answer:
+                    used_provider = 'mistral'
                     break
             elif p == 'claude':
                 api_key = user_claude_key or getattr(settings, 'ANTHROPIC_API_KEY', '')
@@ -322,28 +334,34 @@ Budi koncizan ali potpun.
                         },
                         json={
                             "model": "claude-3-haiku-20240307",
-                            "max_tokens": 800,
+                            "max_tokens": 1200,
                             "system": messages[0]["content"],
                             "messages": messages[1:],
                         }
                     )
                     if resp.status_code == 200:
                         answer = resp.json()["content"][0]["text"].strip()
+                        used_provider = 'claude'
                         break
         except Exception as e:
             logger.warning(f"RAG LLM provider {p} failed: {e}")
             continue
     
     if not answer:
-        # Fallback: vrati samo kontekst bez LLM sinteze
-        answer = f"Pronašao sam sledeće relevantne informacije:\n\n" + "\n\n".join(
-            f"**{c['source_name']}**: {c['content'][:300]}..." for c in chunks[:3]
-        )
+        if has_context:
+            # LLM failed but we have context — show raw context as fallback
+            answer = "Pronašao sam relevantne informacije:\n\n" + "\n\n".join(
+                f"**{c['source_name']}**: {c['content'][:400]}..." for c in chunks[:3]
+            )
+        else:
+            answer = "Trenutno nije dostupan AI provajder za odgovor. Proveri podešavanja API ključeva u Settings."
     
-    sources = list({c['source_name']: c for c in chunks}.values())  # deduplicate by name
+    sources = list({c['source_name']: c for c in chunks}.values())  # deduplicate
     
     return {
         "answer": answer,
         "sources": [{"name": s["source_name"], "type": s["source_type"], "url": s.get("url")} for s in sources],
-        "chunks_used": len(chunks)
+        "chunks_used": len(chunks),
+        "provider": used_provider,
+        "has_context": has_context,
     }
