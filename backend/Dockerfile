@@ -68,8 +68,9 @@ COPY alembic.ini .
 # ================================================================================
 # CREATE LOGS DIRECTORY
 # ================================================================================
-RUN mkdir -p /app/logs && \
-    chmod 755 /app/logs
+RUN mkdir -p /app/logs /app/uploads && \
+    chmod 755 /app/logs && \
+    chmod 777 /app/uploads
 
 # ================================================================================
 # CREATE NON-ROOT USER

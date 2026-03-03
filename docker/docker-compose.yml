@@ -19,6 +19,9 @@ services:
       dockerfile: Dockerfile
     container_name: ai-learning-app
     restart: unless-stopped
+    user: root
+    command: >
+      sh -c "chmod 777 /app/uploads && su appuser -s /bin/sh -c 'uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload'"
     ports:
       - "8000:8000"
     env_file:
@@ -123,7 +126,9 @@ services:
       dockerfile: Dockerfile
     container_name: ai-learning-worker
     restart: unless-stopped
-    command: celery -A app.workers.celery_app worker --loglevel=info --concurrency=4 -Q pdf_processing,translation,quiz_generation,default
+    user: root
+    command: >
+      sh -c "chmod 777 /app/uploads && su appuser -s /bin/sh -c 'celery -A app.workers.celery_app worker --loglevel=info --concurrency=4 -Q pdf_processing,translation,quiz_generation,default'"
     env_file:
       - .env
     environment:
