@@ -30,8 +30,8 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-ALLOWED_EXTENSIONS = {'.pdf'}
-MAX_FILE_SIZE = 50 * 1024 * 1024  # 50MB
+ALLOWED_EXTENSIONS = {'.pdf', '.txt', '.docx', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
 
 @router.post("/upload", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
@@ -44,12 +44,11 @@ async def upload_file(
     ================================================================================
     UPLOAD FAJLA
     ================================================================================
-    Uploaduje PDF fajl za obradu.
+    Uploaduje fajl (PDF, TXT, DOCX, slike) za obradu.
     
     Validacije:
-        - Mora biti PDF format
+        - Mora biti dozvoljeni format (PDF, TXT, DOCX, JPG, PNG, itd.)
         - Maksimalna veličina: 50MB
-        - Provera na malware (todo)
     
     Args:
         file: UploadFile objekat
@@ -68,7 +67,7 @@ async def upload_file(
         logger.warning(f"Invalid file extension: {file_ext}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Only PDF files are allowed. Got: {file_ext}"
+            detail=f"Invalid file type. Allowed types: PDF, TXT, DOCX, JPG, PNG, GIF, BMP, TIFF, WebP. Got: {file_ext}"
         )
     
     # Čitanje sadržaja

@@ -33,6 +33,7 @@ logger = logging.getLogger(__name__)
 class TranslationProvider(str, Enum):
     """Dostupni provajderi za prevod."""
     OLLAMA = "ollama"
+    LIBRETRANSLATE = "libretranslate"
     DEEPL = "deepl"
     OPENAI = "openai"
     GOOGLE = "google"
@@ -40,6 +41,7 @@ class TranslationProvider(str, Enum):
     GEMINI = "gemini"
     GROQ = "groq"
     MISTRAL = "mistral"
+    DEEPSEEK = "deepseek"
 
 
 @dataclass
@@ -207,6 +209,223 @@ Translation:"""
 
 
 class DeepLClient(BaseTranslationClient):
+    """Klijent za DeepL API (online, visoki kvalitet prevoda)."""
+    
+    LANGUAGE_MAP = {
+        "en": "EN",
+        "sr": "SR",
+        "de": "DE",
+        "fr": "FR",
+        "es": "ES",
+        "it": "IT",
+        "pt": "PT-PT",
+        "nl": "NL",
+        "pl": "PL",
+        "ru": "RU",
+        "ja": "JA",
+        "zh": "ZH",
+    }
+    
+    COST_PER_CHAR = 0.000025
+    
+    def __init__(
+        self,
+        api_key: str = None,
+        use_pro: bool = None,
+        timeout: int = None
+    ):
+        self.api_key = api_key or settings.DEEPL_API_KEY
+        self.use_pro = use_pro if use_pro is not None else settings.DEEPL_USE_PRO
+        self.timeout = timeout or settings.DEEPL_TIMEOUT
+        
+        if self.use_pro:
+            self.base_url = "https://api.deepl.com/v2"
+        else:
+            self.base_url = "https://api-free.deepl.com/v2"
+    
+    @property
+    def provider_name(self) -> str:
+        return TranslationProvider.DEEPL.value
+    
+    def is_available(self) -> bool:
+        if not self.api_key:
+            return False
+        try:
+            response = httpx.get(
+                f"{self.base_url}/usage",
+                headers={"Authorization": f"DeepL-Auth-Key {self.api_key}"},
+                timeout=5
+            )
+            return response.status_code == 200
+        except Exception:
+            return False
+    
+    def translate(
+        self,
+        text: str,
+        source_language: str,
+        target_language: str,
+        context: Optional[str] = None
+    ) -> TranslationResult:
+        start_time = time.time()
+        
+        source = self.LANGUAGE_MAP.get(source_language, source_language.upper())
+        target = self.LANGUAGE_MAP.get(target_language, target_language.upper())
+        
+        try:
+            response = httpx.post(
+                f"{self.base_url}/translate",
+                headers={"Authorization": f"DeepL-Auth-Key {self.api_key}"},
+                json={
+                    "text": [text],
+                    "source_lang": source,
+                    "target_lang": target,
+                },
+                timeout=self.timeout
+            )
+            
+            duration_ms = (time.time() - start_time) * 1000
+            
+            if response.status_code != 200:
+                raise Exception(f"DeepL API error: {response.status_code} - {response.text}")
+            
+            data = response.json()
+            translated_text = data["translations"][0]["text"]
+            
+            chars_translated = len(text)
+            cost = chars_translated * self.COST_PER_CHAR
+            
+            return TranslationResult(
+                success=True,
+                translated_text=translated_text,
+                source_language=source_language,
+                target_language=target_language,
+                tokens_used=chars_translated // 4,
+                cost=cost,
+                duration_ms=duration_ms
+            )
+            
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"DeepL translation failed: {e}")
+            return TranslationResult(
+                success=False,
+                error=str(e),
+                duration_ms=duration_ms
+            )
+
+
+class LibreTranslateClient(BaseTranslationClient):
+    """Klijent za LibreTranslate API (besplatni, open-source prevodilac).
+    
+    Podržava 30+ jezika uključujući srpski.
+    Može se koristiti lokalno ili sa javnih servera.
+    """
+    
+    LANGUAGE_MAP = {
+        "en": "en",
+        "sr": "sr",
+        "de": "de",
+        "fr": "fr",
+        "es": "es",
+        "it": "it",
+        "pt": "pt",
+        "nl": "nl",
+        "pl": "pl",
+        "ru": "ru",
+        "ja": "ja",
+        "zh": "zh",
+        "ar": "ar",
+        "hi": "hi",
+        "tr": "tr",
+        "uk": "uk",
+        "bg": "bg",
+        "cs": "cs",
+        "hr": "hr",
+        "sl": "sl",
+    }
+    
+    def __init__(
+        self,
+        api_key: str = None,
+        base_url: str = None,
+        timeout: int = None
+    ):
+        super().__init__()
+        self.api_key = api_key or getattr(settings, 'LIBRETRANSLATE_API_KEY', None)
+        # Default to official LibreTranslate instance, can be overridden
+        self.base_url = base_url or getattr(settings, 'LIBRETRANSLATE_URL', 'https://libretranslate.com')
+        self.timeout = timeout or 30
+        self._available = None
+    
+    def is_available(self) -> bool:
+        if self._available is not None:
+            return self._available
+        
+        try:
+            response = httpx.get(f"{self.base_url}/languages", timeout=5)
+            self._available = response.status_code == 200
+        except Exception:
+            self._available = False
+        return self._available
+    
+    def translate(
+        self,
+        text: str,
+        source_language: str,
+        target_language: str,
+        context: Optional[str] = None
+    ) -> TranslationResult:
+        start_time = time.time()
+        
+        # Map language codes
+        source = self.LANGUAGE_MAP.get(source_language, source_language)
+        target = self.LANGUAGE_MAP.get(target_language, target_language)
+        
+        try:
+            payload = {
+                "q": text,
+                "source": source,
+                "target": target,
+                "format": "text"
+            }
+            
+            if self.api_key:
+                payload["api_key"] = self.api_key
+            
+            response = httpx.post(
+                f"{self.base_url}/translate",
+                json=payload,
+                timeout=self.timeout
+            )
+            
+            duration_ms = (time.time() - start_time) * 1000
+            
+            if response.status_code != 200:
+                raise Exception(f"LibreTranslate API error: {response.status_code} - {response.text}")
+            
+            data = response.json()
+            translated_text = data.get("translatedText", "").strip()
+            
+            # LibreTranslate is free, no cost
+            return TranslationResult(
+                success=True,
+                translated_text=translated_text,
+                source_language=source_language,
+                target_language=target_language,
+                tokens_used=len(text) // 4,
+                cost=0.0,
+                duration_ms=duration_ms
+            )
+            
+        except Exception as e:
+            duration_ms = (time.time() - start_time) * 1000
+            logger.error(f"LibreTranslate translation failed: {e}")
+            return TranslationResult(
+                success=False,
+                error=str(e),
+                duration_ms=duration_ms
+            )
     """Klijent za DeepL API (online, visoki kvalitet prevoda)."""
     
     LANGUAGE_MAP = {
@@ -747,6 +966,16 @@ def make_mistral_client(api_key: str = None) -> OpenAICompatibleClient:
     )
 
 
+def make_deepseek_client(api_key: str = None) -> OpenAICompatibleClient:
+    """Kreira DeepSeek klijenta za prevod."""
+    key = api_key or getattr(settings, 'DEEPSEEK_API_KEY', None) or ""
+    return OpenAICompatibleClient(
+        provider_id="deepseek", display_name="DeepSeek",
+        base_url="https://api.deepseek.com",
+        api_key=key, model=getattr(settings, 'DEEPSEEK_MODEL', 'deepseek-chat') or "deepseek-chat"
+    )
+
+
 class TranslationService:
     """
     ================================================================================
@@ -784,6 +1013,7 @@ class TranslationService:
         
         self._clients: Dict[str, BaseTranslationClient] = {
             TranslationProvider.OLLAMA.value: OllamaClient(),
+            TranslationProvider.LIBRETRANSLATE.value: LibreTranslateClient(),
             TranslationProvider.DEEPL.value: DeepLClient(),
             TranslationProvider.OPENAI.value: OpenAIClient(),
             TranslationProvider.GOOGLE.value: GoogleTranslateClient(),
@@ -791,6 +1021,7 @@ class TranslationService:
             TranslationProvider.GEMINI.value: make_gemini_client(),
             TranslationProvider.GROQ.value: make_groq_client(),
             TranslationProvider.MISTRAL.value: make_mistral_client(),
+            TranslationProvider.DEEPSEEK.value: make_deepseek_client(),
         }
         
         self._glossary: Dict[str, str] = {}

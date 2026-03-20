@@ -12,13 +12,14 @@ export default function QuizzesPage() {
   const [selectedDocId, setSelectedDocId] = useState<string>('')
   const [numQuestions, setNumQuestions] = useState(0)
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [shuffleQuestions, setShuffleQuestions] = useState(false)
 
   const { data: quizzesData, isLoading } = useQuery({
     queryKey: ['quizzes'],
     queryFn: () => quizzesApi.list(0, 50),
     refetchInterval: (data) => {
       const quizzes: Quiz[] = (data as any)?.data?.items ?? []
-      return quizzes.some((q) => q.status === 'generating') ? 3000 : false
+      return quizzes.some((q) => q.status === 'generating') ? 1000 : false  // Poll every 1 second while generating
     },
   })
 
@@ -28,12 +29,13 @@ export default function QuizzesPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: () => quizzesApi.create(selectedDocId, numQuestions),
+    mutationFn: () => quizzesApi.create(selectedDocId, numQuestions, undefined, undefined, shuffleQuestions),
     onSuccess: () => {
       toast.success('Generisanje kviza pokrenuto!')
       queryClient.invalidateQueries({ queryKey: ['quizzes'] })
       setShowCreateForm(false)
       setSelectedDocId('')
+      setShuffleQuestions(false)
     },
     onError: () => toast.error('Greška pri kreiranju kviza'),
   })
@@ -110,6 +112,15 @@ export default function QuizzesPage() {
               <span>Auto</span><span>50</span>
             </div>
           </div>
+          <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+            <input
+              type="checkbox"
+              checked={shuffleQuestions}
+              onChange={(e) => setShuffleQuestions(e.target.checked)}
+              className="w-4 h-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            />
+            Nasumičan redosled pitanja
+          </label>
           <div className="flex gap-3">
             <button
               onClick={() => createMutation.mutate()}
@@ -160,8 +171,32 @@ export default function QuizzesPage() {
                     {statusIcon(quiz.status)}
                     {statusLabel(quiz.status)}
                   </span>
-                  <span className="text-xs text-gray-400">·</span>
-                  <span className="text-xs text-gray-500">{quiz.total_questions} pitanja</span>
+                  {quiz.status === 'ready' && (
+                    <>
+                      <span className="text-xs text-gray-400">·</span>
+                      <span className="text-xs text-gray-500">{quiz.total_questions} pitanja</span>
+                    </>
+                  )}
+                  {(quiz.status === 'generating' || quiz.status === 'ready') && quiz.total_questions < (quiz.target_questions || 999) && (
+                    <>
+                      <span className="text-xs text-gray-400">·</span>
+                      <div className="flex items-center gap-2">
+                        <div className="w-32 h-3 bg-gradient-to-r from-indigo-200 to-indigo-400 rounded-full overflow-hidden relative">
+                          <div 
+                            className="h-full bg-indigo-600 absolute inset-0 rounded-full"
+                            style={{ 
+                              width: quiz.target_questions > 0 
+                                ? `${Math.min((quiz.total_questions / quiz.target_questions) * 100, 100)}%` 
+                                : '10%' 
+                            }}
+                          />
+                        </div>
+                        <span className="text-sm font-bold text-indigo-600">
+                          {quiz.total_questions} / {quiz.target_questions || '?'}
+                        </span>
+                      </div>
+                    </>
+                  )}
                   {quiz.time_limit && (
                     <>
                       <span className="text-xs text-gray-400">·</span>

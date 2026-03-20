@@ -29,9 +29,13 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxext6 \
     libxrender-dev \
     libgomp1 \
-    # Tesseract OCR
+    # Poppler (for pdf2image OCR) - OBAVEZNO za skenirane PDF-ove
+    poppler-utils \
+    # Tesseract OCR - OBAVEZNO za prepoznavanje teksta iz slika
     tesseract-ocr \
     tesseract-ocr-eng \
+    tesseract-ocr-script-latn \
+    tesseract-ocr-srp \
     # Utils
     curl \
     && rm -rf /var/lib/apt/lists/*

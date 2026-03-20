@@ -405,7 +405,7 @@ class TestProcessPDF:
         mock_doc.__exit__ = lambda self, *args: None
         
         mock_page = MagicMock()
-        mock_page.get_text.return_value = "Test content for the page."
+        mock_page.get_text.return_value = "Test content for the page. This is a longer text that contains more than fifty characters to pass the empty page check in the PDF service."
         mock_page.get_images.return_value = []
         mock_doc.__getitem__ = lambda self, idx: mock_page
         

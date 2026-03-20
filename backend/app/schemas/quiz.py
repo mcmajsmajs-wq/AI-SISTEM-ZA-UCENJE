@@ -19,12 +19,19 @@ from typing import List, Optional, Any
 class QuestionCreate(BaseModel):
     """Kreiranje pitanja."""
     question_text: str = Field(..., min_length=5)
-    question_type: str = Field("multiple_choice", pattern="^(multiple_choice|checkbox|true_false)$")
+    question_type: str = Field("multiple_choice", pattern="^(multiple_choice|checkbox|true_false|fill_blank|calculation|step_by_step)$")
     options: List[str] = Field(..., min_length=2)
     correct_answer: str
     explanation: Optional[str] = None
     points: int = Field(1, ge=1)
     order_index: int = 0
+    # Dodatna polja za fill_blank tip
+    exact_word: Optional[str] = None
+    alternative_words: Optional[List[str]] = None
+    case_insensitive: bool = True
+    # Polja za calculation i step_by_step
+    formula: Optional[str] = None
+    steps: Optional[List[str]] = None
 
 
 class QuestionResponse(BaseModel):
@@ -38,6 +45,15 @@ class QuestionResponse(BaseModel):
     order_index: int
     correct_answer: Optional[str] = None
     explanation: Optional[str] = None
+    image_url: Optional[str] = None
+    image_caption: Optional[str] = None
+    # Dodatna polja za fill_blank tip
+    exact_word: Optional[str] = None
+    alternative_words: Optional[List[str]] = None
+    case_insensitive: bool = True
+    # Polja za calculation i step_by_step
+    formula: Optional[str] = None
+    steps: Optional[List[str]] = None
 
     class Config:
         from_attributes = True
@@ -47,6 +63,8 @@ class QuestionWithAnswer(QuestionResponse):
     """Pitanje sa tačnim odgovorom (za prikaz rezultata)."""
     correct_answer: str
     explanation: Optional[str] = None
+    image_url: Optional[str] = None
+    image_caption: Optional[str] = None
 
 
 # ============================================================
@@ -70,9 +88,11 @@ class QuizResponse(BaseModel):
     user_id: str
     title: str
     description: Optional[str] = None
+    subject_area: Optional[str] = None  # Oblast dokumenta
     total_questions: int
+    target_questions: Optional[int] = 0
     time_limit: Optional[int] = None
-    passing_score: int
+    passing_score: Optional[int] = 60  # Default to 60%
     shuffle_questions: bool = False
     status: str
     created_at: datetime

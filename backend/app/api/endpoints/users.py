@@ -234,28 +234,31 @@ from pydantic import BaseModel
 from typing import Optional as _Optional
 
 class AISettingsRequest(BaseModel):
-    ai_provider: str = "auto"  # auto | ollama | openai | claude | gemini | groq | mistral | custom
+    ai_provider: str = "auto"  # auto | ollama | openai | claude | gemini | groq | mistral | deepseek | custom
     ai_api_key_openai: _Optional[str] = None
     ai_api_key_claude: _Optional[str] = None
     ai_api_key_gemini: _Optional[str] = None
     ai_api_key_groq: _Optional[str] = None
     ai_api_key_mistral: _Optional[str] = None
+    ai_api_key_deepseek: _Optional[str] = None
     ai_custom_base_url: _Optional[str] = None
     ai_api_key_custom: _Optional[str] = None
 
 class AISettingsResponse(BaseModel):
     ai_provider: str
-    has_openai_key: bool
-    has_claude_key: bool
-    has_gemini_key: bool
-    has_groq_key: bool
-    has_mistral_key: bool
-    has_custom_key: bool
+    has_openai_key: bool = False
+    has_claude_key: bool = False
+    has_gemini_key: bool = False
+    has_groq_key: bool = False
+    has_mistral_key: bool = False
+    has_deepseek_key: bool = False
+    has_custom_key: bool = False
     openai_key_preview: _Optional[str] = None
     claude_key_preview: _Optional[str] = None
     gemini_key_preview: _Optional[str] = None
     groq_key_preview: _Optional[str] = None
     mistral_key_preview: _Optional[str] = None
+    deepseek_key_preview: _Optional[str] = None
     custom_base_url: _Optional[str] = None
     custom_key_preview: _Optional[str] = None
 
@@ -275,12 +278,14 @@ async def get_ai_settings(current_user: User = Depends(get_current_user)):
         has_gemini_key=bool(current_user.ai_api_key_gemini),
         has_groq_key=bool(current_user.ai_api_key_groq),
         has_mistral_key=bool(current_user.ai_api_key_mistral),
+        has_deepseek_key=bool(current_user.ai_api_key_deepseek),
         has_custom_key=bool(current_user.ai_api_key_custom),
         openai_key_preview=preview(current_user.ai_api_key_openai),
         claude_key_preview=preview(current_user.ai_api_key_claude),
         gemini_key_preview=preview(current_user.ai_api_key_gemini),
         groq_key_preview=preview(current_user.ai_api_key_groq),
         mistral_key_preview=preview(current_user.ai_api_key_mistral),
+        deepseek_key_preview=preview(current_user.ai_api_key_deepseek),
         custom_base_url=current_user.ai_custom_base_url,
         custom_key_preview=preview(current_user.ai_api_key_custom),
     )
@@ -293,25 +298,27 @@ async def update_ai_settings(
     db: Session = Depends(get_db)
 ):
     """Čuva AI podešavanja korisnika."""
-    valid_providers = {"auto", "ollama", "openai", "claude", "gemini", "groq", "mistral", "custom"}
+    valid_providers = {"auto", "ollama", "openai", "claude", "gemini", "groq", "mistral", "deepseek", "custom"}
     if data.ai_provider not in valid_providers:
         raise HTTPException(status_code=400, detail=f"Nevažeći provajder. Dozvoljeni: {valid_providers}")
 
     current_user.ai_provider = data.ai_provider
 
-    # Prazan string znači "obriši ključ"; None znači "ne menjaj"
+    # Always update keys if provided (including empty strings to clear them)
     def update_key(field, value):
+        # Update if value is not None (allow empty strings to clear key)
         if value is not None:
-            setattr(current_user, field, value or None)
+            setattr(current_user, field, value if value else None)
+            logger.info(f"Updating {field}: {str(value)[:10] if value else 'cleared'}")
 
     update_key("ai_api_key_openai", data.ai_api_key_openai)
     update_key("ai_api_key_claude", data.ai_api_key_claude)
     update_key("ai_api_key_gemini", data.ai_api_key_gemini)
     update_key("ai_api_key_groq", data.ai_api_key_groq)
     update_key("ai_api_key_mistral", data.ai_api_key_mistral)
+    update_key("ai_api_key_deepseek", data.ai_api_key_deepseek)
+    update_key("ai_custom_base_url", data.ai_custom_base_url)
     update_key("ai_api_key_custom", data.ai_api_key_custom)
-    if data.ai_custom_base_url is not None:
-        current_user.ai_custom_base_url = data.ai_custom_base_url or None
 
     db.commit()
     db.refresh(current_user)

@@ -9,7 +9,7 @@ Verzija: 1.0.0
 ================================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks, Request, Query
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
 from pydantic import BaseModel, EmailStr
@@ -47,6 +47,10 @@ class ResetPasswordRequest(BaseModel):
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+class RefreshTokenRequest(BaseModel):
+    refresh_token: str
 
 
 @router.post("/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED)
@@ -220,7 +224,11 @@ async def logout(
 
 
 @router.post("/refresh", response_model=Token)
-async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
+async def refresh_token(
+    refresh_data: Optional[RefreshTokenRequest] = None,
+    refresh_token_query: Optional[str] = Query(None, alias="refresh_token"),
+    db: Session = Depends(get_db)
+):
     """
     ================================================================================
     REFRESH TOKEN
@@ -228,19 +236,26 @@ async def refresh_token(refresh_token: str, db: Session = Depends(get_db)):
     Generiše novi access token koristeći refresh token.
     
     Args:
-        refresh_token: Validan refresh token
+        refresh_token: Validan refresh token (can be sent as JSON body or query param)
     
     Returns:
         Novi Token
     
     Raises:
         HTTPException 401: Ako je refresh token invalid
-    ================================================================================
     """
+    token = refresh_data.refresh_token if refresh_data else refresh_token_query
+    
+    if not token:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail="refresh_token is required"
+        )
+    
     logger.info("Token refresh attempt")
     
     # Dekodiranje refresh token-a
-    payload = AuthService.decode_token(refresh_token)
+    payload = AuthService.decode_token(token)
     
     if payload is None:
         raise HTTPException(

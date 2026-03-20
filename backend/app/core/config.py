@@ -57,55 +57,54 @@ class Settings(BaseSettings):
     # ================================================================================
     # DATABASE
     # ================================================================================
-    POSTGRES_USER: str = "ai_learning_user"
-    POSTGRES_PASSWORD: str = "ai_learning_password"
-    POSTGRES_DB: str = "ai_learning_db"
-    POSTGRES_HOST: str = "localhost"
-    POSTGRES_PORT: str = "5432"
-    
-    @property
-    def DATABASE_URL(self) -> str:
-        """Generiše PostgreSQL connection string."""
-        return (
-            f"postgresql://{self.POSTGRES_USER}:{self.POSTGRES_PASSWORD}"
-            f"@{self.POSTGRES_HOST}:{self.POSTGRES_PORT}/{self.POSTGRES_DB}"
-        )
-    
-    # SQLAlchemy settings
-    SQLALCHEMY_DATABASE_URI: Optional[str] = None
+    DATABASE_URL: str = "postgresql://ai_learning_user:password@db:5432/ai_learning_db"
     SQLALCHEMY_POOL_SIZE: int = 5
     SQLALCHEMY_MAX_OVERFLOW: int = 10
     SQLALCHEMY_POOL_TIMEOUT: int = 30
-    SQLALCHEMY_POOL_RECYCLE: int = 1800
+    SQLALCHEMY_POOL_RECYCLE: int = 3600
+    SQLALCHEMY_ECHO: bool = False
     
     # ================================================================================
     # REDIS
     # ================================================================================
-    REDIS_HOST: str = "localhost"
+    REDIS_HOST: str = "redis"
     REDIS_PORT: int = 6379
     REDIS_DB: int = 0
-    REDIS_URL: Optional[str] = None
     
     @property
     def REDIS_CONNECTION_URL(self) -> str:
         """Generiše Redis connection string."""
-        return self.REDIS_URL or f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+        return f"redis://{self.REDIS_HOST}:{self.REDIS_PORT}/{self.REDIS_DB}"
+    
+    # ================================================================================
+    # STORAGE
+    # ================================================================================
+    STORAGE_BACKEND: str = "local"  # "local" or "s3"
     
     # ================================================================================
     # MINIO / S3
     # ================================================================================
-    MINIO_ENDPOINT: str = "localhost:9000"
+    MINIO_ENDPOINT: str = "minio:9000"
     MINIO_ACCESS_KEY: str = "minioadmin"
-    MINIO_SECRET_KEY: str = "minioadmin"
+    MINIO_SECRET_KEY: str = "minioadmin123"
     MINIO_BUCKET_NAME: str = "ai-learning-uploads"
     MINIO_USE_SSL: bool = False
+    # Public URL for frontend - if not set, uses internal endpoint
+    MINIO_PUBLIC_URL: Optional[str] = None
+    
+    # Legacy compatibility
+    CLOUD_STORAGE_ENDPOINT: Optional[str] = None
+    CLOUD_STORAGE_ACCESS_KEY: Optional[str] = None
+    CLOUD_STORAGE_SECRET_KEY: Optional[str] = None
+    CLOUD_STORAGE_BUCKET_NAME: Optional[str] = None
+    CLOUD_STORAGE_USE_SSL: bool = False
     
     # ================================================================================
     # AI / LLM
     # ================================================================================
     OLLAMA_HOST: str = "http://localhost:11434"
     OLLAMA_MODEL: str = "llama3.1"
-    OLLAMA_TIMEOUT: int = 300
+    OLLAMA_TIMEOUT: int = 60
     
     OPENAI_API_KEY: Optional[str] = None
     OPENAI_MODEL: str = "gpt-4"
@@ -125,9 +124,43 @@ class Settings(BaseSettings):
     CLAUDE_MODEL: str = "claude-3-sonnet-20240229"
     CLAUDE_TIMEOUT: int = 60
     
+    # DeepSeek AI
+    DEEPSEEK_API_KEY: Optional[str] = None
+    DEEPSEEK_MODEL: str = "deepseek-chat"
+    DEEPSEEK_TIMEOUT: int = 60
+
+    # Groq AI
+    GROQ_API_KEY: Optional[str] = None
+    GROQ_MODEL: str = "llama-3.3-70b-versatile"
+    GROQ_TIMEOUT: int = 60
+
+    # Mistral AI
+    MISTRAL_API_KEY: Optional[str] = None
+
+    # ================================================================================
+    # SISTEMSKI AI KLIJUČEVI (FALLBACK)
+    # ================================================================================
+    # Ovi ključevi se koriste ako korisnik nema svoje
+    SYSTEM_AI_PROVIDER: str = "groq"
+    SYSTEM_GROQ_API_KEY: Optional[str] = None
+    SYSTEM_OPENAI_API_KEY: Optional[str] = None
+    SYSTEM_ANTHROPIC_API_KEY: Optional[str] = None
+    MISTRAL_MODEL: str = "mistral-small-latest"
+    MISTRAL_TIMEOUT: int = 60
+
+    # Gemini AI
+    GEMINI_API_KEY: Optional[str] = None
+    GEMINI_MODEL: str = "gemini-2.0-flash"
+    GEMINI_TIMEOUT: int = 60
+    
     # Translation settings
-    TRANSLATION_PREFER_LOCAL: bool = True  # Prefer Ollama (free, local)
-    TRANSLATION_FALLBACK_ORDER: str = "ollama,deepl,openai,google,claude"  # Comma-separated
+    TRANSLATION_PREFER_LOCAL: bool = True  # Prefer LibreTranslate (free)
+    # Translation: LibreTranslate (free), DeepL (quality), Google (reliable), then AI as backup
+    TRANSLATION_FALLBACK_ORDER: str = "libretranslate,deepl,google,ollama,claude,gemini,groq,mistral,deepseek,openai"
+    
+    # LibreTranslate settings (optional - can use public instance or self-hosted)
+    LIBRETRANSLATE_URL: str = "https://libretranslate.com"  # Or your own instance
+    LIBRETRANSLATE_API_KEY: Optional[str] = None  # Optional API key
     
     # ================================================================================
     # EMAIL
@@ -144,7 +177,7 @@ class Settings(BaseSettings):
     # FILE UPLOAD
     # ================================================================================
     MAX_UPLOAD_SIZE: int = 50 * 1024 * 1024  # 50MB
-    ALLOWED_EXTENSIONS: List[str] = ["pdf"]
+    ALLOWED_EXTENSIONS: List[str] = ["pdf", "txt", "docx", "jpg", "jpeg", "png", "gif", "bmp", "tiff", "webp"]
     UPLOAD_FOLDER: str = "/tmp/ai-learning-uploads"
     
     # ================================================================================

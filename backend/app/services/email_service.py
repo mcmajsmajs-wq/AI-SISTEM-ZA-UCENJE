@@ -174,6 +174,66 @@ class EmailService:
         """
         return self._send(to, subject, html)
 
+    # ──────────────────────────────────────────────────────────────────────────
+    # Dokument obrađen
+    # ──────────────────────────────────────────────────────────────────────────
+    def send_document_processed(
+        self,
+        to: str,
+        full_name: str,
+        document_title: str,
+        total_pages: int,
+        total_chunks: int,
+    ) -> bool:
+        name = full_name or to.split("@")[0]
+        subject = f"✅ Dokument obrađen — {document_title}"
+        html = f"""
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
+          <h2 style="color:#10b981">Dokument je spreman, {name}! 🎉</h2>
+          <p>Vaš dokument <strong>"{document_title}"</strong> je uspešno obrađen.</p>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0">
+            <tr><td style="padding:8px;background:#f9fafb;border-radius:4px">📄 Stranica</td><td style="padding:8px;font-weight:bold">{total_pages}</td></tr>
+            <tr><td style="padding:8px">📝 Chunk-ova</td><td style="padding:8px;font-weight:bold">{total_chunks}</td></tr>
+          </table>
+          <p>Sada možete:</p>
+          <ul>
+            <li>Prevesti dokument na drugi jezik</li>
+            <li>Generisati kviz iz sadržaja</li>
+            <li>Koristiti dokument za RAG pretragu</li>
+          </ul>
+          <a href="http://localhost:5173/documents" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold">
+            Pregledaj dokumente →
+          </a>
+          <p style="margin-top:24px;color:#9ca3af;font-size:12px">AI Sistem za učenje</p>
+        </div>
+        """
+        return self._send(to, subject, html)
+
+    # ──────────────────────────────────────────────────────────────────────────
+    # Kviz spreman
+    # ──────────────────────────────────────────────────────────────────────────
+    def send_quiz_ready(
+        self,
+        to: str,
+        full_name: str,
+        quiz_title: str,
+        num_questions: int,
+    ) -> bool:
+        name = full_name or to.split("@")[0]
+        subject = f"🧠 Kviz je spreman — {quiz_title}"
+        html = f"""
+        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
+          <h2 style="color:#8b5cf6">Vaš kviz je spreman, {name}! 🎯</h2>
+          <p>Kviz <strong>"{quiz_title}"</strong> je uspešno generisan.</p>
+          <p style="font-size:18px;margin:16px 0"><strong>{num_questions} pitanja</strong> čeka na vas!</p>
+          <a href="http://localhost:5173/quizzes" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#8b5cf6;color:white;border-radius:8px;text-decoration:none;font-weight:bold">
+            Pokreni kviz →
+          </a>
+          <p style="margin-top:24px;color:#9ca3af;font-size:12px">AI Sistem za učenje</p>
+        </div>
+        """
+        return self._send(to, subject, html)
+
 
 # Singleton
 email_service = EmailService()

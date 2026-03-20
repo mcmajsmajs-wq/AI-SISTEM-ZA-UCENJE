@@ -20,6 +20,8 @@ from app.api.endpoints import quizzes
 from app.api.endpoints import study_plan
 from app.api.endpoints import analytics
 from app.api.endpoints import knowledge
+from app.api.endpoints import intelligence_test
+from app.api.endpoints import chat
 
 # ================================================================================
 # GLAVNI API ROUTER
@@ -87,6 +89,20 @@ api_router.include_router(
     knowledge.router,
     prefix="/knowledge",
     tags=["Knowledge"]
+)
+
+# Intelligence Test
+api_router.include_router(
+    intelligence_test.router,
+    prefix="/intelligence-test",
+    tags=["Intelligence Test"]
+)
+
+# AI Chat
+api_router.include_router(
+    chat.router,
+    prefix="/chat",
+    tags=["AI Chat"]
 )
 
 # TODO: Dodati ostale endpoint-e kada se implementiraju:

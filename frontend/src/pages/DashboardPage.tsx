@@ -63,7 +63,8 @@ export default function DashboardPage() {
     ? '< 1%'
     : `${translationPct}%`
 
-  const today = new Date().toLocaleDateString('sr-RS', { weekday: 'long', day: 'numeric', month: 'long' })
+  const today = new Date().toLocaleDateString('sr-RS', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' })
+  const now = new Date().toLocaleTimeString('sr-RS', { hour: '2-digit', minute: '2-digit' })
 
   const statCards = [
     {
@@ -127,7 +128,7 @@ export default function DashboardPage() {
           <h1 className="text-3xl font-extrabold text-gray-900">
             Dobrodošli, {user?.full_name?.split(' ')[0] || 'korisnik'}! 👋
           </h1>
-          <p className="text-gray-500 mt-1 capitalize">{today}</p>
+          <p className="text-gray-500 mt-1 capitalize">{today} • {now}</p>
         </div>
         {userStats.study_streak > 0 && (
           <div className="inline-flex items-center gap-2 px-4 py-2 rounded-2xl text-white text-sm font-semibold shadow-lg shadow-orange-500/25"
@@ -200,7 +201,7 @@ export default function DashboardPage() {
                         {doc.title}
                       </h3>
                       <p className="text-xs text-gray-400 mb-3">
-                        {doc.total_pages} str • {doc.total_chunks} odl
+                        {doc.total_pages} str • {doc.total_chunks} odl • {new Date(doc.created_at).toLocaleString('sr-RS', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
                       </p>
                       
                       {doc.total_chunks > 0 && (

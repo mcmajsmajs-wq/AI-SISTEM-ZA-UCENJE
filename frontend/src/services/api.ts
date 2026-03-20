@@ -228,8 +228,8 @@ export const documentsApi = {
 }
 
 export const quizzesApi = {
-  create: (documentId: string, numQuestions = 5, timeLimit?: number, passingScore = 60) =>
-    api.post('/quizzes', { document_id: documentId, num_questions: numQuestions, time_limit: timeLimit, passing_score: passingScore }),
+  create: (documentId: string, numQuestions = 5, timeLimit?: number, passingScore = 60, shuffleQuestions = false) =>
+    api.post('/quizzes', { document_id: documentId, num_questions: numQuestions, time_limit: timeLimit, passing_score: passingScore, shuffle_questions: shuffleQuestions }),
 
   list: (skip = 0, limit = 20, documentId?: string) => {
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) })
@@ -295,6 +295,7 @@ export const aiSettingsApi = {
     ai_api_key_gemini?: string | null
     ai_api_key_groq?: string | null
     ai_api_key_mistral?: string | null
+    ai_api_key_deepseek?: string | null
     ai_custom_base_url?: string | null
     ai_api_key_custom?: string | null
   }) => api.put('/users/me/ai-settings', data),
@@ -315,6 +316,17 @@ export const knowledgeApi = {
     api.delete(`/knowledge/sources/${id}`),
   reindex: () =>
     api.post('/knowledge/reindex', {}),
+}
+
+export const intelligenceTestApi = {
+  saveResult: (result: {
+    total_questions: number
+    correct_answers: number
+    time_spent: number
+    category_scores: Record<string, number>
+  }) => api.post('/intelligence-test/results', result),
+  
+  getResults: () => api.get('/intelligence-test/results'),
 }
 
 export default api

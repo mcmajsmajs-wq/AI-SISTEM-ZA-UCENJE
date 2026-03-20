@@ -112,12 +112,18 @@ class CloudStorageService:
         filename: str,
         user_id: str,
         content_type: str = "application/octet-stream",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        custom_path: Optional[str] = None
     ) -> Dict[str, Any]:
         content = file_content.read()
         checksum = self.calculate_checksum(content)
         ext = Path(filename).suffix.lower()
-        storage_path = f"{user_id}/{checksum}{ext}"
+        
+        # Use custom path if provided, otherwise generate default path
+        if custom_path:
+            storage_path = custom_path
+        else:
+            storage_path = f"{user_id}/{checksum}{ext}"
 
         s3_metadata = {'original-filename': filename, 'user-id': user_id}
         if metadata:
@@ -145,11 +151,32 @@ class CloudStorageService:
 
     def get_presigned_url(self, storage_path: str, expiration: int = 3600) -> str:
         """Generiše S3 pre-signed URL za direktan download."""
-        return self.client.generate_presigned_url(
+        url = self.client.generate_presigned_url(
             'get_object',
             Params={'Bucket': self.bucket_name, 'Key': storage_path},
             ExpiresIn=expiration
         )
+        # Replace internal MinIO URL with public proxy URL
+        public_url = getattr(settings, 'MINIO_PUBLIC_URL', None)
+        if public_url:
+            # Replace the internal endpoint with public URL
+            internal_endpoint = f"http://{settings.MINIO_ENDPOINT}" if not settings.MINIO_USE_SSL else f"https://{settings.MINIO_ENDPOINT}"
+            url = url.replace(internal_endpoint, public_url)
+        elif 'minio:' in url:
+            # Fallback: replace minio:9000 with /minio/ path
+            url = url.replace('http://minio:9000', '/minio')
+        return url
+
+    def get_public_url(self, storage_path: str) -> str:
+        """Generiše trajni javni URL bez ekspiracije."""
+        public_url = getattr(settings, 'MINIO_PUBLIC_URL', None)
+        if public_url:
+            # MINIO_PUBLIC_URL should be like http://localhost:8081/minio
+            # Format: http://localhost:8081/minio/ai-learning-uploads/path/to/file
+            return f"{public_url}/{self.bucket_name}/{storage_path}"
+        else:
+            # Fallback: use /minio/ path
+            return f"/minio/{self.bucket_name}/{storage_path}"
 
     def file_exists(self, storage_path: str) -> bool:
         try:

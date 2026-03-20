@@ -20,6 +20,7 @@ import QuizResultsPage from '@/pages/QuizResultsPage'
 import AnalyticsPage from '@/pages/AnalyticsPage'
 import KnowledgeBasePage from '@/pages/KnowledgeBasePage'
 import TranslationsPage from '@/pages/TranslationsPage'
+import IntelligenceTestPage from '@/pages/IntelligenceTestPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 function App() {
@@ -76,6 +77,7 @@ function App() {
         <Route path="analytics" element={<AnalyticsPage />} />
         <Route path="knowledge" element={<KnowledgeBasePage />} />
         <Route path="review" element={<TranslationsPage />} />
+        <Route path="intelligence-test" element={<IntelligenceTestPage />} />
       </Route>
       
       <Route path="*" element={<NotFoundPage />} />

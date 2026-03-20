@@ -111,6 +111,7 @@ export interface Quiz {
   title: string
   description: string | null
   total_questions: number
+  target_questions: number
   time_limit: number | null
   passing_score: number
   status: string
@@ -126,9 +127,16 @@ export interface Question {
   correct_answer: string
   explanation: string | null
   points: number
+  image_url?: string | null
+  image_caption?: string | null
+  exact_word?: string | null
+  alternative_words?: string | null
+  case_insensitive?: boolean
+  formula?: string | null
+  steps?: string | null
 }
 
-export type QuestionType = 'multiple_choice' | 'checkbox' | 'true_false'
+export type QuestionType = 'multiple_choice' | 'checkbox' | 'true_false' | 'calculation' | 'fill_blank' | 'step_by_step' | 'chemical_equation'
 
 export interface QuizAttempt {
   id: string

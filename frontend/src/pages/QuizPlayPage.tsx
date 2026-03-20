@@ -3,7 +3,7 @@ import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'
 import { quizzesApi } from '@/services/api'
 import { QuizWithQuestions, Question } from '@/types'
-import { Clock, ChevronRight, CheckSquare, AlertCircle, Loader2, CheckCircle2, XCircle, BookOpen, MessageCircle, Send, LogOut, Play, Save } from 'lucide-react'
+import { Clock, ChevronRight, CheckSquare, AlertCircle, Loader2, CheckCircle2, XCircle, BookOpen, MessageCircle, Send, LogOut, Play, Save, X, ZoomIn } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -55,6 +55,7 @@ export default function QuizPlayPage() {
   const [started, setStarted] = useState(false)
   const [showQuitConfirm, setShowQuitConfirm] = useState(false)
   const [savedProgress, setSavedProgress] = useState<SavedProgress | null>(null)
+  const [zoomImage, setZoomImage] = useState<{url: string; caption?: string} | null>(null)
 
   // Učitaj sačuvani napredak pri montiranju
   useEffect(() => {
@@ -174,21 +175,51 @@ export default function QuizPlayPage() {
   // Provjera tačnosti odgovora
   const isAnswerCorrect = (q: Question, userAnswer: string): boolean => {
     if (!userAnswer) return false
-    const correct = (q.correct_answer ?? '').trim().toLowerCase()
-    const user = userAnswer.trim().toLowerCase()
+    const correct = (q.correct_answer ?? '').trim()
+    const user = userAnswer.trim()
+    
+    if (q.question_type === 'calculation' || q.question_type === 'step_by_step') {
+      const numCorrect = parseFloat(correct.replace(',', '.'))
+      const numUser = parseFloat(user.replace(',', '.'))
+      if (isNaN(numCorrect) || isNaN(numUser)) return false
+      return Math.abs(numCorrect - numUser) < 0.001
+    }
+    
+    if (q.question_type === 'fill_blank') {
+      if (q.case_insensitive) {
+        return correct.toLowerCase() === user.toLowerCase()
+      }
+      return correct === user
+    }
+    
+    if (q.question_type === 'chemical_equation') {
+      const normalizeEq = (eq: string) => eq.toLowerCase()
+        .replace(/→/g, '->')
+        .replace(/\s+/g, '')
+        .replace(/[-=]+>/g, '->')
+      return normalizeEq(correct) === normalizeEq(user)
+    }
+    
     if (q.question_type === 'checkbox') {
-      const correctSet = new Set(correct.split(',').map(s => s.trim()))
-      const userSet = new Set(user.split(',').map(s => s.trim()))
+      const correctSet = new Set(correct.split(',').map(s => s.trim().toLowerCase()))
+      const userSet = new Set(user.split(',').map(s => s.trim().toLowerCase()))
       return correctSet.size === userSet.size && [...correctSet].every(v => userSet.has(v))
     }
-    return correct === user
+    
+    return correct.toLowerCase() === user.toLowerCase()
   }
 
   const FALLBACK_EXPLANATION = 'Ova tvrdnja je direktno navedena u tekstu.'
 
   const handleConfirm = (questionId: string) => {
-    if (!answers[questionId]) {
+    const q = questions.find(q => q.id === questionId)
+    const isTextInput = q?.question_type === 'calculation' || q?.question_type === 'fill_blank' || q?.question_type === 'step_by_step' || q?.question_type === 'chemical_equation'
+    if (!answers[questionId] && !isTextInput) {
       toast.error('Izaberi odgovor pre potvrde')
+      return
+    }
+    if (isTextInput && !answers[questionId]?.trim()) {
+      toast.error('Unesi odgovor pre potvrde')
       return
     }
     const newConfirmed = new Set([...confirmed, questionId])
@@ -205,7 +236,6 @@ export default function QuizPlayPage() {
     }
 
     // Auto-generate AI explanation if the stored one is missing or is the generic fallback
-    const q = questions.find(q => q.id === questionId)
     if (!q) return
     const hasGoodExplanation = q.explanation && q.explanation.trim() !== FALLBACK_EXPLANATION
     if (hasGoodExplanation || autoExplanations[questionId]) return
@@ -361,7 +391,7 @@ export default function QuizPlayPage() {
   const userCorrect = isConfirmed && isAnswerCorrect(currentQ, selectedAnswer)
 
   return (
-    <div className="max-w-2xl mx-auto space-y-4">
+    <div className="max-w-2xl mx-auto space-y-4 pb-20">
       {/* Confirm quit modal */}
       {showQuitConfirm && (
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
@@ -438,68 +468,173 @@ export default function QuizPlayPage() {
 
       {/* Question card */}
       <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-6 space-y-5">
+        {currentQ.image_url && (
+          <div className="space-y-2">
+            <div 
+              className="relative group cursor-zoom-in rounded-lg border border-gray-200 bg-gray-50 overflow-y-auto"
+              style={{ maxHeight: '600px' }}
+              onClick={() => setZoomImage({url: currentQ.image_url || '', caption: currentQ.image_caption || undefined})}
+            >
+              <img 
+                src={currentQ.image_url} 
+                alt={currentQ.image_caption || "Quiz image"}
+                className="w-full h-auto rounded"
+                style={{ maxHeight: '600px' }}
+              />
+              <div className="absolute top-2 right-2 p-1.5 bg-black/50 rounded-full opacity-0 group-hover:opacity-100 transition-opacity">
+                <ZoomIn className="w-4 h-4 text-white" />
+              </div>
+            </div>
+            {currentQ.image_caption && (
+              <p className="text-sm text-gray-500 italic text-center">{currentQ.image_caption}</p>
+            )}
+          </div>
+        )}
         <div>
           <span className="text-xs font-semibold text-indigo-500 uppercase tracking-wider">
             {currentQ.question_type === 'multiple_choice' ? 'Jedan tačan odgovor' :
-             currentQ.question_type === 'checkbox' ? 'Više tačnih odgovora' : 'Tačno / Netačno'}
+             currentQ.question_type === 'checkbox' ? 'Više tačnih odgovora' :
+             currentQ.question_type === 'true_false' ? 'Tačno / Netačno' :
+             currentQ.question_type === 'calculation' ? 'Računski zadatak' :
+             currentQ.question_type === 'fill_blank' ? 'Popuni prazninu' :
+             currentQ.question_type === 'step_by_step' ? 'Korak po korak' :
+             currentQ.question_type === 'chemical_equation' ? 'Hemijska jednačina' : 'Pitanje'}
           </span>
           <p className="text-lg font-semibold text-gray-900 mt-2 leading-snug">{currentQ.question_text}</p>
         </div>
 
         <div className="space-y-2">
-          {currentQ.options.map((option) => {
-            const isSelected = currentQ.question_type === 'checkbox'
-              ? selectedCheckboxes.includes(option)
-              : selectedAnswer === option
-
-            const isCorrectOption = isConfirmed && (() => {
-              const correct = (currentQ.correct_answer ?? '').trim()
-              if (currentQ.question_type === 'checkbox') {
-                return correct.split(',').map(s => s.trim()).includes(option.trim())
-              }
-              return correct === option
-            })()
-
-            return (
-              <label
-                key={option}
+          {currentQ.question_type === 'calculation' || currentQ.question_type === 'step_by_step' ? (
+            <div className="space-y-3">
+              {currentQ.formula && (
+                <div className="bg-gray-50 border border-gray-200 rounded-lg p-3 text-sm text-gray-600">
+                  <span className="font-medium">Formula:</span> {currentQ.formula}
+                </div>
+              )}
+              <input
+                type="text"
+                value={selectedAnswer}
+                onChange={(e) => handleAnswer(currentQ.id, e.target.value, currentQ.question_type)}
+                disabled={isConfirmed}
+                placeholder="Unesi odgovor (npr: H=6)..."
                 className={clsx(
-                  "flex items-center gap-3 p-3.5 rounded-xl border transition-all",
-                  isConfirmed ? "cursor-default" : "cursor-pointer",
-                  isConfirmed && isCorrectOption
+                  "w-full px-4 py-3 rounded-xl border text-lg",
+                  isConfirmed ? "bg-gray-50 cursor-default" : "",
+                  isConfirmed && userCorrect
                     ? "border-green-400 bg-green-50"
-                    : isConfirmed && isSelected && !isCorrectOption
+                    : isConfirmed && !userCorrect
                     ? "border-red-400 bg-red-50"
-                    : isSelected
-                    ? "border-indigo-400 bg-indigo-50"
-                    : isConfirmed
-                    ? "border-gray-100 bg-gray-50 opacity-60"
-                    : "border-gray-200 hover:border-indigo-200 hover:bg-gray-50"
+                    : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 )}
-              >
-                {currentQ.question_type === 'checkbox' ? (
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={(e) => handleAnswer(currentQ.id, option, 'checkbox', e.target.checked)}
-                    disabled={isConfirmed}
-                    className="w-4 h-4 accent-indigo-600"
-                  />
-                ) : (
-                  <input
-                    type="radio"
-                    checked={isSelected}
-                    onChange={() => handleAnswer(currentQ.id, option, currentQ.question_type)}
-                    disabled={isConfirmed}
-                    className="w-4 h-4 accent-indigo-600"
-                  />
+              />
+              {isConfirmed && currentQ.steps && (
+                <div className="bg-blue-50 border border-blue-200 rounded-lg p-3 text-sm text-gray-700">
+                  <span className="font-medium text-blue-700">Rešenje korak po korak:</span>
+                  <div className="mt-2 whitespace-pre-wrap">{currentQ.steps}</div>
+                </div>
+              )}
+            </div>
+          ) : currentQ.question_type === 'fill_blank' ? (
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={selectedAnswer}
+                onChange={(e) => handleAnswer(currentQ.id, e.target.value, currentQ.question_type)}
+                disabled={isConfirmed}
+                placeholder="Unesi tačan odgovor..."
+                className={clsx(
+                  "w-full px-4 py-3 rounded-xl border text-lg",
+                  isConfirmed ? "bg-gray-50 cursor-default" : "",
+                  isConfirmed && userCorrect
+                    ? "border-green-400 bg-green-50"
+                    : isConfirmed && !userCorrect
+                    ? "border-red-400 bg-red-50"
+                    : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
                 )}
-                <span className="text-sm font-medium text-gray-800 flex-1">{option}</span>
-                {isConfirmed && isCorrectOption && <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />}
-                {isConfirmed && isSelected && !isCorrectOption && <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />}
-              </label>
-            )
-          })}
+              />
+              {currentQ.exact_word && (
+                <p className="text-xs text-gray-400">
+                  {currentQ.case_insensitive ? 'Odgovor nije osetljiv na velika/mala slova' : 'Odgovor je osetljiv na velika/mala slova'}
+                </p>
+              )}
+            </div>
+          ) : currentQ.question_type === 'chemical_equation' ? (
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={selectedAnswer}
+                onChange={(e) => handleAnswer(currentQ.id, e.target.value, currentQ.question_type)}
+                disabled={isConfirmed}
+                placeholder="Npr: 2H2 + O2 -> 2H2O"
+                className={clsx(
+                  "w-full px-4 py-3 rounded-xl border text-lg font-mono",
+                  isConfirmed ? "bg-gray-50 cursor-default" : "",
+                  isConfirmed && userCorrect
+                    ? "border-green-400 bg-green-50"
+                    : isConfirmed && !userCorrect
+                    ? "border-red-400 bg-red-50"
+                    : "border-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-300"
+                )}
+              />
+              <p className="text-xs text-gray-400">
+                Koristi standardnu hemijsku notaciju (npr: -&gt; za strelicu)
+              </p>
+            </div>
+          ) : (
+            currentQ.options.map((option) => {
+              const isSelected = currentQ.question_type === 'checkbox'
+                ? selectedCheckboxes.includes(option)
+                : selectedAnswer === option
+
+              const isCorrectOption = isConfirmed && (() => {
+                const correct = (currentQ.correct_answer ?? '').trim()
+                if (currentQ.question_type === 'checkbox') {
+                  return correct.split(',').map(s => s.trim()).includes(option.trim())
+                }
+                return correct === option
+              })()
+
+              return (
+                <label
+                  key={option}
+                  className={clsx(
+                    "flex items-center gap-3 p-3.5 rounded-xl border transition-all",
+                    isConfirmed ? "cursor-default" : "cursor-pointer",
+                    isConfirmed && isCorrectOption
+                      ? "border-green-400 bg-green-50"
+                      : isConfirmed && isSelected && !isCorrectOption
+                      ? "border-red-400 bg-red-50"
+                      : isSelected
+                      ? "border-indigo-400 bg-indigo-50"
+                      : isConfirmed
+                      ? "border-gray-100 bg-gray-50 opacity-60"
+                      : "border-gray-200 hover:border-indigo-200 hover:bg-gray-50"
+                  )}
+                >
+                  {currentQ.question_type === 'checkbox' ? (
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={(e) => handleAnswer(currentQ.id, option, 'checkbox', e.target.checked)}
+                      disabled={isConfirmed}
+                      className="w-4 h-4 accent-indigo-600"
+                    />
+                  ) : (
+                    <input
+                      type="radio"
+                      checked={isSelected}
+                      onChange={() => handleAnswer(currentQ.id, option, currentQ.question_type)}
+                      disabled={isConfirmed}
+                      className="w-4 h-4 accent-indigo-600"
+                    />
+                  )}
+                  <span className="text-sm font-medium text-gray-800 flex-1">{option}</span>
+                  {isConfirmed && isCorrectOption && <CheckCircle2 className="w-4 h-4 text-green-500 flex-shrink-0" />}
+                  {isConfirmed && isSelected && !isCorrectOption && <XCircle className="w-4 h-4 text-red-500 flex-shrink-0" />}
+                </label>
+              )
+            })
+          )}
         </div>
 
         {/* Feedback panel — prikazuje se posle potvrde */}
@@ -513,7 +648,9 @@ export default function QuizPlayPage() {
                 ? <CheckCircle2 className="w-4 h-4 text-green-600 flex-shrink-0" />
                 : <XCircle className="w-4 h-4 text-amber-600 flex-shrink-0" />}
               <span className={clsx("text-sm font-semibold", userCorrect ? "text-green-800" : "text-amber-800")}>
-                {userCorrect ? 'Tačno! ✓' : `Netačno. Tačan odgovor: ${currentQ.correct_answer}`}
+                {userCorrect 
+                  ? 'Tačno! ✓' 
+                  : `Netačno. ${(currentQ.question_type === 'calculation' || currentQ.question_type === 'fill_blank' || currentQ.question_type === 'step_by_step') ? `Tvoj odgovor: "${selectedAnswer}" — Tačan: ` : ''}${currentQ.correct_answer}`}
               </span>
             </div>
             {/* Show stored explanation if it's a good one */}
@@ -671,6 +808,34 @@ export default function QuizPlayPage() {
           )
         )}
       </div>
+
+      {/* Lightbox Modal for Image Zoom */}
+      {zoomImage && (
+        <div 
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/90 overflow-auto"
+          onClick={() => setZoomImage(null)}
+        >
+          <button
+            className="fixed top-4 right-4 p-2 rounded-full bg-white/10 hover:bg-white/20 text-white transition-colors z-50"
+            onClick={() => setZoomImage(null)}
+          >
+            <X className="w-6 h-6" />
+          </button>
+          <div 
+            className="relative max-w-[95vw] my-8"
+            onClick={(e) => e.stopPropagation()}
+          >
+            <img 
+              src={zoomImage.url} 
+              alt={zoomImage.caption || "Uvećana slika"}
+              className="w-full h-auto rounded-lg"
+            />
+            {zoomImage.caption && (
+              <p className="mt-3 text-center text-white/80 text-sm">{zoomImage.caption}</p>
+            )}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

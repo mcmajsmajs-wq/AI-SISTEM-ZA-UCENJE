@@ -32,6 +32,7 @@ from app.db.base import Base
 from app.db.models.user import User, UserSession
 from app.db.models.file import File
 from app.db.models.document import Document, Chunk
+from app.db.models.conversation import Conversation, Message
 from app.core.config import settings
 
 # ── SQLite UUID compatibility ─────────────────────────────────────────────────

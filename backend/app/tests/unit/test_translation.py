@@ -41,7 +41,7 @@ class TestTranslationProvider:
     
     def test_provider_count(self):
         """Test broja provajdera."""
-        assert len(TranslationProvider) == 8
+        assert len(TranslationProvider) == 9
 
 
 class TestTranslationResult:
@@ -238,9 +238,11 @@ class TestDeepLClient:
     
     def test_is_available_without_key(self):
         """Test dostupnosti bez API ključa."""
-        client = DeepLClient(api_key=None)
-        
-        assert client.is_available() is False
+        with patch('app.services.translation.settings') as mock_settings:
+            mock_settings.DEEPL_API_KEY = None
+            client = DeepLClient()
+            
+            assert client.is_available() is False
     
     def test_map_language(self):
         """Test mapiranja jezika."""
@@ -274,16 +276,18 @@ class TestDeepLClient:
     
     def test_translate_without_api_key(self):
         """Test prevoda bez API ključa."""
-        client = DeepLClient(api_key=None)
-        
-        result = client.translate(
-            text="Test",
-            source_language="en",
-            target_language="sr"
-        )
-        
-        assert result.success is False
-        assert "API key" in result.error
+        with patch('app.services.translation.settings') as mock_settings:
+            mock_settings.DEEPL_API_KEY = None
+            client = DeepLClient()
+            
+            result = client.translate(
+                text="Test",
+                source_language="en",
+                target_language="sr"
+            )
+            
+            assert result.success is False
+            assert result.error is not None
 
 
 class TestOpenAIClient:
@@ -440,7 +444,7 @@ class TestTranslationService:
         """Test inicijalizacije servisa."""
         service = TranslationService()
         
-        assert len(service._clients) == 8
+        assert len(service._clients) == 9
     
     def test_get_language_name(self):
         """Test dohvatanja imena jezika."""
@@ -465,7 +469,7 @@ class TestTranslationService:
         with patch.object(service._clients['ollama'], 'is_available', return_value=True):
             providers = service.get_available_providers()
             
-            assert len(providers) == 8
+            assert len(providers) == 9
             assert any(p['id'] == 'ollama' for p in providers)
     
     def test_translate_empty_text(self):

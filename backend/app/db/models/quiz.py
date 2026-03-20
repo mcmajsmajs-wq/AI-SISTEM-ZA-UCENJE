@@ -30,7 +30,9 @@ class Quiz(Base):
 
     title = Column(String(500), nullable=False)
     description = Column(Text)
+    subject_area = Column(String(100))  # Oblast dokumenta (matematika, fizika, hemija...)
     total_questions = Column(Integer, default=0)
+    target_questions = Column(Integer, default=0)  # očekivan broj pitanja
     time_limit = Column(Integer, nullable=True)  # sekunde, None = bez limita
     passing_score = Column(Integer, default=60)  # procenat za prolaz
     shuffle_questions = Column(Boolean, default=False)  # mešanje redosleda pitanja
@@ -63,7 +65,7 @@ class Question(Base):
 
     question_text = Column(Text, nullable=False)
     question_type = Column(
-        Enum("multiple_choice", "checkbox", "true_false", name="question_type"),
+        Enum("multiple_choice", "checkbox", "true_false", "fill_blank", "calculation", "step_by_step", "chemical_equation", name="question_type"),
         nullable=False,
         default="multiple_choice"
     )
@@ -74,9 +76,22 @@ class Question(Base):
     #                 za checkbox = lista vrednosti kao JSON string
     correct_answer = Column(Text, nullable=False)
 
+    # Dodatna polja za fill_blank tip pitanja
+    exact_word = Column(Text)  # Tačna reč za fill_blank
+    alternative_words = Column(JSON)  # Alternativni odgovori (sinonimi)
+    case_insensitive = Column(Boolean, default=True)  # Da li je veličina slova bitna
+
+    # Polja za calculation i step_by_step tipove
+    formula = Column(Text)  # Formula za izračunavanje
+    steps = Column(JSON)  # Koraci za step_by_step (lista stringova)
+
     explanation = Column(Text)
     points = Column(Integer, default=1)
     order_index = Column(Integer, default=0)
+    
+    # Image for question (stored in MinIO/S3)
+    image_url = Column(Text)
+    image_caption = Column(Text)
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
@@ -86,6 +101,30 @@ class Question(Base):
 
     def __repr__(self):
         return f"<Question(id={self.id}, type={self.question_type})>"
+
+
+class QuizImage(Base):
+    """
+    Slike ekstrahovane iz PDF dokumenta za kviz pitanja.
+    """
+    __tablename__ = "quiz_images"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False, index=True)
+    
+    # Image storage info
+    storage_path = Column(Text, nullable=False)
+    image_url = Column(Text, nullable=False)
+    mime_type = Column(String(50), default="image/jpeg")
+    file_size = Column(Integer)
+    
+    # Image metadata
+    page_number = Column(Integer)
+    caption = Column(Text)
+    
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    
+    document = relationship("Document", backref="quiz_images")
 
 
 class QuizAttempt(Base):

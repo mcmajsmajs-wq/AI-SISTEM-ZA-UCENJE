@@ -30,7 +30,11 @@ from app.db.models.file import File  # noqa
 from app.db.models.document import Document, Chunk  # noqa
 from app.db.models.quiz import Quiz, Question, QuizAttempt, QuizAnswer  # noqa
 from app.db.models.study_plan import StudyPlan, StudyPlanItem  # noqa
+from app.db.models.conversation import Conversation, Message  # noqa
 from app.workers.celery_app import celery_app  # noqa: ensure celery app is registered
+
+# Import automatic migration utility
+from app.utils.database_migration import check_and_add_missing_columns, verify_database_health
 
 import logging
 
@@ -71,6 +75,16 @@ async def lifespan(app: FastAPI):
         logger.info("Creating database tables...")
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
+    
+    # Automatska provera i migracija kolona (radi i u produkciji)
+    if verify_database_health():
+        try:
+            check_and_add_missing_columns()
+        except Exception as e:
+            logger.warning(f"Automatska migracija nije uspela: {e}")
+            logger.warning("Aplikacija će pokušati da nastavi bez automatske migracije")
+    else:
+        logger.error("Baza podataka nije dostupna!")
     
     logger.info("Application started successfully!")
     logger.info("=" * 80)

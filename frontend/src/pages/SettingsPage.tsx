@@ -454,6 +454,7 @@ function AIProviderTab() {
   const [geminiKey, setGeminiKey] = useState('')
   const [groqKey, setGroqKey] = useState('')
   const [mistralKey, setMistralKey] = useState('')
+  const [deepseekKey, setDeepseekKey] = useState('')
   const [customBaseUrl, setCustomBaseUrl] = useState('')
   const [customKey, setCustomKey] = useState('')
   const [showKeys, setShowKeys] = useState<Record<string, boolean>>({})
@@ -474,13 +475,14 @@ function AIProviderTab() {
       ai_api_key_gemini: geminiKey || undefined,
       ai_api_key_groq: groqKey || undefined,
       ai_api_key_mistral: mistralKey || undefined,
+      ai_api_key_deepseek: deepseekKey || undefined,
       ai_custom_base_url: customBaseUrl || undefined,
       ai_api_key_custom: customKey || undefined,
     }),
     onSuccess: () => {
       toast.success('AI podešavanja sačuvana!')
       setOpenaiKey(''); setClaudeKey(''); setGeminiKey('')
-      setGroqKey(''); setMistralKey(''); setCustomKey('')
+      setGroqKey(''); setMistralKey(''); setDeepseekKey(''); setCustomKey('')
       refetch()
     },
     onError: () => toast.error('Greška pri čuvanju'),
@@ -557,6 +559,15 @@ function AIProviderTab() {
       requiresKey: true,
     },
     {
+      id: 'deepseek',
+      name: 'DeepSeek',
+      desc: 'DeepSeek V3 i R1 modeli. Odličan odnos cene i kvaliteta.',
+      icon: Cpu,
+      color: 'cyan',
+      requiresKey: true,
+      badge: 'Novi',
+    },
+    {
       id: 'custom',
       name: 'Custom (OpenAI-compatible)',
       desc: 'LM Studio, vLLM, Ollama REST, ili bilo koji OpenAI-compatible API.',
@@ -575,6 +586,7 @@ function AIProviderTab() {
     purple: 'border-purple-500 bg-purple-50',
     yellow: 'border-yellow-500 bg-yellow-50',
     slate:  'border-slate-500 bg-slate-50',
+    cyan:   'border-cyan-500 bg-cyan-50',
   }
 
   const badgeColor: Record<string, string> = {
@@ -639,6 +651,14 @@ function AIProviderTab() {
       savedKey: settings?.mistral_key_preview, hasKey: settings?.has_mistral_key,
       link: 'https://console.mistral.ai/api-keys/', linkLabel: 'console.mistral.ai',
       bgClass: 'bg-yellow-50', borderClass: 'border-yellow-200', textClass: 'text-yellow-700',
+    },
+    deepseek: {
+      label: 'DeepSeek API ključ',
+      placeholder: settings?.has_deepseek_key ? 'Ostavi prazno da zadržiš ključ' : 'sk-...',
+      value: deepseekKey, onChange: setDeepseekKey,
+      savedKey: settings?.deepseek_key_preview, hasKey: settings?.has_deepseek_key,
+      link: 'https://platform.deepseek.com/api-keys', linkLabel: 'platform.deepseek.com',
+      bgClass: 'bg-cyan-50', borderClass: 'border-cyan-200', textClass: 'text-cyan-700',
     },
   }
 
@@ -730,7 +750,7 @@ function AIProviderTab() {
       </div>
 
       {/* Key inputs — shown for active provider */}
-      {['openai', 'claude', 'gemini', 'groq', 'mistral'].map(id =>
+      {['openai', 'claude', 'gemini', 'groq', 'mistral', 'deepseek'].map(id =>
         showKeyField(id) ? <KeyInput key={id} id={id} /> : null
       )}
 

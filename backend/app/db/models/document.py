@@ -84,6 +84,10 @@ class Chunk(Base):
     # Status
     is_translated = Column(Integer, default=0)  # 0=False, 1=True
     is_reviewed = Column(Integer, default=0)
+    used_for_quiz = Column(Integer, default=0)  # 0=False, 1=True - da li je chunk korišćen za kviz
+    
+    # Page number for image mapping
+    page_number = Column(Integer, nullable=True)  # Broj stranice u PDF-u
     
     # Embeddings (ako koristite pgvector)
     # embedding = Column(Vector(1536))  # Zakomentarisano dok se ne doda pgvector

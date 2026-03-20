@@ -5,7 +5,7 @@ CELERY TASKS
 ================================================================================
 Background task-ovi za asinhronu obradu.
 
-Verzija: 1.2.0
+Verzija: 1.2.1
 ================================================================================
 """
 
@@ -13,17 +13,282 @@ from celery import shared_task
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 import logging
+import uuid
+import io
+import time
 from typing import Dict, Any, Optional
+from PIL import Image
 
 from app.core.config import settings
 from app.db.session import engine
 from app.db.models.file import File
 from app.db.models.document import Document, Chunk
+from app.db.models.quiz import QuizImage
 from app.services.storage import storage_service
 from app.services.pdf import pdf_service
 from app.services.translation import translation_service, make_gemini_client, make_groq_client, make_mistral_client
 
 logger = logging.getLogger(__name__)
+
+
+def translate_with_fallback(text: str, source_language: str, target_language: str, user_api_keys: dict = None) -> Any:
+    """
+    Translate text with automatic fallback between providers.
+    Tries multiple providers in order until one works.
+    """
+    from app.services.translation import translation_service
+    
+    # Get all available user API keys
+    providers_to_try = []
+    
+    if user_api_keys:
+        # Add user's providers in order of preference
+        priority_order = ['mistral', 'groq', 'gemini', 'deepseek', 'openai']
+        for p in priority_order:
+            if user_api_keys.get(p):
+                providers_to_try.append(p)
+    
+    # Add system providers as fallback - ONLY LibreTranslate (free, fast)
+    # AI providers should only be used if user has their own keys
+    system_order = ['libretranslate']
+    for p in system_order:
+        if p not in providers_to_try:
+            providers_to_try.append(p)
+    
+    last_error = None
+    
+    for provider in providers_to_try:
+        # Create client for this provider
+        client = None
+        if provider == 'mistral' and user_api_keys.get('mistral'):
+            from app.services.translation import make_mistral_client
+            client = make_mistral_client(user_api_keys['mistral'])
+        elif provider == 'groq' and user_api_keys.get('groq'):
+            from app.services.translation import make_groq_client
+            client = make_groq_client(user_api_keys['groq'])
+        elif provider == 'gemini' and user_api_keys.get('gemini'):
+            from app.services.translation import make_gemini_client
+            client = make_gemini_client(user_api_keys['gemini'])
+        
+        if client:
+            # Try this provider
+            for attempt in range(3):
+                result = client.translate(text, source_language, target_language)
+                
+                if result.success:
+                    return result
+                
+                error_str = str(result.error or "").lower()
+                if "429" in error_str or "rate limit" in error_str:
+                    wait_time = (2 ** attempt) * 2.0  # Wait 2s, 4s, 8s
+                    logging.warning(f"{provider} rate limit, waiting {wait_time}s...")
+                    time.sleep(wait_time)
+                    continue
+                else:
+                    # Non-rate-limit error, try next provider
+                    break
+            
+            last_error = result.error
+    
+    # If all user providers failed, try system translation service
+    result = translation_service.translate(text, source_language, target_language)
+    return result
+
+
+def _is_metadata_page(text: str, is_scanned: bool = False) -> bool:
+    """
+    Proverava da li je stranica metadata (korice, copyright, sadržaj).
+    Takve stranice ne treba da idu u quiz slike.
+    
+    NOTE: Za skenirane dokumente (bez teksta), uvek vrati False -
+    jer ne možemo znati da li je metadata bez OCR-a.
+    """
+    # Za skenirane dokumente - NEBOJ SE, pusti sve stranice
+    # Kasnije AI Vision može da odluci da preskoci ako treba
+    if is_scanned:
+        return False
+    
+    # Ako nema teksta - preskoci
+    if not text or len(text.strip()) < 50:
+        return True
+    
+    lines = [l.strip() for l in text.split('\n') if l.strip()]
+    if not lines:
+        return True
+    
+    # Dodatna provera za KRATKE stranice (<100 reči) - verovatno metadata
+    words = len(text.split())
+    if words < 100:
+        # Kratke stranice su obično: korice, copyright, autor, sadržaj
+        logger.debug(f"Short page ({words} words) - likely metadata")
+        return True
+    
+    # Pokazatelji metadata stranica
+    metadata_indicators = [
+        # Serbian
+        'аутор', 'аутора', 'аутору', 'аутором',
+        'рецензент', 'рецензенти', 'рецензената',
+        'уредник', 'уредника', 'уредници',
+        'издавач', 'издавача', 'издаваштво',
+        'тираж', 'штампа', 'штампане',
+        'copyright', 'сва права', 'сва права задржана',
+        'isbn', 'issn',
+        'министарство просвете',
+        'одобрило је', 'решење број',
+        'фондаци', 'кавчић', 'алек',
+        'математички клуб', 'диофант',
+        'реч аутора', 'реч издавача',
+        'садржина', 'казало', 'садржај',
+        'литература', 'библиографиј',
+        'регистар', 'индекс', 'појмовник',
+        'увод', 'предговор', 'закључак',
+        'напомене', 'биљешке',
+        # English
+        'author', 'authors', 'publisher',
+        'copyright', 'all rights reserved',
+        'table of contents', 'contents',
+        'index', 'bibliography', 'references',
+        'preface', 'introduction', 'foreword',
+        'edition', 'first edition', 'second edition',
+        'printed by', 'print', 'impression',
+        'about the author', 'author biography',
+        'front cover', 'back cover', 'cover',
+        'dedication', 'epigraph',
+    ]
+    
+    text_lower = text.lower()
+    metadata_count = sum(1 for ind in metadata_indicators if ind in text_lower)
+    
+    # Ako ima više od 3 metadata indikatora, verovatno je metadata stranica
+    if metadata_count >= 3:
+        return True
+    
+    # Provera za kratke stranice sa imenima (autori, recenzenti)
+    if len(lines) < 20:
+        short_metadata = ['аутор', 'рецензент', 'уредник', 'издавач', 'author', 'publisher']
+        if any(m in text_lower for m in short_metadata):
+            return True
+    
+    return False
+
+
+def _extract_and_save_images(document_id: str, file_bytes: bytes, db) -> int:
+    """
+    Ekstrahuje slike iz PDF-a koristeci PyMuPDF - cele stranice kao slike.
+    Ovo osigurava da se vidi sav sadržaj stranice (tekst + slike zajedno).
+    FILTRIRA metadata stranice (korice, copyright, autori, itd).
+    Vraca broj sacuvanih slika.
+    """
+    import fitz
+    
+    images_saved = 0
+    images_skipped = 0
+    try:
+        logger.info(f"Starting full-page image extraction for document {document_id}")
+        
+        # Open PDF with PyMuPDF
+        pdf_doc = fitz.open(stream=file_bytes, filetype="pdf")
+        
+        logger.info(f"PDF has {len(pdf_doc)} pages")
+        
+        for page_num in range(len(pdf_doc)):
+            try:
+                page = pdf_doc[page_num]
+                
+                # Check if this is a text-based page (has text) - then check for metadata
+                # For scanned documents, we can't detect metadata without OCR
+                page_text = page.get_text()
+                text_chars = len(page_text.strip())
+                
+                # For text-based pages with text - check if it's metadata
+                # For scanned pages - include them (is_scanned=True skips filter)
+                if text_chars > 50:
+                    # Page has text - check if it's metadata
+                    if _is_metadata_page(page_text, is_scanned=False):
+                        images_skipped += 1
+                        logger.debug(f"Skipping metadata page {page_num + 1} (has text)")
+                        continue
+                # For scanned/blank pages - include them
+                
+                # Get page rotation
+                rotation = page.rotation
+                
+                # Calculate zoom for DPI (1.5 = ~150 DPI)
+                zoom = 1.5
+                mat = fitz.Matrix(zoom, zoom)
+                
+                # Render page to pixmap (image)
+                pix = page.get_pixmap(matrix=mat)
+                
+                # Apply rotation if needed
+                if rotation != 0:
+                    pix = pix.rotate(rotation)
+                
+                # Convert to bytes (PNG first, then convert to JPEG)
+                img_bytes = pix.tobytes("png")
+                pix = None
+                
+                # Skip if too small
+                if len(img_bytes) < 10000:
+                    logger.debug(f"Skipping small image from page {page_num + 1}")
+                    images_skipped += 1
+                    continue
+                
+                # Convert PNG to JPEG for smaller size
+                try:
+                    pil_img = Image.open(io.BytesIO(img_bytes))
+                    output = io.BytesIO()
+                    pil_img.save(output, format='JPEG', quality=85)
+                    img_bytes = output.getvalue()
+                    pil_img.close()
+                except Exception as e:
+                    logger.debug(f"Failed to convert to JPEG: {e}")
+                    # Keep PNG if JPEG conversion fails
+                    pass
+                
+                img_uuid = str(uuid.uuid4())
+                storage_path = f"quiz_images/{document_id}/{img_uuid}.jpg"
+                
+                # Upload image
+                upload_result = storage_service.upload_file(
+                    file_content=io.BytesIO(img_bytes),
+                    filename=f"{img_uuid}.jpg",
+                    user_id=str(document_id),
+                    content_type="image/jpeg",
+                    custom_path=storage_path
+                )
+                
+                actual_storage_path = upload_result.get('storage_path', storage_path)
+                image_url = storage_service.get_presigned_url(actual_storage_path)
+                
+                quiz_image = QuizImage(
+                    document_id=document_id,
+                    storage_path=actual_storage_path,
+                    image_url=image_url,
+                    mime_type="image/jpeg",
+                    file_size=len(img_bytes),
+                    page_number=page_num + 1
+                )
+                db.add(quiz_image)
+                images_saved += 1
+                
+                if images_saved % 50 == 0:
+                    logger.info(f"Extracted {images_saved} images so far...")
+                
+            except Exception as e:
+                logger.debug(f"Failed to save image from page {page_num + 1}: {e}")
+                continue
+        
+        pdf_doc.close()
+        db.commit()
+        logger.info(f"Extracted {images_saved} full-page images (skipped {images_skipped} metadata pages) for document {document_id}")
+        
+    except Exception as e:
+        logger.warning(f"Failed to extract images from PDF: {e}")
+        import traceback
+        traceback.print_exc()
+    
+    return images_saved
 
 
 def get_db_session():
@@ -65,9 +330,13 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
         db.commit()
         
         logger.info(f"Downloading file from storage: {file.storage_path}")
-        pdf_bytes = storage_service.download_file(file.storage_path)
+        file_bytes = storage_service.download_file(file.storage_path)
         
-        logger.info(f"Processing PDF: {file.original_filename}")
+        # Detect file type and process accordingly
+        file_ext = file.original_filename.split('.')[-1].lower() if file.original_filename else 'pdf'
+        file_ext = '.' + file_ext
+        
+        logger.info(f"Processing file: {file.original_filename} (type: {file_ext})")
 
         import time as _time
         _started_at = _time.time()
@@ -105,10 +374,48 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
                     try: _pdb.close()
                     except Exception: pass
 
-        result = pdf_service.process_pdf(pdf_bytes, title=document.title, progress_callback=_progress)
+        # Process file based on type
+        from app.services.file_processing import FileProcessingService
+        
+        if file_ext == '.pdf':
+            # Use PDF service for PDFs (more detailed chunking)
+            from app.services.pdf import PDFService
+            pdf_service = PDFService(use_ocr=True)
+            result = pdf_service.process_pdf(file_bytes, title=document.title, progress_callback=_progress)
+            is_scanned = result.metadata.is_scanned if hasattr(result.metadata, 'is_scanned') else False
+            has_images = result.metadata.has_images if hasattr(result.metadata, 'has_images') else False
+            total_pages = result.metadata.total_pages if hasattr(result.metadata, 'total_pages') else 1
+            total_chars = result.metadata.total_chars if hasattr(result.metadata, 'total_chars') else 0
+        else:
+            # Use FileProcessingService for TXT, DOCX, images, etc.
+            file_processor = FileProcessingService(use_ocr=True)
+            result = file_processor.process_file(file_bytes, file.original_filename, file_ext)
+            
+            if not result['success']:
+                raise Exception(f"File processing failed: {result.get('error', 'Unknown error')}")
+            
+            # Convert to chunks (simple chunking for non-PDF)
+            text = result['text']
+            chunk_size = 2000  # characters per chunk
+            chunks = []
+            for i in range(0, len(text), chunk_size):
+                chunks.append({
+                    'sequence_number': len(chunks),
+                    'content': text[i:i+chunk_size],
+                    'token_count': len(text[i:i+chunk_size]) // 4,  # rough estimate
+                    'heading_level': 0,
+                    'parent_heading': None
+                })
+            
+            result.chunks = type('obj', (object,), {'__iter__': lambda self: iter(chunks), '__len__': lambda self: len(chunks)})()
+            result.success = True
+            is_scanned = result.get('metadata', {}).get('is_scanned', False)
+            has_images = result.get('metadata', {}).get('has_images', False)
+            total_pages = result.get('metadata', {}).get('total_pages', 1)
+            total_chars = result.get('metadata', {}).get('char_count', len(text))
         
         if not result.success:
-            raise Exception(f"PDF processing failed: {result.error}")
+            raise Exception(f"File processing failed: {result.error}")
         
         document.total_pages = result.metadata.total_pages
         document.total_chunks = len(result.chunks)
@@ -123,6 +430,13 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
         }
         flag_modified(document, "file_metadata")
         
+        # Delete old chunks before adding new ones (prevent duplicates on reprocess)
+        existing_chunks = db.query(Chunk).filter(Chunk.document_id == document.id).count()
+        if existing_chunks > 0:
+            logger.info(f"Deleting {existing_chunks} existing chunks before reprocessing")
+            db.query(Chunk).filter(Chunk.document_id == document.id).delete()
+            db.commit()
+        
         for chunk_data in result.chunks:
             chunk = Chunk(
                 document_id=document.id,
@@ -130,9 +444,19 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
                 content=chunk_data.content,
                 token_count=chunk_data.token_count,
                 heading_level=chunk_data.heading_level,
-                parent_heading=chunk_data.parent_heading
+                parent_heading=chunk_data.parent_heading,
+                page_number=getattr(chunk_data, 'page_number', None)
             )
             db.add(chunk)
+        
+        db.commit()
+        
+        try:
+            num_images = _extract_and_save_images(str(document.id), file_bytes, db)
+            if num_images > 0:
+                logger.info(f"Extracted {num_images} images from PDF for quiz")
+        except Exception as img_err:
+            logger.warning(f"Image extraction failed (non-critical): {img_err}")
         
         document.status = "completed"
         file.status = "completed"
@@ -142,6 +466,23 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
             f"PDF processing completed for document {document_id}: "
             f"{result.metadata.total_pages} pages, {len(result.chunks)} chunks"
         )
+        
+        # Send email notification
+        try:
+            from app.db.models.user import User
+            owner = db.query(User).filter(User.id == document.user_id).first()
+            if owner and owner.email:
+                from app.services.email_service import email_service
+                email_service.send_document_processed(
+                    to=owner.email,
+                    full_name=owner.full_name or "",
+                    document_title=document.title or "Dokument",
+                    total_pages=result.metadata.total_pages,
+                    total_chunks=len(result.chunks),
+                )
+                logger.info(f"Email notification sent for document {document_id}")
+        except Exception as email_err:
+            logger.warning(f"Email notification failed (non-critical): {email_err}")
         
         # Automatski pokreni RAG indeksiranje u pozadini
         try:
@@ -226,21 +567,52 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
         errors = []
 
         # Load user API key for cloud providers
-        user = db.query(Document).filter(Document.id == document_id).first()
         from app.db.models.user import User
         user_obj = db.query(User).filter(User.id == document.user_id).first() if document.user_id else None
+        
+        # Collect user API keys for fallback
+        user_api_keys = {}
+        if user_obj:
+            user_api_keys = {
+                'mistral': getattr(user_obj, 'ai_api_key_mistral', None),
+                'groq': getattr(user_obj, 'ai_api_key_groq', None),
+                'gemini': getattr(user_obj, 'ai_api_key_gemini', None),
+                'deepseek': getattr(user_obj, 'ai_api_key_deepseek', None),
+                'openai': getattr(user_obj, 'ai_api_key_openai', None),
+            }
+            # Remove None values
+            user_api_keys = {k: v for k, v in user_api_keys.items() if v}
 
-        # Build a per-request client if user has their own key for this provider
+        # Build a per-request client if user has their own key for any provider
         _provider_client = None
-        if provider and user_obj:
-            if provider == "gemini" and getattr(user_obj, 'ai_api_key_gemini', None):
-                _provider_client = make_gemini_client(user_obj.ai_api_key_gemini)
-            elif provider == "groq" and getattr(user_obj, 'ai_api_key_groq', None):
-                _provider_client = make_groq_client(user_obj.ai_api_key_groq)
-            elif provider == "mistral" and getattr(user_obj, 'ai_api_key_mistral', None):
+        _use_provider = provider
+        
+        # Auto-detect provider based on user's available API keys
+        if not _use_provider or _use_provider == "auto":
+            if user_obj:
+                # Check user keys in order of preference - Mistral first!
+                if getattr(user_obj, 'ai_api_key_mistral', None):
+                    _use_provider = "mistral"
+                    _provider_client = make_mistral_client(user_obj.ai_api_key_mistral)
+                elif getattr(user_obj, 'ai_api_key_groq', None):
+                    _use_provider = "groq"
+                    _provider_client = make_groq_client(user_obj.ai_api_key_groq)
+                elif getattr(user_obj, 'ai_api_key_gemini', None):
+                    _use_provider = "gemini"
+                    _provider_client = make_gemini_client(user_obj.ai_api_key_gemini)
+                elif getattr(user_obj, 'ai_api_key_deepseek', None):
+                    _use_provider = "deepseek"
+                    # DeepSeek doesn't have a client factory yet
+        elif user_obj:
+            # Specific provider requested - check if user has key for it
+            if _use_provider == "mistral" and getattr(user_obj, 'ai_api_key_mistral', None):
                 _provider_client = make_mistral_client(user_obj.ai_api_key_mistral)
+            elif _use_provider == "groq" and getattr(user_obj, 'ai_api_key_groq', None):
+                _provider_client = make_groq_client(user_obj.ai_api_key_groq)
+            elif _use_provider == "gemini" and getattr(user_obj, 'ai_api_key_gemini', None):
+                _provider_client = make_gemini_client(user_obj.ai_api_key_gemini)
 
-        logger.info(f"Translating {total_chunks} chunks for document {document_id}")
+        logger.info(f"Translating {total_chunks} chunks for document {document_id} using provider: {_use_provider or 'auto'}")
 
         # Group untranslated chunks into batches (reduce API calls)
         BATCH_SIZE = 8  # 8 chunks per request → ~10x fewer API calls
@@ -258,22 +630,13 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
             for idx, chunk in enumerate(batch):
                 batch_text += separator.format(idx + 1) + chunk.content
 
-            # Translate full batch as one request
-            def _do_translate(text):
-                if _provider_client:
-                    return _provider_client.translate(
-                        text=text,
-                        source_language=document.source_language,
-                        target_language=document.target_language,
-                    )
-                return translation_service.translate(
-                    text=text,
-                    source_language=document.source_language,
-                    target_language=document.target_language,
-                    provider=provider
-                )
-
-            result = _do_translate(batch_text)
+            # Translate full batch as one request with fallback to other providers
+            result = translate_with_fallback(
+                text=batch_text,
+                source_language=document.source_language,
+                target_language=document.target_language,
+                user_api_keys=user_api_keys
+            )
 
             if result.success:
                 # Split translated batch back into individual chunks
@@ -294,7 +657,12 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
                 # Batch failed — fall back to individual translation for this batch
                 logger.warning(f"Batch translation failed, trying individually: {result.error}")
                 for chunk in batch:
-                    single_result = _do_translate(chunk.content)
+                    single_result = translate_with_fallback(
+                        text=chunk.content,
+                        source_language=document.source_language,
+                        target_language=document.target_language,
+                        user_api_keys=user_api_keys
+                    )
                     if single_result.success:
                         chunk.translated_content = single_result.translated_text
                         chunk.is_translated = 1
@@ -383,7 +751,7 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
 
 
 @shared_task(bind=True, max_retries=2)
-def generate_quiz_task(self, quiz_id: str, document_id: str, num_questions: int = 5, provider: Optional[str] = None, user_openai_key: Optional[str] = None, user_claude_key: Optional[str] = None, user_gemini_key: Optional[str] = None, user_groq_key: Optional[str] = None, user_mistral_key: Optional[str] = None):
+def generate_quiz_task(self, quiz_id: str, document_id: str, num_questions: int = 5, provider: Optional[str] = None, user_openai_key: Optional[str] = None, user_claude_key: Optional[str] = None, user_gemini_key: Optional[str] = None, user_groq_key: Optional[str] = None, user_mistral_key: Optional[str] = None, user_deepseek_key: Optional[str] = None):
     """
     Task za generisanje kviza iz dokumenta.
 
@@ -414,10 +782,39 @@ def generate_quiz_task(self, quiz_id: str, document_id: str, num_questions: int 
             user_gemini_key=user_gemini_key,
             user_groq_key=user_groq_key,
             user_mistral_key=user_mistral_key,
+            user_deepseek_key=user_deepseek_key,
         )
 
         if success:
             logger.info(f"Kviz {quiz_id} uspešno generisan [{used_provider}]")
+            
+            # Close db session BEFORE sending any emails
+            db.close()
+            
+            # Send email notification in completely separate context
+            try:
+                from app.db.models.quiz import Quiz
+                from app.db.models.user import User
+                
+                email_db = get_db_session()
+                try:
+                    quiz = email_db.query(Quiz).filter(Quiz.id == quiz_id).first()
+                    if quiz and quiz.user_id:
+                        user = email_db.query(User).filter(User.id == quiz.user_id).first()
+                        if user and user.email:
+                            from app.services.email_service import email_service
+                            email_service.send_quiz_ready(
+                                to=user.email,
+                                full_name=user.full_name or "",
+                                quiz_title=quiz.title or "Kviz",
+                                num_questions=quiz.total_questions or 0,
+                            )
+                            logger.info(f"Email notification sent for quiz {quiz_id}")
+                finally:
+                    email_db.close()
+            except Exception as email_err:
+                logger.warning(f"Email notification failed (non-critical): {email_err}")
+            
             return {"status": "success", "quiz_id": quiz_id, "provider": used_provider}
         else:
             logger.error(f"Generisanje kviza {quiz_id} nije uspelo")
@@ -435,7 +832,10 @@ def generate_quiz_task(self, quiz_id: str, document_id: str, num_questions: int 
             pass
         raise self.retry(exc=exc, countdown=60)
     finally:
-        db.close()
+        try:
+            db.close()
+        except:
+            pass
 
 
 @shared_task(bind=True, max_retries=2)
@@ -492,23 +892,69 @@ def auto_pipeline_task(
             file.status = "processing"
             db.commit()
 
-            pdf_bytes = storage_service.download_file(file.storage_path)
-            result = pdf_service.process_pdf(pdf_bytes, title=document.title)
+            # Determine file type
+            file_bytes = storage_service.download_file(file.storage_path)
+            file_ext = file.original_filename.split('.')[-1].lower() if file.original_filename else 'pdf'
+            file_ext = '.' + file_ext
+            
+            logger.info(f"[PIPELINE] Processing file: {file.original_filename} (type: {file_ext})")
+            
+            # Process based on file type
+            from app.services.file_processing import FileProcessingService
+            
+            if file_ext == '.pdf':
+                result = pdf_service.process_pdf(file_bytes, title=document.title)
+                is_scanned = result.metadata.is_scanned if hasattr(result.metadata, 'is_scanned') else False
+                has_images = result.metadata.has_images if hasattr(result.metadata, 'has_images') else False
+                total_pages = result.metadata.total_pages if hasattr(result.metadata, 'total_pages') else 1
+                total_chars = result.metadata.total_chars if hasattr(result.metadata, 'total_chars') else 0
+            else:
+                file_processor = FileProcessingService(use_ocr=True)
+                result = file_processor.process_file(file_bytes, file.original_filename, file_ext)
+                
+                if not result['success']:
+                    raise Exception(f"File processing failed: {result.get('error', 'Unknown error')}")
+                
+                text = result['text']
+                chunk_size = 2000
+                chunks = []
+                for i in range(0, len(text), chunk_size):
+                    chunks.append({
+                        'sequence_number': len(chunks),
+                        'content': text[i:i+chunk_size],
+                        'token_count': len(text[i:i+chunk_size]) // 4,
+                        'heading_level': 0,
+                        'parent_heading': None
+                    })
+                
+                result.chunks = type('obj', (object,), {'__iter__': lambda self: iter(chunks), '__len__': lambda self: len(chunks)})()
+                result.success = True
+                is_scanned = result.get('metadata', {}).get('is_scanned', False)
+                has_images = result.get('metadata', {}).get('has_images', False)
+                total_pages = result.get('metadata', {}).get('total_pages', 1)
+                total_chars = result.get('metadata', {}).get('char_count', len(text))
 
             if not result.success:
                 raise Exception(f"PDF processing greška: {result.error}")
 
-            document.total_pages = result.metadata.total_pages
+            document.total_pages = total_pages
             document.total_chunks = len(result.chunks)
             document.source_language = source_language
             document.target_language = target_language
             document.file_metadata = {
-                "author": result.metadata.author,
-                "total_chars": result.metadata.total_chars,
-                "is_scanned": result.metadata.is_scanned,
+                "total_chars": total_chars,
+                "is_scanned": is_scanned,
+                "has_images": has_images,
+                "file_type": file_ext,
             }
 
             for chunk_data in result.chunks:
+                # Delete old chunks first (prevent duplicates on reprocess)
+                existing = db.query(Chunk).filter(Chunk.document_id == document.id).count()
+                if existing > 0:
+                    db.query(Chunk).filter(Chunk.document_id == document.id).delete()
+                    db.commit()
+                
                 chunk = Chunk(
                     document_id=document.id,
                     sequence_number=chunk_data.sequence_number,
@@ -516,6 +962,7 @@ def auto_pipeline_task(
                     token_count=chunk_data.token_count,
                     heading_level=chunk_data.heading_level,
                     parent_heading=chunk_data.parent_heading,
+                    page_number=getattr(chunk_data, 'page_number', None),
                 )
                 db.add(chunk)
 
@@ -531,6 +978,23 @@ def auto_pipeline_task(
             logger.info(f"[PIPELINE] Korak 2/3: Prevod ({source_language}→{target_language}) [{translation_provider or 'auto'}]")
             document.status = "translating"
             db.commit()
+
+            # Load user API key for cloud providers
+            from app.db.models.user import User
+            user_obj = db.query(User).filter(User.id == owner_id).first() if owner_id else None
+            
+            # Collect user API keys for fallback
+            user_api_keys = {}
+            if user_obj:
+                user_api_keys = {
+                    'mistral': getattr(user_obj, 'ai_api_key_mistral', None),
+                    'groq': getattr(user_obj, 'ai_api_key_groq', None),
+                    'gemini': getattr(user_obj, 'ai_api_key_gemini', None),
+                    'deepseek': getattr(user_obj, 'ai_api_key_deepseek', None),
+                    'openai': getattr(user_obj, 'ai_api_key_openai', None),
+                }
+                # Remove None values
+                user_api_keys = {k: v for k, v in user_api_keys.items() if v}
 
             chunks = db.query(Chunk).filter(
                 Chunk.document_id == document.id,
@@ -549,11 +1013,11 @@ def auto_pipeline_task(
                 for idx, chunk in enumerate(batch):
                     batch_text += f"\n\n### {idx + 1}\n" + chunk.content
 
-                trans_result = translation_service.translate(
+                trans_result = translate_with_fallback(
                     text=batch_text,
                     source_language=source_language,
                     target_language=target_language,
-                    provider=translation_provider,
+                    user_api_keys=user_api_keys
                 )
                 if trans_result.success:
                     parts = _pre.split(r'\n\n?###\s+\d+\n', trans_result.translated_text)
@@ -564,13 +1028,13 @@ def auto_pipeline_task(
                         translated_count += 1
                     total_cost += trans_result.cost
                 else:
-                    # Fallback: translate individually
+                    # Fallback: translate individually with fallback
                     for chunk in batch:
-                        single = translation_service.translate(
+                        single = translate_with_fallback(
                             text=chunk.content,
                             source_language=source_language,
                             target_language=target_language,
-                            provider=translation_provider,
+                            user_api_keys=user_api_keys
                         )
                         if single.success:
                             chunk.translated_content = single.translated_text

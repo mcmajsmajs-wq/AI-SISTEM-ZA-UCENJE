@@ -193,6 +193,9 @@ async def rag_query(db, query: str, user=None, top_k: int = 5, provider_override
     has_context = bool(chunks)
     
     # 2. Pripremi poruke za LLM
+    from datetime import datetime
+    current_date = datetime.now().strftime("%d. %B %Y. godine")
+    
     if has_context:
         context = "\n\n---\n\n".join([
             f"[Izvor: {c['source_name']}]\n{c['content']}"
@@ -200,11 +203,13 @@ async def rag_query(db, query: str, user=None, top_k: int = 5, provider_override
         ])
         system_prompt = f"""Ti si AI asistent za učenje koji pomaže korisnicima da razumeju materijale.
 
+Današnji datum je: {current_date}
+
 Imaš pristup sledećem kontekstu iz baze znanja korisnika:
 
 === KONTEKST IZ BAZE ZNANJA ===
 {context}
-==============================
+===============================
 
 Uputstvo:
 - Prvo iskoristi informacije iz gornjeg konteksta kada su relevantne
@@ -214,7 +219,9 @@ Uputstvo:
 - Budi detaljan i edukativan — objasni koncepte, ne samo cituj tekst"""
     else:
         # Nema konteksta iz baze — AI daje direktan odgovor
-        system_prompt = """Ti si AI asistent za učenje. Odgovaraj na pitanja korisnika koristeći sopstveno znanje.
+        system_prompt = f"""Ti si AI asistent za učenje. Odgovaraj na pitanja korisnika koristeći sopstveno znanje.
+Današnji datum je: {current_date}
+
 Baza znanja trenutno nema relevantnih dokumenata za ovo pitanje, ali ti svejedno odgovaraj korisno i detaljno.
 Odgovaraj na jeziku na kom je postavljeno pitanje (srpski ili engleski).
 Budi edukativan, detaljan i jasan."""
@@ -231,16 +238,18 @@ Budi edukativan, detaljan i jasan."""
     user_groq_key    = getattr(user, 'ai_api_key_groq',    None) if user else None
     user_mistral_key = getattr(user, 'ai_api_key_mistral', None) if user else None
     user_claude_key  = getattr(user, 'ai_api_key_claude',  None) if user else None
+    user_deepseek_key = getattr(user, 'ai_api_key_deepseek', None) if user else None
 
     if provider == 'auto':
-        auto_order = ['gemini', 'groq', 'mistral', 'openai', 'claude', 'ollama']
+        auto_order = ['gemini', 'groq', 'mistral', 'deepseek', 'openai', 'claude', 'ollama']
         key_map = {
-            'gemini':  user_gemini_key  or getattr(settings, 'GEMINI_API_KEY',   ''),
-            'groq':    user_groq_key    or getattr(settings, 'GROQ_API_KEY',     ''),
-            'mistral': user_mistral_key or getattr(settings, 'MISTRAL_API_KEY',  ''),
-            'openai':  user_openai_key  or getattr(settings, 'OPENAI_API_KEY',   ''),
-            'claude':  user_claude_key  or getattr(settings, 'ANTHROPIC_API_KEY',''),
-            'ollama':  True,
+            'gemini':   user_gemini_key  or getattr(settings, 'GEMINI_API_KEY',   ''),
+            'groq':     user_groq_key    or getattr(settings, 'GROQ_API_KEY',     ''),
+            'mistral':  user_mistral_key or getattr(settings, 'MISTRAL_API_KEY',  ''),
+            'deepseek':  user_deepseek_key or getattr(settings, 'DEEPSEEK_API_KEY', ''),
+            'openai':   user_openai_key  or getattr(settings, 'OPENAI_API_KEY',   ''),
+            'claude':   user_claude_key  or getattr(settings, 'ANTHROPIC_API_KEY',''),
+            'ollama':   True,
         }
         providers_to_try = [p for p in auto_order if key_map.get(p)] or ['ollama']
     else:

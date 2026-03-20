@@ -21,24 +21,30 @@ export default function ReviewPage() {
   const docId = id || ''
   const queryClient = useQueryClient()
   
-  const [currentIndex, setCurrentIndex] = useState(0)
+  const CHUNKS_PER_PAGE = 20
+  const [currentPage, setCurrentPage] = useState(0)
   const [editedText, setEditedText] = useState('')
   const [isEditing, setIsEditing] = useState(false)
 
+  // First, get total count of chunks
   const { data: document } = useQuery({
     queryKey: ['document', docId],
     queryFn: () => documentsApi.get(docId),
     enabled: !!docId,
   })
 
+  const totalChunks = document?.data?.total_chunks || 0
+  const totalPages = Math.ceil(totalChunks / CHUNKS_PER_PAGE)
+
+  // Fetch chunks for current page
   const { data: chunks, isLoading } = useQuery({
-    queryKey: ['document-chunks', docId],
-    queryFn: () => documentsApi.getChunks(docId, 0, 100),
-    enabled: !!docId,
+    queryKey: ['document-chunks', docId, currentPage],
+    queryFn: () => documentsApi.getChunks(docId, currentPage * CHUNKS_PER_PAGE, CHUNKS_PER_PAGE),
+    enabled: !!docId && totalChunks > 0,
   })
 
   const chunkList: any[] = Array.isArray(chunks?.data) ? chunks.data : []
-  const currentChunk = chunkList[currentIndex]
+  const currentChunk = chunkList[currentPage % CHUNKS_PER_PAGE] // Handle case where page changed
 
   useEffect(() => {
     if (currentChunk?.translated_content) {
@@ -75,15 +81,15 @@ export default function ReviewPage() {
   }
 
   const handlePrevious = () => {
-    if (currentIndex > 0) {
-      setCurrentIndex(currentIndex - 1)
+    if (currentPage > 0) {
+      setCurrentPage(currentPage - 1)
       setIsEditing(false)
     }
   }
 
   const handleNext = () => {
-    if (currentIndex < chunkList.length - 1) {
-      setCurrentIndex(currentIndex + 1)
+    if ((currentPage + 1) * CHUNKS_PER_PAGE < totalChunks) {
+      setCurrentPage(currentPage + 1)
       setIsEditing(false)
     }
   }
@@ -111,9 +117,10 @@ export default function ReviewPage() {
   }
 
   const doc = document?.data
-  const approvedCount = chunkList.filter((c: any) => c.is_reviewed).length
-  const progress = Math.round((approvedCount / chunkList.length) * 100)
-  const visibleDots = Math.min(20, chunkList.length)
+  
+  // Get total reviewed count from the document
+  const reviewedCount = doc?.reviewed_chunks || 0
+  const progress = totalChunks > 0 ? Math.round((reviewedCount / totalChunks) * 100) : 0
 
   return (
     <div className="space-y-5 animate-fade-in max-w-6xl mx-auto">
@@ -130,7 +137,7 @@ export default function ReviewPage() {
           <h1 className="text-xl font-extrabold text-gray-900 truncate">
             {doc?.title || 'Pregled prevoda'}
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Odlomak {currentIndex + 1} od {chunkList.length}</p>
+          <p className="text-sm text-gray-500 mt-0.5">Stranica {currentPage + 1} od {totalPages} ({totalChunks} odlomaka)</p>
         </div>
       </div>
 
@@ -139,7 +146,7 @@ export default function ReviewPage() {
         <div className="flex items-center justify-between mb-2">
           <span className="text-sm font-semibold text-gray-700">Napredak pregleda</span>
           <div className="flex items-center gap-2">
-            <span className="text-sm text-gray-500">{approvedCount}/{chunkList.length}</span>
+            <span className="text-sm text-gray-500">{reviewedCount}/{totalChunks}</span>
             <span className="text-sm font-bold text-indigo-600">{progress}%</span>
           </div>
         </div>
@@ -251,11 +258,11 @@ export default function ReviewPage() {
         <div className="card px-5 py-4 flex items-center justify-between gap-3">
           <button
             onClick={handlePrevious}
-            disabled={currentIndex === 0}
+            disabled={currentPage === 0}
             className="btn-secondary"
           >
             <ChevronLeft className="w-4 h-4" />
-            Prethodni
+            Prethodna strana
           </button>
 
           <div className="flex items-center gap-2">
@@ -278,47 +285,66 @@ export default function ReviewPage() {
 
           <button
             onClick={handleNext}
-            disabled={currentIndex === chunkList.length - 1}
+            disabled={(currentPage + 1) * CHUNKS_PER_PAGE >= totalChunks}
             className="btn-secondary"
           >
-            Sledeći
+            Sledeća strana
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
       )}
 
-      {/* Dot navigation */}
+      {/* Page navigation */}
       <div className="card px-5 py-4">
-        <p className="text-xs text-gray-400 mb-3 font-medium">Navigacija odlomaka</p>
+        <p className="text-xs text-gray-400 mb-3 font-medium">Navigacija stranica</p>
         <div className="flex flex-wrap gap-2">
-          {Array.from({ length: visibleDots }, (_, i) => {
-            const chunk = chunkList[i]
+          {/* Previous button */}
+          <button
+            onClick={handlePrevious}
+            disabled={currentPage === 0}
+            className="btn-secondary px-3 py-2"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
+          
+          {/* Page numbers - simple version */}
+          {Array.from({ length: Math.min(totalPages, 30) }, (_, i) => {
+            const isCurrentPage = i === currentPage
             return (
               <button
                 key={i}
-                onClick={() => { setCurrentIndex(i); setIsEditing(false) }}
-                title={`Odlomak ${i + 1}`}
+                onClick={() => { setCurrentPage(i); setIsEditing(false) }}
+                title={`Stranica ${i + 1}`}
                 className={clsx(
-                  'w-8 h-8 rounded-xl text-xs font-bold transition-all duration-150',
-                  i === currentIndex
-                    ? 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-md shadow-indigo-500/30 scale-110'
-                    : chunk?.is_reviewed
-                      ? 'bg-emerald-100 text-emerald-700 hover:bg-emerald-200'
-                      : chunk?.is_translated
-                        ? 'bg-amber-100 text-amber-700 hover:bg-amber-200'
-                        : 'bg-gray-100 text-gray-500 hover:bg-gray-200'
+                  'w-10 h-10 rounded-xl text-sm font-bold transition-all duration-150',
+                  isCurrentPage
+                    ? 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-md shadow-indigo-500/30'
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
                 )}
               >
                 {i + 1}
               </button>
             )
           })}
-          {chunkList.length > visibleDots && (
+          
+          {totalPages > 30 && (
             <span className="self-center text-gray-400 text-sm font-medium ml-1">
-              +{chunkList.length - visibleDots} više
+              ... do {totalPages} stranica
             </span>
           )}
+          
+          {/* Next button */}
+          <button
+            onClick={handleNext}
+            disabled={(currentPage + 1) * CHUNKS_PER_PAGE >= totalChunks}
+            className="btn-secondary px-3 py-2"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </button>
         </div>
+        <p className="text-xs text-gray-400 mt-3 text-center">
+          Ukupno {totalChunks} odlomaka na {totalPages} stranica
+        </p>
       </div>
     </div>
   )

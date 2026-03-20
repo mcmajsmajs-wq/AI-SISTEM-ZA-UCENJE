@@ -525,3 +525,183 @@ POST /knowledge/ingest/url {"url": "https://fastapi.tiangolo.com/", "recursive":
 # Kompletna dokumentacija (dubina 3, max 100 stranica)  
 POST /knowledge/ingest/url {"url": "https://docs.docker.com/", "recursive": true, "max_depth": 3, "max_pages": 100}
 ```
+
+# ================================================================================
+# ISPRAVKE I POBOLJŠANJA - 2026-03-14
+# ================================================================================
+
+## Problem: Skorirani PDF-ovi se nisu obrađivali (0 chunks)
+
+### Uzrok:
+- Worker kontejner nije imao instaliran Poppler
+- PDF2image (pdf2image) zahteva Poppler za konverziju PDF stranica u slike
+- Bez Popplera, OCR nije mogao da radi
+
+### Rešenje:
+
+#### 1. Dockerfile - Dodati Poppler i srpski jezik za OCR
+**Fajl:** `backend/Dockerfile`
+
+```dockerfile
+# Poppler (for pdf2image OCR) - OBAVEZNO za skenirane PDF-ove
+poppler-utils \
+# Tesseract OCR - OBAVEZNO za prepoznavanje teksta iz slika
+tesseract-ocr \
+tesseract-ocr-eng \
+tesseract-ocr-script-latn \
+tesseract-ocr-srp \  # Srpski jezik za OCR
+```
+
+#### 2. Worker konfiguracija - Dodati S3/MinIO storage
+**Fajl:** `docker/docker-compose.yml`
+
+Worker kontejner nije imao konfigurisan S3 storage, pa je tražio fajlove u lokalnom storage umesto MinIO.
+
+```yaml
+worker:
+  environment:
+    - STORAGE_BACKEND=s3
+    - CLOUD_STORAGE_ENDPOINT=http://minio:9000
+    - CLOUD_STORAGE_ACCESS_KEY=minioadmin
+    - CLOUD_STORAGE_SECRET_KEY=minioadmin123
+    - CLOUD_STORAGE_BUCKET_NAME=ai-learning-uploads
+    - CLOUD_STORAGE_USE_SSL=false
+```
+
+#### 3. Translation servis - Koristiti korisničke API ključeve
+**Fajl:** `backend/app/workers/tasks.py`
+
+Translation servis koristi placeholder API ključeve iz .env umesto korisničkih ključeva iz baze.
+
+Izmena: `translate_document_task` sada prvo proverava korisničke API ključeve (Groq, Mistral, Gemini) pre nego što koristi sistemske.
+
+#### 4. Povećan limit za upload fajlova
+**Fajlovi:** 
+- `backend/app/api/endpoints/files.py` - MAX_FILE_SIZE = 100MB
+- `frontend/src/pages/DocumentsPage.tsx` - Frontend validacija 100MB
+- `docker/nginx/nginx.conf` - client_max_body_size 100M
+
+### OBAVEZNE ZAVISNOSTI za rad aplikacije:
+
+Sledeći sistemski paketi moraju biti instalirani u Docker kontejneru:
+
+| Paket | Namena | Alternativa |
+|-------|--------|-------------|
+| `poppler-utils` | PDF konverzija za OCR | OBAVEZNO |
+| `tesseract-ocr` | OCR engine | OBAVEZNO |
+| `tesseract-ocr-eng` | Engleski jezik za OCR | OBAVEZNO |
+| `tesseract-ocr-srp` | Srpski jezik za OCR | Opcionalno |
+| `tesseract-ocr-script-latn` | Latin script za OCR | OBAVEZNO |
+
+### Napomena za deployment:
+
+Prilikom prvog podizanja Docker kontejnera, potrebno je izgraditi image sa svim zavisnostima:
+
+```bash
+cd docker
+docker-compose build worker
+docker-compose up -d
+```
+
+## Problem: Prevod srpskih PDF-ova
+
+### Uzrok:
+- Prevod je uvek bio podesen na srpski (en → sr)
+- Serbian PDF-ovi (ćirilica) treba da se prevode na engleski
+
+### Rešenje: Auto-detekcija jezika
+
+**Fajl:** `backend/app/api/endpoints/documents.py`
+
+Dodato automatsko prepoznavanje jezika:
+1. Proverava se prvi chunk dokumenta
+2. Broje se ćirilični vs latinični karakteri
+3. Ako ima više ćirilice → source_language = "sr", target_language = "en"
+4. Ako ima više latinice → source_language = "en", target_language = "sr"
+
+## OCR Sistem (Tesseract + Surya fallback)
+
+### Trenutni OCR flow:
+
+```
+1. Tesseract (srp jezik) - PRIMARNI
+   - Radi za srpsku ćirilicu
+   - Brži, manje zahtevan
+   
+2. Surya OCR - FALLBACK (zahteva instalaciju)
+   - Moderni ML-baziran OCR
+   - Bolji kvalitet za složene dokumente
+   - Install: pip install surya-ocr
+   
+3. Tesseract (bez jezika) - FINALNI FALLBACK
+   - Ako ništa ne radi
+```
+
+### Provera kvaliteta:
+
+Sistem automatski proverava kvalitet OCR rezultata:
+- Minimalna gustina karaktera po slici (1%)
+- Ako kvalitet nije dovoljan, proba sledeći OCR
+
+### Napomena o Suryi:
+
+Surya OCR zahteva dodatnu instalaciju i resurse:
+```bash
+pip install surya-ocr
+```
+
+Za sada, Tesseract sa `srp` jezikom daje solidne rezultate za srpsku ćirilicu.
+
+
+================================================================================
+# IMPLEMENTACIJA - 2026-03-18
+# ===============================================================================
+# Status: SISTEM STABILAN - SVE TESTIRANO
+# ===============================================================================
+
+## ZAVRŠENO (18.03.2026):
+
+### 1. OCR Sistem ✅
+- Tesseract sa  jezikom - RADI
+- Surya fallback - instaliran
+- Verifikacija: Matematika dokument sa 524 chunks, pravilna srpska ćirilica
+
+### 2. Subject Area Detection ✅
+- Keyword matching + AI fallback - RADI
+- Verifikacija: Matematika quiz ima subject_area = "matematika"
+- Hemijai, biologija, istorija quizovi - ispravne oblasti
+
+### 3. Docker Konfiguracija ✅
+- Backend API: port 8010
+- Frontend: port 8083
+- Nginx proxy: konfigurisan bez redirect loop-a
+
+### 4. Dokumentacija ✅
+- SYSTEM_FIXES.md - kreiran sa svim ispravkama
+- Unapredjenja.md - ažuriran sa finalnim statusom
+- Test korisnik: noviuser@test.com / Sifra123!
+
+## TESTIRANJE (18.03.2026):
+
+### Dokument processing:
+| Dokument | Status | Chunks |
+|----------|--------|--------|
+| Matematika | ✅ completed | 524 |
+| Hemija | ✅ completed | 512 |
+| Biologija | ✅ completed | 612 |
+
+### Quiz generation:
+| Quiz | Subject | Status |
+|------|---------|--------|
+| Matematika | matematika ✅ | ready |
+| Hemija | hemija ✅ | ready |
+| Biologija | biologija ✅ | ready |
+
+### Primer pitanja (Matematika):
+- "Колика је површина основе правилне тростране призме чија је основна ивица а = 6 cm?"
+- Tip: calculation
+- Odgovor: 9√3 cm²
+
+## STATUS SISTEMA: OPERATIVAN ✅
+
+

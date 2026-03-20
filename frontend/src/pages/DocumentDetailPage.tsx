@@ -16,6 +16,7 @@ import {
   Zap,
   Download,
   AlertTriangle,
+  AlertCircle,
   Activity
 } from 'lucide-react'
 import clsx from 'clsx'
@@ -86,9 +87,12 @@ export default function DocumentDetailPage() {
     return () => { if (activityTimerRef.current) clearInterval(activityTimerRef.current) }
   }, [progress?.last_activity_at])
 
+  const [chunkPage, setChunkPage] = useState(0)
+  const CHUNKS_PER_PAGE = 20
+
   const { data: chunks } = useQuery({
-    queryKey: ['document-chunks', docId],
-    queryFn: () => documentsApi.getChunks(docId, 0, 20),
+    queryKey: ['document-chunks', docId, chunkPage],
+    queryFn: () => documentsApi.getChunks(docId, chunkPage * CHUNKS_PER_PAGE, CHUNKS_PER_PAGE),
     enabled: !!docId && docQueryData?.data?.status !== 'pending',
   })
 
@@ -104,6 +108,25 @@ export default function DocumentDetailPage() {
     }
     return configs[status] || configs['pending']
   }
+
+  const getTranslationStatus = () => {
+    if (!doc) return null
+    const translated = doc.translated_chunks || 0
+    const total = doc.total_chunks || 0
+    if (total === 0) return null
+    if (translated === 0 && doc.status === 'completed') {
+      return { label: 'Nije prevedeno', color: 'text-orange-600 bg-orange-50' }
+    }
+    if (translated > 0 && translated < total) {
+      return { label: `Delimično prevedeno (${translated}/${total})`, color: 'text-yellow-600 bg-yellow-50' }
+    }
+    if (translated === total && total > 0) {
+      return { label: 'Prevedeno', color: 'text-green-600 bg-green-50' }
+    }
+    return null
+  }
+
+  const translationStatus = getTranslationStatus()
 
   if (isLoading) {
     return (
@@ -302,8 +325,9 @@ export default function DocumentDetailPage() {
         </button>
         <div className="flex items-center gap-2 text-sm text-gray-500 ml-auto">
           <Calendar className="w-4 h-4" />
-          {new Date(doc.created_at).toLocaleDateString('sr-RS', {
+          {new Date(doc.created_at).toLocaleString('sr-RS', {
             year: 'numeric', month: 'long', day: 'numeric',
+            hour: '2-digit', minute: '2-digit',
           })}
         </div>
       </div>
@@ -311,6 +335,20 @@ export default function DocumentDetailPage() {
       {/* Chunks section */}
       {doc.status !== 'pending' && (
         <div className="card overflow-hidden">
+          {translationStatus && (
+            <div className={clsx('px-6 py-3 text-sm flex items-center gap-2', translationStatus.color)}>
+              <AlertCircle className="w-4 h-4" />
+              {translationStatus.label}
+              {translationStatus.label.includes('Nije prevedeno') && (
+                <button
+                  onClick={() => setShowPipeline(true)}
+                  className="ml-auto text-xs font-medium underline hover:no-underline"
+                >
+                  Pokreni prevod
+                </button>
+              )}
+            </div>
+          )}
           <div className="px-6 py-4 border-b border-gray-100 flex items-center justify-between">
             <div>
               <h2 className="text-base font-bold text-gray-900">Odlomci (lekcije)</h2>
@@ -335,13 +373,13 @@ export default function DocumentDetailPage() {
 
           {Array.isArray(chunks?.data) && chunks.data.length > 0 ? (
             <div className="divide-y divide-gray-100">
-              {chunks.data.slice(0, 10).map((chunk: any, idx: number) => (
+              {chunks.data.map((chunk: any, idx: number) => (
                 <div key={chunk.id} className="px-6 py-4 hover:bg-gray-50/80 transition-colors group">
                   <div className="flex items-start gap-3">
                     {/* Number + status */}
                     <div className="flex-shrink-0 flex flex-col items-center gap-1.5 pt-0.5">
                       <div className="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
-                        <span className="text-xs font-bold text-indigo-600">{(chunk.sequence_number ?? idx) + 1}</span>
+                        <span className="text-xs font-bold text-indigo-600">{chunkPage * CHUNKS_PER_PAGE + idx + 1}</span>
                       </div>
                       {chunk.translated_content ? (
                         <CheckCircle className="w-3.5 h-3.5 text-emerald-500" />
@@ -381,6 +419,29 @@ export default function DocumentDetailPage() {
                   </div>
                 </div>
               ))}
+
+              {/* Pagination */}
+              {doc && doc.total_chunks > CHUNKS_PER_PAGE && (
+                <div className="px-6 py-4 border-t border-gray-100 bg-gray-50/50 flex items-center justify-between">
+                  <button
+                    onClick={() => setChunkPage(p => Math.max(0, p - 1))}
+                    disabled={chunkPage === 0}
+                    className="btn btn-secondary btn-sm disabled:opacity-50"
+                  >
+                    Prethodna
+                  </button>
+                  <span className="text-sm text-gray-500">
+                    Stranica {chunkPage + 1} od {Math.ceil(doc.total_chunks / CHUNKS_PER_PAGE)}
+                  </span>
+                  <button
+                    onClick={() => setChunkPage(p => p + 1)}
+                    disabled={(chunkPage + 1) * CHUNKS_PER_PAGE >= doc.total_chunks}
+                    className="btn btn-secondary btn-sm disabled:opacity-50"
+                  >
+                    Sledeća
+                  </button>
+                </div>
+              )}
             </div>
           ) : (
             <div className="p-14 text-center">

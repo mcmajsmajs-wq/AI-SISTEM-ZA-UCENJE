@@ -224,7 +224,7 @@ async def get_document(
     return document_to_response(document, db)
 
 
-@router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/{document_id}")
 async def delete_document(
     document_id: str,
     current_user: User = Depends(get_current_user),
@@ -234,12 +234,11 @@ async def delete_document(
     ================================================================================
     DELETE DOCUMENT
     ================================================================================
-    Briše dokument i sve njegove chunk-ove.
+    Briše dokument i sve njegove povezane zapise (chunks, quizzes, quiz_images).
     
-    Args:
-        document_id: ID dokumenta
-        current_user: Trenutni korisnik
-        db: Database session
+    Returns:
+        204: Document deleted successfully
+        409: Document has related data that needs to be deleted first
     ================================================================================
     """
     logger.warning(f"Document deletion requested: {document_id}")
@@ -249,7 +248,7 @@ async def delete_document(
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid document ID format"
+            detail="Nevalidan format ID dokumenta"
         )
     
     document = db.query(Document).filter(
@@ -259,14 +258,109 @@ async def delete_document(
     if not document:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            detail="Dokument nije pronađen"
         )
     
+    # Check for related data and provide smart messages
+    from app.db.models.quiz import Quiz, QuizImage, QuizAttempt, Question
+    
+    # Count related data
+    chunks_count = db.query(Chunk).filter(Chunk.document_id == doc_uuid).count()
+    quiz_images_count = db.query(QuizImage).filter(QuizImage.document_id == doc_uuid).count()
+    quizzes = db.query(Quiz).filter(Quiz.document_id == doc_uuid).all()
+    quizzes_count = len(quizzes)
+    
+    total_questions = 0
+    total_attempts = 0
+    for quiz in quizzes:
+        questions_count = db.query(Question).filter(Question.quiz_id == quiz.id).count()
+        total_questions += questions_count
+        attempts = db.query(QuizAttempt).filter(QuizAttempt.quiz_id == quiz.id).count()
+        total_attempts += attempts
+    
+    # Build smart response message
+    if chunks_count > 0 or quizzes_count > 0 or quiz_images_count > 0:
+        message_parts = []
+        if chunks_count > 0:
+            message_parts.append(f"• {chunks_count} odlomaka")
+        if quizzes_count > 0:
+            message_parts.append(f"• {quizzes_count} kvizova ({total_questions} pitanja)")
+        if quiz_images_count > 0:
+            message_parts.append(f"• {quiz_images_count} slika")
+        if total_attempts > 0:
+            message_parts.append(f"• {total_attempts} pokušaja")
+        
+        # Provide helpful message based on what needs to be deleted
+        if quizzes_count > 0:
+            detail_msg = (
+                f"⚠️ Da biste obrisali ovaj dokument, prvo morate obrisati povezane kvizove!\n\n"
+                f"Da li želite da automatski obrišemo sve povezane podatke?\n\n"
+                f"Povezani podaci:\n" + "\n".join(message_parts) + "\n\n"
+                f"📝 Ili možete ručno obrisati kvizove prvo, pa onda dokument."
+            )
+        else:
+            detail_msg = (
+                f"⚠️ Dokument ima povezane podatke:\n" + "\n".join(message_parts) + "\n\n"
+                f"Pokušavamo automatski da obrišemo..."
+            )
+        
+        # Try to delete, if fails provide detailed message
+        try:
+            # Delete in correct order due to foreign keys
+            for quiz in quizzes:
+                # Delete questions first
+                db.query(Question).filter(Question.quiz_id == quiz.id).delete(synchronize_session=False)
+                # Delete attempts
+                db.query(QuizAttempt).filter(QuizAttempt.quiz_id == quiz.id).delete(synchronize_session=False)
+            
+            # Delete quizzes
+            db.query(Quiz).filter(Quiz.document_id == doc_uuid).delete(synchronize_session=False)
+            
+            # Delete quiz images
+            db.query(QuizImage).filter(QuizImage.document_id == doc_uuid).delete(synchronize_session=False)
+            
+            # Delete chunks
+            db.query(Chunk).filter(Chunk.document_id == doc_uuid).delete(synchronize_session=False)
+            
+            # Save file_id before deleting document
+            file_id = document.file_id
+            
+            # Delete document
+            db.delete(document)
+            
+            # Delete file if exists
+            if file_id:
+                db.query(File).filter(File.id == file_id).delete(synchronize_session=False)
+            
+            db.commit()
+            logger.warning(f"Document {document_id} and all related data deleted successfully")
+            
+            return {"message": "Dokument uspešno obrisan!", "deleted": True}
+            
+        except Exception as e:
+            db.rollback()
+            logger.error(f"Error deleting document {document_id}: {e}")
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail=detail_msg
+            )
+    
+    
+    # Obriši dokument
     db.delete(document)
     db.commit()
     
-    logger.info(f"Document deleted: {document_id}")
-    return None
+    # Obriši fajl ako postoji
+    file_id = document.file_id
+    if file_id:
+        from app.db.models.file import File
+        file = db.query(File).filter(File.id == file_id).first()
+        if file:
+            db.delete(file)
+            db.commit()
+    
+    logger.warning(f"Document {document_id} deleted successfully")
+    return {"message": "Dokument uspešno obrisan!", "deleted": True}
 
 
 @router.post("/{document_id}/process")
@@ -800,8 +894,26 @@ async def start_pipeline(
     if not document:
         raise HTTPException(status_code=404, detail="Dokument nije pronađen")
 
-    source_language = pipeline_data.get("source_language", "en")
-    target_language = pipeline_data.get("target_language", "sr")
+    # Auto-detekcija jezika - proveri prvi chunk
+    detected_lang = None
+    first_chunk = db.query(Chunk).filter(Chunk.document_id == document.id).first()
+    if first_chunk and first_chunk.content:
+        # Proveri da li sadrži ćirilične karaktere
+        cyrillic_chars = sum(1 for c in first_chunk.content if '\u0400' <= c <= '\u04FF')
+        latin_chars = sum(1 for c in first_chunk.content if 'a' <= c.lower() <= 'z')
+        
+        if cyrillic_chars > latin_chars * 0.1:  # Ako ima dosta ćirilice
+            detected_lang = "sr"
+        elif latin_chars > 10:
+            detected_lang = "en"
+    
+    # Koristi auto-detektovani jezik ili default
+    source_language = pipeline_data.get("source_language") or detected_lang or "en"
+    # Target language je uvek suprotan od source
+    if not pipeline_data.get("target_language"):
+        target_language = "sr" if source_language == "en" else "en"
+    else:
+        target_language = pipeline_data.get("target_language")
     translation_provider = pipeline_data.get("translation_provider")
     quiz_provider = pipeline_data.get("quiz_provider")
     num_questions = int(pipeline_data.get("num_questions", 5))

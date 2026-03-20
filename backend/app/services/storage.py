@@ -1,165 +1,61 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-STORAGE SERVICE — Lokalni fajl sistem
+STORAGE SERVICE — Unified storage interface
 ================================================================================
-Servis za upravljanje fajlovima na lokalnom disku (uploads/).
+Supports both local filesystem and S3-compatible (MinIO) storage.
+The storage backend is determined by the STORAGE_BACKEND setting.
 
-Interfejs je identičan cloud verziji tako da se po potrebi može zameniti
-cloud provajderom (S3, GCS, Azure Blob) bez izmena u ostatku koda.
-
-Cloud storage: videti storage_cloud.py (posebna priča — boto3/S3 implementacija)
-
-Verzija: 2.0.0
+Verzija: 3.0.0
 ================================================================================
 """
 
-import hashlib
 import logging
-import os
-import time
-from pathlib import Path
-from typing import Optional, BinaryIO, Dict, Any
-
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
+# Import both storage backends
+from app.services.storage_local import StorageService as LocalStorageService
+from app.services.storage_cloud import CloudStorageService
 
-class StorageService:
+# Alias for backwards compatibility
+from app.services.storage_local import StorageService
+
+
+def get_storage_service():
     """
-    ================================================================================
-    LOCAL STORAGE SERVICE
-    ================================================================================
-    Čuva fajlove na lokalnom fajl sistemu u UPLOAD_FOLDER direktorijumu.
-
-    Struktura:
-        uploads/
-          <user_id>/
-            <sha256_checksum>.<ext>   ← svaki fajl je jedinstven po sadržaju
-
-    Metode su identične cloud verziji radi lakog prebacivanja.
-    ================================================================================
+    Factory function that returns the appropriate storage service based on configuration.
     """
-
-    def __init__(self, base_path: Optional[str] = None):
-        """Inicijalizuje lokalni storage u zadatoj putanji."""
-        self.base_path = Path(base_path or settings.UPLOAD_FOLDER)
-        self.base_path.mkdir(parents=True, exist_ok=True)
-        self._bucket_ready = True  # uvek True za lokalni storage
-        logger.info(f"LocalStorageService initialized: {self.base_path}")
-
-    # ── Helpers ───────────────────────────────────────────────────────────────
-
-    @staticmethod
-    def calculate_checksum(file_content: bytes) -> str:
-        """Računa SHA256 checksum sadržaja fajla."""
-        return hashlib.sha256(file_content).hexdigest()
-
-    def _full_path(self, storage_path: str) -> Path:
-        """Vraća apsolutnu putanju za dati storage_path."""
-        return self.base_path / storage_path
-
-    # ── Glavne operacije ──────────────────────────────────────────────────────
-
-    def upload_file(
-        self,
-        file_content: BinaryIO,
-        filename: str,
-        user_id: str,
-        content_type: str = "application/octet-stream",
-        metadata: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Upisuje fajl na lokalni disk.
-
-        Returns:
-            {'storage_path': str, 'checksum': str, 'size': int}
-        """
-        content = file_content.read()
-        checksum = self.calculate_checksum(content)
-        ext = Path(filename).suffix.lower()
-        storage_path = f"{user_id}/{checksum}{ext}"
-
-        dest = self._full_path(storage_path)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-
-        # Ako već postoji isti sadržaj — nema potrebe upisivati ponovo
-        if not dest.exists():
-            dest.write_bytes(content)
-            logger.info(f"Uploaded: {storage_path} ({len(content)} bytes)")
-        else:
-            logger.debug(f"Already exists (dedup): {storage_path}")
-
-        return {
-            'storage_path': storage_path,
-            'checksum': checksum,
-            'size': len(content)
-        }
-
-    def download_file(self, storage_path: str) -> bytes:
-        """
-        Čita fajl sa lokalnog diska.
-
-        Raises:
-            FileNotFoundError: Ako fajl ne postoji
-        """
-        path = self._full_path(storage_path)
-        if not path.exists():
-            raise FileNotFoundError(f"File not found in local storage: {storage_path}")
-        return path.read_bytes()
-
-    def delete_file(self, storage_path: str) -> bool:
-        """
-        Briše fajl sa lokalnog diska.
-
-        Returns:
-            True (i ako fajl ne postoji — idempotentna operacija)
-        """
-        path = self._full_path(storage_path)
-        if path.exists():
-            path.unlink()
-            logger.info(f"Deleted: {storage_path}")
-        return True
-
-    def get_presigned_url(
-        self,
-        storage_path: str,
-        expiration: int = 3600
-    ) -> str:
-        """
-        Vraća URL za direktan download fajla putem API-ja.
-
-        Za lokalni storage ovo je relativni URL na /api/v1/files/serve/{storage_path}.
-        Za cloud: zameniti boto3 generate_presigned_url() pozivom.
-        """
-        # Koristimo API endpoint koji servira fajl direktno
-        encoded = storage_path.replace("/", "%2F")
-        return f"/api/v1/files/serve/{encoded}"
-
-    def file_exists(self, storage_path: str) -> bool:
-        """Proverava da li fajl postoji na disku."""
-        return self._full_path(storage_path).exists()
-
-    def get_file_metadata(self, storage_path: str) -> Dict[str, Any]:
-        """
-        Dohvata metadata fajla sa diska.
-
-        Raises:
-            FileNotFoundError: Ako fajl ne postoji
-        """
-        path = self._full_path(storage_path)
-        if not path.exists():
-            raise FileNotFoundError(f"File not found: {storage_path}")
-        stat = path.stat()
-        return {
-            'size': stat.st_size,
-            'content_type': 'application/octet-stream',
-            'last_modified': stat.st_mtime,
-            'metadata': {}
-        }
+    backend = getattr(settings, 'STORAGE_BACKEND', 'local') or 'local'
+    
+    # Check for legacy CLOUD_STORAGE settings
+    cloud_endpoint = getattr(settings, 'CLOUD_STORAGE_ENDPOINT', None)
+    
+    if backend == 's3' or cloud_endpoint:
+        logger.info("Using S3/MinIO storage backend")
+        # Get settings from CLOUD_STORAGE or fall back to MINIO settings
+        # Note: Don't include protocol prefix - the cloud service adds it
+        endpoint = getattr(settings, 'CLOUD_STORAGE_ENDPOINT', None)
+        if endpoint:
+            endpoint = endpoint.replace('http://', '').replace('https://', '')
+        endpoint = endpoint or settings.MINIO_ENDPOINT
+        access_key = getattr(settings, 'CLOUD_STORAGE_ACCESS_KEY', None) or settings.MINIO_ACCESS_KEY
+        secret_key = getattr(settings, 'CLOUD_STORAGE_SECRET_KEY', None) or settings.MINIO_SECRET_KEY
+        bucket = getattr(settings, 'CLOUD_STORAGE_BUCKET_NAME', None) or settings.MINIO_BUCKET_NAME
+        use_ssl = getattr(settings, 'CLOUD_STORAGE_USE_SSL', None) or settings.MINIO_USE_SSL
+        
+        return CloudStorageService(
+            endpoint=endpoint,
+            access_key=access_key,
+            secret_key=secret_key,
+            bucket_name=bucket,
+            use_ssl=use_ssl
+        )
+    else:
+        logger.info("Using local storage backend")
+        return LocalStorageService()
 
 
-# Singleton instance
-storage_service = StorageService()
-
+# Singleton instance - uses the appropriate backend
+storage_service = get_storage_service()

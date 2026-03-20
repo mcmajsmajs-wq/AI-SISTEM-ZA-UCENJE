@@ -43,14 +43,44 @@ logger = logging.getLogger(__name__)
 # HELPERS
 # ============================================================
 
+def get_quiz_progress(quiz_id: str) -> tuple:
+    """Get quiz progress from Redis. Returns (current, total)."""
+    try:
+        import redis as redis_client
+        from app.core.config import settings
+        r = redis_client.from_url(settings.REDIS_CONNECTION_URL, decode_responses=True)
+        data = r.hgetall(f"quiz_progress:{quiz_id}")
+        if data:
+            return int(data.get("current", 0)), int(data.get("total", 0))
+    except Exception:
+        pass
+    return 0, 0
+
+
 def quiz_to_response(quiz: Quiz) -> QuizResponse:
+    # If quiz is still generating, get real-time progress from Redis
+    current_progress, total_progress = 0, 0
+    if quiz.status == 'generating':
+        current_progress, total_progress = get_quiz_progress(str(quiz.id))
+        if current_progress > 0:
+            actual_question_count = current_progress
+        elif quiz.questions:
+            actual_question_count = len(quiz.questions)
+        else:
+            actual_question_count = quiz.total_questions
+    else:
+        actual_question_count = quiz.total_questions
+        current_progress = actual_question_count
+        total_progress = actual_question_count
+    
     return QuizResponse(
         id=str(quiz.id),
         document_id=str(quiz.document_id),
         user_id=str(quiz.user_id),
         title=quiz.title,
         description=quiz.description,
-        total_questions=quiz.total_questions,
+        total_questions=current_progress or actual_question_count,
+        target_questions=total_progress or quiz.target_questions or actual_question_count,
         time_limit=quiz.time_limit,
         passing_score=quiz.passing_score,
         status=quiz.status,
@@ -60,6 +90,29 @@ def quiz_to_response(quiz: Quiz) -> QuizResponse:
 
 
 def question_to_response(q: Question, include_answer: bool = False):
+    # Handle image URL - use permanent public URL
+    image_url = q.image_url
+    if image_url:
+        # If URL starts with /minio/ or contains presigned params, get permanent URL
+        if image_url.startswith('/minio/') or 'X-Amz-' in image_url:
+            try:
+                from app.services.storage_cloud import CloudStorageService
+                storage = CloudStorageService()
+                # Extract the path from /minio/ai-learning-uploads/...
+                # First remove query string if present
+                url_without_query = image_url.split('?')[0]
+                # Remove /minio/ prefix
+                path = url_without_query.replace('/minio/', '')
+                # path is now: ai-learning-uploads/3edf0f17-.../file.jpg
+                # Remove bucket name prefix to get: 3edf0f17-.../file.jpg
+                if '/' in path:
+                    path = path.split('/', 1)[1]
+                # Generate permanent public URL (no expiration)
+                image_url = storage.get_public_url(path)
+            except Exception as e:
+                import logging
+                logging.getLogger(__name__).warning(f"Could not get public image URL: {e}")
+    
     if include_answer:
         return QuestionWithAnswer(
             id=str(q.id),
@@ -71,6 +124,8 @@ def question_to_response(q: Question, include_answer: bool = False):
             order_index=q.order_index,
             correct_answer=q.correct_answer,
             explanation=q.explanation,
+            image_url=image_url,
+            image_caption=q.image_caption,
         )
     return QuestionResponse(
         id=str(q.id),
@@ -82,6 +137,8 @@ def question_to_response(q: Question, include_answer: bool = False):
         order_index=q.order_index,
         correct_answer=q.correct_answer,
         explanation=q.explanation,
+        image_url=image_url,
+        image_caption=q.image_caption,
     )
 
 
@@ -149,8 +206,9 @@ async def create_quiz(
     user_gemini_key = getattr(current_user, 'ai_api_key_gemini', None)
     user_groq_key   = getattr(current_user, 'ai_api_key_groq', None)
     user_mistral_key = getattr(current_user, 'ai_api_key_mistral', None)
+    user_deepseek_key = getattr(current_user, 'ai_api_key_deepseek', None)
     generate_quiz_task.delay(str(quiz.id), str(document.id), data.num_questions, user_provider,
-                             user_openai_key, user_claude_key, user_gemini_key, user_groq_key, user_mistral_key)
+                             user_openai_key, user_claude_key, user_gemini_key, user_groq_key, user_mistral_key, user_deepseek_key)
 
     logger.info(f"Kviz {quiz.id} kreiran, generisanje pokrenuto")
     return quiz_to_response(quiz)
@@ -165,7 +223,9 @@ async def list_quizzes(
     current_user: User = Depends(get_current_user),
 ):
     """Lista svih kvizova korisnika, opcionalno filtrirano po dokumentu."""
-    query = db.query(Quiz).filter(Quiz.user_id == current_user.id)
+    from sqlalchemy.orm import joinedload
+    
+    query = db.query(Quiz).options(joinedload(Quiz.questions)).filter(Quiz.user_id == current_user.id)
     if document_id:
         query = query.filter(Quiz.document_id == document_id)
 

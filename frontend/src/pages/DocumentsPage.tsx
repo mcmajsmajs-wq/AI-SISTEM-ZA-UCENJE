@@ -115,8 +115,8 @@ export default function DocumentsPage() {
         toast.error('Dozvoljeni su samo PDF fajlovi')
         return
       }
-      if (file.size > 50 * 1024 * 1024) {
-        toast.error('Fajl mora biti manji od 50MB')
+      if (file.size > 100 * 1024 * 1024) {
+        toast.error('Fajl mora biti manji od 100MB')
         return
       }
       // Store file and pre-fill title from filename (without extension)
@@ -152,6 +152,7 @@ export default function DocumentsPage() {
     { id: 'ollama',   name: 'Ollama (Lokalni)', free: true },
     { id: 'gemini',   name: 'Google Gemini',    free: true },
     { id: 'groq',     name: 'Groq',             free: true },
+    { id: 'deepseek', name: 'DeepSeek',         free: false },
     { id: 'openai',   name: 'OpenAI GPT',       free: false },
     { id: 'claude',   name: 'Anthropic Claude', free: false },
     { id: 'mistral',  name: 'Mistral',          free: false },
@@ -377,14 +378,20 @@ export default function DocumentsPage() {
 
                     {(doc.status === 'processing') && (
                       <span className="flex items-center gap-1.5 text-xs text-indigo-500 font-medium flex-1">
-                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> Obrađuje se...
+                        <Loader2 className="w-3.5 h-3.5 animate-spin" /> 
+                        {doc.total_pages > 0 
+                          ? `Obrađuje se... (~${Math.ceil(doc.total_pages / 5)} min)` 
+                          : 'Obrađuje se...'}
                       </span>
                     )}
 
                     {doc.status === 'translating' && (
                       <>
                         <span className="flex items-center gap-1.5 text-xs text-violet-500 font-medium flex-1">
-                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> Prevodi se...
+                          <Loader2 className="w-3.5 h-3.5 animate-spin" /> 
+                          {doc.total_chunks > 0 
+                            ? `Prevodi se... (~${Math.ceil((doc.total_chunks - (doc.translated_chunks || 0)) / 20)} min)` 
+                            : 'Prevodi se...'}
                         </span>
                         <button
                           onClick={() => setShowTranslateModal(doc.id)}

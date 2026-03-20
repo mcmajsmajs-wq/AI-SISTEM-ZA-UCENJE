@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { documentsApi } from '@/services/api'
-import { X, Zap, Loader2, CheckCircle, ChevronRight } from 'lucide-react'
+import { X, Zap, Loader2, CheckCircle, ChevronRight, Activity } from 'lucide-react'
 import toast from 'react-hot-toast'
 import clsx from 'clsx'
 
@@ -53,6 +53,13 @@ export default function PipelineModal({ documentId, documentTitle, onClose, onSt
   const [passingScore, setPassingScore] = useState(60)
   const [started, setStarted] = useState(false)
   const [taskResult, setTaskResult] = useState<any>(null)
+
+  const { data: progressData } = useQuery({
+    queryKey: ['document-progress', documentId],
+    queryFn: () => documentsApi.getProgress(documentId),
+    enabled: started,
+    refetchInterval: 3000,
+  })
 
   const { data: providersData } = useQuery({
     queryKey: ['pipeline-providers'],
@@ -262,27 +269,95 @@ export default function PipelineModal({ documentId, documentTitle, onClose, onSt
             </button>
           </div>
         ) : (
-          /* After start — status */
+          /* After start — status with progress */
           <div className="p-6 space-y-5">
-            <div className="text-center space-y-3">
-              <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)' }}>
-                <CheckCircle className="w-8 h-8 text-green-600" />
+            {/* Progress indicator */}
+            {progressData && (() => {
+              const data = (progressData as any).data
+              const progressPct = data.progress_percentage || 0
+              const phase = data.phase_label || 'Obrada u toku...'
+              const translated = data.translated_chunks || 0
+              const total = data.total_chunks || 0
+              
+              return (
+                <div className="space-y-4">
+                  <div className="text-center space-y-2">
+                    <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center relative">
+                      <div className="absolute inset-0 rounded-2xl border-4 border-indigo-100"></div>
+                      <Loader2 className="w-8 h-8 text-indigo-600 animate-spin" />
+                    </div>
+                    <div>
+                      <h3 className="font-bold text-gray-900">{phase}</h3>
+                      <p className="text-gray-500 text-sm mt-1">
+                        {progressPct}% završeno
+                      </p>
+                    </div>
+                  </div>
+                  
+                  {/* Progress bar */}
+                  <div className="bg-gray-100 rounded-full h-2 overflow-hidden">
+                    <div 
+                      className="h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-500"
+                      style={{ width: `${progressPct}%` }}
+                    />
+                  </div>
+                  
+                  {/* Details */}
+                  {(translated > 0 || total > 0) && (
+                    <div className="bg-gray-50 rounded-xl p-3 text-sm text-gray-600 flex items-center justify-center gap-2">
+                      <Activity className="w-4 h-4" />
+                      <span>Prevedeno: {translated} / {total} odlomaka</span>
+                    </div>
+                  )}
+                  
+                  {/* Current phase details */}
+                  {data.status === 'translating' && (
+                    <div className="bg-violet-50 rounded-xl p-3 text-sm text-violet-700">
+                      Prevod u toku...
+                    </div>
+                  )}
+                  
+                  {data.status === 'processing' && (
+                    <div className="bg-blue-50 rounded-xl p-3 text-sm text-blue-700">
+                      Obrada dokumenta u toku...
+                    </div>
+                  )}
+                  
+                  {data.status === 'completed' && (
+                    <div className="text-center space-y-3">
+                      <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center"
+                        style={{ background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)' }}>
+                        <CheckCircle className="w-8 h-8 text-green-600" />
+                      </div>
+                      <div>
+                        <h3 className="font-bold text-gray-900">Obrada završena!</h3>
+                        <p className="text-gray-500 text-sm mt-1">
+                          Sve je spremno.
+                        </p>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })()}
+
+            {!progressData && started && (
+              <div className="text-center space-y-3">
+                <div className="w-16 h-16 rounded-2xl mx-auto flex items-center justify-center"
+                  style={{ background: 'linear-gradient(135deg, #d1fae5, #a7f3d0)' }}>
+                  <CheckCircle className="w-8 h-8 text-green-600" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-gray-900">Pipeline je pokrenut!</h3>
+                  <p className="text-gray-500 text-sm mt-1">
+                    Obrada tece u pozadini. Kviz će biti spreman za nekoliko minuta.
+                  </p>
+                </div>
               </div>
-              <div>
-                <h3 className="font-bold text-gray-900">Pipeline je pokrenut!</h3>
-                <p className="text-gray-500 text-sm mt-1">
-                  Obrada tece u pozadini. Kviz će biti spreman za nekoliko minuta.
-                </p>
-              </div>
-            </div>
+            )}
 
             {taskResult && (
               <div className="bg-gray-50 rounded-xl p-4 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-500">Task ID:</span>
-                  <span className="text-gray-700 font-mono text-xs">{taskResult.task_id?.slice(0, 16)}...</span>
-                </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-500">AI za prevod:</span>
                   <span className="font-medium text-gray-700">{taskResult.providers?.translation || 'auto'}</span>

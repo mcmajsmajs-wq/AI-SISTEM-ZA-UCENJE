@@ -6,6 +6,40 @@ Kategorije: ✅ Dodato | 🔧 Izmenjeno | 🐛 Ispravka | 🗑️ Uklonjeno
 
 ---
 
+## [2.0.1] — 2026-03-14
+
+### 🐛 Ispravke
+
+#### PDF Processing za skenirane dokumente
+- **Problem:** Skenirani PDF-ovi (skenovi knjiga) nisu se obrađivali - 0 chunks
+- **Uzrok:** Worker kontejner nije imao instaliran Poppler
+- **Rešenje:** Dodati `poppler-utils` u Dockerfile
+
+#### Storage konfiguracija za Worker
+- **Problem:** Worker nije mogao da pronađe fajlove u MinIO storage-u
+- **Uzrok:** Worker nije imao S3/MinIO konfiguraciju u environment
+- **Rešenje:** Dodati STORAGE_BACKEND i CLOUD_STORAGE promenjive u docker-compose.yml
+
+#### Translation API ključevi
+- **Problem:** Prevod je koristio placeholder API ključeve umesto korisničkih
+- **Uzrok:** translate_document_task koristi sistemske ključeve umesto korisničkih
+- **Rešenje:** Izmenjena logika da prvo koristi korisničke API ključeve (Groq, Mistral, Gemini)
+
+#### Povećan limit za upload fajlova
+- **Problem:** Maksimalna veličina fajla bila je 50MB
+- **Rešenje:** Povećano na 100MB u backend, frontend i nginx konfiguraciji
+
+### ✅ Dodato
+
+#### OCR podrška za srpski jezik
+- Dodat `tesseract-ocr-srp` paket za prepoznavanje srpskog teksta
+
+#### Dokumentacija zavisnosti
+- Ažuriran IMPLEMENTATION_LOG.md sa detaljnim opisom problema i rešenja
+- Dodat poglavlje "OBAVEZNE ZAVISNOSTI za rad aplikacije"
+
+---
+
 ## [2.0.0] — 2026-03-01
 
 ### ✅ Dodato

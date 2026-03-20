@@ -50,14 +50,15 @@ export default function KnowledgeBasePage() {
   const [selectedProvider, setSelectedProvider] = useState('auto')
   const [pendingProvider, setPendingProvider] = useState('Auto')
 
-  const AI_PROVIDERS = [
+const AI_PROVIDERS = [
     { id: 'auto',    label: 'Auto',           emoji: '🤖' },
-    { id: 'ollama',  label: 'Ollama (lokalni)', emoji: '🖥️' },
+    { id: 'ollamas',  label: 'Ollama (lokalni)', emoji: '🖥️' },
     { id: 'gemini',  label: 'Gemini',          emoji: '✨' },
     { id: 'groq',    label: 'Groq',            emoji: '⚡' },
     { id: 'openai',  label: 'OpenAI',          emoji: '🔵' },
     { id: 'claude',  label: 'Claude',          emoji: '🟠' },
     { id: 'mistral', label: 'Mistral',         emoji: '🌊' },
+    { id: 'deepseek', label: 'DeepSeek',        emoji: '🔮' },
   ]
 
   const { data: statsData } = useQuery({
