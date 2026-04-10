@@ -1,8 +1,8 @@
 # ================================================================================
 # GUIDE ZA INSTALACIJU I POKRETANJE - AI LEARNING SYSTEM
 # ================================================================================
-# Datum: 2026-02-17
-# Verzija: 1.0.0
+# Datum: 2026-04-10
+# Verzija: 1.1.0
 # ================================================================================
 
 # ================================================================================
@@ -114,6 +114,23 @@ touch backend/app/services/__init__.py
 touch backend/app/utils/__init__.py
 touch backend/app/workers/__init__.py
 touch backend/app/tests/__init__.py
+
+## 3.4 Struktura modula (FAZA 1-11 reorganizacija)
+# Novi modularni backend:
+# ├── app/services/quiz_clients/     # AI provajderi za kvizove (FAZA 1)
+# ├── app/services/prompts/          # Prompt templates (FAZA 2)
+# ├── app/services/helpers/          # Pomoćne funkcije (FAZA 2)
+# ├── app/services/quiz/            # Quiz service (FAZA 3)
+# ├── app/services/tasks/           # Celery taskovi (FAZA 4)
+# ├── app/services/translation/     # Prevodjenje (FAZA 5)
+# ├── app/services/skills/          # Skills sistem (FAZA 6)
+# ├── app/services/mcp/             # MCP server (FAZA 7)
+# ├── app/services/security/        # Security (FAZA 8)
+# ├── app/services/testing/         # Testiranje (FAZA 9)
+# └── app/services/optimization/    # Optimizacije (FAZA 11)
+#     ├── rate_limiter.py           # Rate limiting
+#     ├── caching.py                # Redis keširanje
+#     └── connection_pool.py       # DB connection pooling
 
 # ================================================================================
 # 4. KONFIGURACIJA
@@ -318,7 +335,76 @@ cd docker
 docker compose up -d db redis app
 
 # ================================================================================
-# 11. DEVELOPMENT MODE
+# 11. VERIFIKACIJA SISTEMA (FAZA 10-11)
+# ================================================================================
+
+## Verifikacione skripte
+# Nakon deploya, pokrenite verifikacione skripte da proverite da li sve radi:
+
+# FAZA 10 - Testiranje i integracija:
+docker compose exec app python backend/scripts/verify_faza10.py
+
+# FAZA 11 - Optimizacije i CI/CD:
+docker compose exec app python backend/scripts/verify_faza11.py
+
+# Obe skripte proveravaju:
+# - Health check endpoint-e
+# - Database konekciju
+# - Redis konekciju
+# - Modul import
+# - Rate limiting
+# - Caching
+# - Connection pooling
+
+## Provera optimizacija
+# Rate limiting status:
+curl -s http://localhost:8000/api/monitoring/rate-limit-status
+
+# Cache statistike:
+docker compose exec redis redis-cli INFO stats | grep -E "keyspace_hits|keyspace_misses"
+
+# ================================================================================
+# 12. DEVELOPMENT MODE
+# ================================================================================
+
+# Kod je mapiran u kontejner, pa promene u kodu se automatski vide
+# Uvicorn je pokrenut sa --reload, pa se app automatski restartuje
+
+# Ručno restartovanje nakon većih promena:
+docker compose restart app worker
+
+# ================================================================================
+# 13. PRODUKCIJA
+# ================================================================================
+
+# Koristite docker-compose.prod.yml:
+docker compose -f docker-compose.prod.yml up -d
+
+# Dodatne stvari za produkciju:
+# 1. Promenite sve lozinke u .env
+# 2. Podesite SSL sertifikate u docker/nginx/ssl/
+# 3. Onemogućite DEBUG mode
+# 4. Podesite LOG_FORMAT=json
+# 5. Konfigurišite backup-ove
+# 6. Omogućite rate limiting (RATE_LIMIT_ENABLED=true)
+# 7. Omogućite caching (REDIS_CACHE_TTL=300)
+
+# ================================================================================
+# 14. CI/CD WORKFLOW
+# ================================================================================
+
+# Projekat koristi GitHub Actions za CI/CD:
+# - Workflow fajl: .github/workflows/ci.yml
+# - Automatski pokreće: lint (flake8) + testovi (pytest) + build
+
+# Pokretanje CI lokalno:
+make ci
+
+# Pokretanje sa coverage:
+make ci-full
+
+# ================================================================================
+# KRAJ GUIDE-A
 # ================================================================================
 
 # Kod je mapiran u kontejner, pa promene u kodu se automatski vide

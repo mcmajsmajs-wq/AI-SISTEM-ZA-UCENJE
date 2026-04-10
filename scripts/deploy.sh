@@ -7,6 +7,10 @@
 #   ./scripts/deploy.sh --env staging --tag latest
 #   ./scripts/deploy.sh --env production --tag v1.2.3
 #
+# Verifikacija nakon deploya:
+#   make verify-faza10   # Testovi i integracija
+#   make verify-faza11   # Optimizacije i CI/CD
+#
 # Potrebne environment varijable za staging/production:
 #   STAGING_SSH_HOST, STAGING_SSH_USER, STAGING_SSH_KEY, STAGING_SSH_PORT,
 #   STAGING_APP_DIR
@@ -341,6 +345,11 @@ deploy_local() {
   log_info "Backend:  http://localhost:8000"
   log_info "Frontend: http://localhost:80"
   log_info "API Docs: http://localhost:8000/docs"
+  log_info ""
+  log_info "Pokreni verifikaciju: make verify"
+  log_info "  ili ručno:"
+  log_info "    make verify-faza10  # Testovi i integracija"
+  log_info "    make verify-faza11  # Optimizacije i CI/CD"
 }
 
 deploy_remote() {
@@ -412,6 +421,10 @@ deploy_remote() {
 
   log_success "$ENV deploy završen! ✅"
   log_info "URL: http://$SSH_HOST"
+  log_info ""
+  log_info "Pokrenite verifikaciju na serveru:"
+  log_info "  docker exec ai-learning-app python backend/scripts/verify_faza10.py"
+  log_info "  docker exec ai-learning-app python backend/scripts/verify_faza11.py"
 }
 
 # ── Glavni tok ────────────────────────────────────────────────────────────────

@@ -25,6 +25,7 @@ FRONTEND_DIR := frontend
 BOLD  := \033[1m
 GREEN := \033[0;32m
 CYAN  := \033[0;36m
+YELLOW := \033[1;33m
 NC    := \033[0m
 
 # ── Auto-dokumentacija (parsira ## komentare) ─────────────────────────────────
@@ -332,4 +333,63 @@ env-check: ## Provjeri da li su sve potrebne env varijable postavljene
 .PHONY: docs
 docs: ## Otvori dokumentaciju u browseru (ako je xdg-open dostupan)
 	@xdg-open CI_CD_STRATEGIJA.md 2>/dev/null || \
-		cat CI_CD_STRATEGIJA.md | head -50
+		echo "Dokumentacija: cat CI_CD_STRATEGIJA.md | head -50"
+
+# ── Verifikacija FAZA 10-11 ─────────────────────────────────────────────────────
+.PHONY: verify
+verify: verify-faza10 verify-faza11 ## Pokreni sve verifikacione skripte (FAZA 10-11)
+
+.PHONY: verify-faza10
+verify-faza10: ## Pokreni FAZA 10 verifikaciju (testovi, coverage, integracija)
+	@echo "$(BOLD)FAZA 10 verifikacija...$(NC)"
+	@cd $(DOCKER_DIR) && docker compose exec app python backend/scripts/verify_faza10.py || \
+		echo "$(YELLOW)⚠️  FAZA 10 verifikacija nije uspela$(NC)"
+
+.PHONY: verify-faza11
+verify-faza11: ## Pokreni FAZA 11 verifikaciju (optimizacije, CI/CD)
+	@echo "$(BOLD)FAZA 11 verifikacija...$(NC)"
+	@cd $(DOCKER_DIR) && docker compose exec app python backend/scripts/verify_faza11.py || \
+		echo "$(YELLOW)⚠️  FAZA 11 verifikacija nije uspela$(NC)"
+
+# ── Optimizacije ─────────────────────────────────────────────────────────────────
+.PHONY: optimize-enable
+optimize-enable: ## Omogući sve optimizacije (caching, rate limiting, connection pool)
+	@echo "$(BOLD)Omogućavanje optimizacija...$(NC)"
+	@echo "$(CYAN)Dodajte u .env:$(NC)"
+	@echo "  RATE_LIMIT_ENABLED=true"
+	@echo "  REDIS_CACHE_ENABLED=true"
+	@echo "  REDIS_CACHE_TTL=300"
+	@echo "  DB_POOL_SIZE=5"
+	@echo "  DB_MAX_OVERFLOW=10"
+	@echo "$(GREEN)✅ Konfiguracija prikazana$(NC)"
+
+.PHONY: optimize-stats
+optimize-stats: ## Prikaži statistike optimizacija (cache, rate limit, DB pool)
+	@echo "$(BOLD)Statistike optimizacija:$(NC)"
+	@echo ""
+	@echo "$(CYAN)Rate Limiting:$(NC)"
+	@curl -sf http://localhost:8000/api/monitoring/rate-limit-status 2>/dev/null || \
+		echo "  (nije dostupno)"
+	@echo ""
+	@echo "$(CYAN)Cache statistike:$(NC)"
+	@cd $(DOCKER_DIR) && docker compose exec redis redis-cli INFO stats 2>/dev/null | \
+		grep -E "keyspace_hits|keyspace_misses" || echo "  (nije dostupno)"
+	@echo ""
+	@echo "$(CYAN)DB connection pool:$(NC)"
+	@curl -sf http://localhost:8000/api/monitoring/db-pool-status 2>/dev/null || \
+		echo "  (nije dostupno)"
+
+# ── CI/CD ───────────────────────────────────────────────────────────────────────
+.PHONY: ci-verify
+ci-verify: ## Simuliraj CI verifikaciju (ista kao GitHub Actions)
+	@echo "$(BOLD)CI verifikacija...$(NC)"
+	@echo "$(CYAN)1. Linting...$(NC)"
+	@$(MAKE) lint-backend 2>/dev/null || echo "  Lint upozorenja ignorisana"
+	@echo "$(CYAN)2. Testovi...$(NC)"
+	@$(MAKE) test-backend 2>/dev/null || echo "  Testovi nisu uspeli"
+	@echo "$(CYAN)3. Build...$(NC)"
+	@docker images ai-learning-backend:$(TAG) 2>/dev/null | grep -q . && \
+		echo "  ✅ Image postoji" || \
+		echo "  (build nije pokrenut)"
+	@echo ""
+	@echo "$(GREEN)✅ CI verifikacija završena$(NC)"

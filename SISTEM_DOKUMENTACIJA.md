@@ -1,6 +1,6 @@
 # AI Learning System — Kompletna Sistemska Dokumentacija
 
-> **Verzija**: 1.0.0 | **Ažurirano**: 2025  
+> **Verzija**: 1.1.0 | **Ažurirano**: 2026-04-10  
 > Ovaj dokument je centralni referentni vodič za sve aspekte sistema.
 
 ---
@@ -772,3 +772,147 @@ Posle potvrde odgovora na kviz pitanje, korisnik može pitati AI tutora za dodat
 - Historija se čuva lokalno tokom trajanja kviza
 - Koristi isti AI provajder kao korisnikova podešavanja
 - Maksimalno 8 poruka u kontekstu (sliding window)
+
+---
+
+## 18. FAZA 10 — Testiranje i CI/CD
+
+### Verifikacione skripte
+
+| Skripta | Lokacija | Funkcija |
+|---------|----------|----------|
+| `verify_faza10.py` | `backend/scripts/` | Provera testova, coverage, integracija |
+| `verify_faza11.py` | `backend/scripts/` | Provera optimizacija, CI/CD pipeline |
+
+### Pokretanje verifikacije
+
+```bash
+# FAZA 10 - Testiranje
+docker compose exec app python backend/scripts/verify_faza10.py
+
+# FAZA 11 - Optimizacije
+docker compose exec app python backend/scripts/verify_faza11.py
+```
+
+### CI/CD Pipeline (.github/workflows/ci.yml)
+
+| Korak | Opis |
+|-------|------|
+| Lint | flake8 na Python kodu |
+| Test | pytest sa coverage > 60% |
+| Build | Docker image build |
+
+---
+
+## 19. FAZA 11 — Performance Optimizacije
+
+### Novi moduli
+
+| Modul | Fajl | Opis |
+|-------|------|------|
+| **Rate Limiter** | `app/services/optimization/rate_limiter.py` | 100 req/60s po IP |
+| **Caching** | `app/services/optimization/caching.py` | Redis-based keširanje |
+| **Connection Pool** | `app/services/optimization/connection_pool.py` | SQLAlchemy connection pool |
+
+### Konfiguracija (.env)
+
+```env
+# Rate Limiting
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW_SECONDS=60
+
+# Caching
+REDIS_CACHE_TTL=300
+REDIS_CACHE_ENABLED=true
+
+# Connection Pool
+DB_POOL_SIZE=5
+DB_MAX_OVERFLOW=10
+DB_POOL_TIMEOUT=30
+```
+
+### API Endpoint-i za monitoring
+
+| Endpoint | Opis |
+|----------|------|
+| `GET /api/monitoring/rate-limit-status` | Status rate limit-a |
+| `GET /api/monitoring/cache-stats` | Cache statistike |
+| `GET /api/monitoring/db-pool-status` | DB connection pool status |
+
+### Redis cache ključevi
+
+| Prefix | Tip podataka | TTL |
+|--------|--------------|-----|
+| `cache:*` | Generički keš | 300s (default) |
+| `quiz:*` | Quiz podaci | 600s |
+| `doc:*` | Document podaci | 300s |
+| `user:*` | User session | 3600s |
+
+### Performansni benefit-i
+
+- **Rate Limiting**: Sprečava API abuse
+- **Caching**: Smanjuje DB load, brži response
+- **Connection Pool**: Efikasnije korišćenje DB konekcija
+
+---
+
+## 20. Modularna struktura (FAZA 1-11)
+
+```
+app/services/
+├── __init__.py              # Backward compatibility
+├── quiz_clients/            # FAZA 1: AI provajderi za kvizove
+│   ├── __init__.py
+│   ├── openai_client.py
+│   ├── claude_client.py
+│   ├── ollama_client.py
+│   └── dummy_client.py
+├── prompts/                 # FAZA 2: Prompt templates
+│   ├── __init__.py
+│   ├── quiz_prompts.py
+│   └── translation_prompts.py
+├── helpers/                 # FAZA 2: Pomoćne funkcije
+│   ├── __init__.py
+│   ├── text_processing.py
+│   └── pdf_processing.py
+├── quiz/                    # FAZA 3: Quiz service
+│   ├── __init__.py
+│   ├── router.py
+│   ├── schemas.py
+│   └── service.py
+├── tasks/                  # FAZA 4: Celery taskovi
+│   ├── __init__.py
+│   ├── pdf_processing.py
+│   ├── translation.py
+│   └── quiz_generation.py
+├── translation/            # FAZA 5: Prevodjenje
+│   ├── __init__.py
+│   ├── router.py
+│   ├── service.py
+│   └── providers/
+├── skills/                 # FAZA 6: Skills sistem
+│   ├── __init__.py
+│   ├── router.py
+│   └── service.py
+├── mcp/                    # FAZA 7: MCP server tools
+│   ├── __init__.py
+│   └── tools/
+├── security/               # FAZA 8: Security
+│   ├── __init__.py
+│   ├── auth.py
+│   └── middleware.py
+├── testing/                # FAZA 9: Testiranje
+│   ├── __init__.py
+│   └── fixtures.py
+└── optimization/           # FAZA 11: Optimizacije
+    ├── __init__.py
+    ├── rate_limiter.py
+    ├── caching.py
+    └── connection_pool.py
+```
+
+---
+
+*Dokument generisan i održavan kao deo AI Learning System projekta.*  
+*FAZA 1-11 implementacija završena: 2026-04-10*
