@@ -1,6 +1,6 @@
 # UPUTSTVO ZA UPOTREBU — AI SISTEM ZA UČENJE
-**Verzija:** 2.0.0  
-**Poslednje ažuriranje:** 2026-02-25
+**Verzija:** 2.1.0  
+**Poslednje ažuriranje:** 2026-04-10
 
 ---
 
@@ -41,7 +41,7 @@ cd ai-learning-system
 ./quick-start.sh
 ```
 
-### Ručno pokretanje
+### Docker pokretanje
 
 ```bash
 # 1. Pokrenite sve servise
@@ -50,9 +50,12 @@ docker-compose up -d
 # 2. Primijenite migracije baze
 docker-compose exec app alembic upgrade head
 
-# 3. Otvorite aplikaciju
-# Frontend: http://localhost:5173
-# Backend API: http://localhost:8000/api/v1
+# 3. Verifikacija sistema (FAZA 10-11)
+make verify
+
+# 4. Otvorite aplikaciju
+# Frontend (preko NGINX): http://localhost:8083
+# Backend API: http://localhost:8000
 # API Docs: http://localhost:8000/docs
 ```
 
@@ -297,6 +300,30 @@ docker-compose exec ollama ollama pull llama2
 - Proverite da je format PDF (ne Word, Excel itd.)
 - Maksimalna veličina: 50MB
 - Proverite da MinIO servis radi: `docker-compose ps minio`
+
+### ❓ Kako proveriti da li optimizacije rade? (FAZA 11)
+
+```bash
+# Proveri rate limiting status
+curl http://localhost:8000/api/monitoring/rate-limit-status
+
+# Proveri cache statistike
+make optimize-stats
+
+# Pokreni verifikaciju
+make verify-faza11
+```
+
+### ❓ CI/CD verifikacija
+
+```bash
+# Lokalna CI verifikacija
+make ci-verify
+
+# Ili pojedinačno
+make verify-faza10  # Testovi i integracija
+make verify-faza11  # Optimizacije
+```
 
 ### ❓ Prevod je netačan
 

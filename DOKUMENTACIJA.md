@@ -1,7 +1,8 @@
 # AI Learning System - Dokumentacija Funkcionalnosti
 
-**Verzija dokumenta:** 1.0.0  
+**Verzija dokumenta:** 1.1.0  
 **Datum kreiranja:** 08.03.2026  
+**Datum ažuriranja:** 2026-04-10  
 **Autor:** AI Assistant
 
 ---
@@ -318,6 +319,75 @@ docker exec ai-learning-minio mc ls local/ai-learning-uploads/
 
 ---
 
+## 11. FAZA 1-11: Modularna Reorganizacija (2026-04-10)
+
+### Pregled implementiranih faza
+
+| FAZA | Modul | Opis |
+|------|-------|------|
+| FAZA 1 | Quiz Clients | 7 AI providers (Ollama, OpenAI, Claude, Gemini, Groq, Mistral, DeepSeek) |
+| FAZA 2 | Prompts & Helpers | Modular prompts, subject detection, document structure |
+| FAZA 3 | Quiz Service | QuizService klasa sa fallback chain |
+| FAZA 4 | Tasks | Celery tasks modularizovani (PDF, Translation, Quiz, Knowledge, Maintenance) |
+| FAZA 5 | Translation | Translation clients (Ollama, DeepL, OpenAI, Google, Claude, DeepSeek) |
+| FAZA 6 | Skills | SkillDetector, PDFSkillDetector, 6 kategorija, 6 šablona |
+| FAZA 7 | MCP Server | 17 MCP alata za AI interakciju |
+| FAZA 8 | Security | Encryption, KeyManager, APIKeyValidator |
+| FAZA 9 | Installation | Verifikacija svih modula |
+| FAZA 10 | Testing | 205+ testova, verification script |
+| FAZA 11 | Optimization | RateLimiter, CacheService, ConnectionPool |
+
+### Novi direktorijumi
+
+```
+backend/app/services/
+├── quiz/           # FAZA 1-3
+│   ├── prompts/   # Quiz prompts
+│   ├── helpers/    # Parsing, validation
+│   └── clients/   # AI providers
+├── translation/   # FAZA 5
+│   ├── clients/   # Translation clients
+│   └── providers.py
+├── skills/         # FAZA 6
+│   ├── templates/ # Skill templates
+│   └── keywords/ # Subject keywords
+├── security/       # FAZA 8
+│   ├── encryption.py
+│   ├── key_manager.py
+│   └── validators.py
+└── optimization/  # FAZA 11
+    ├── rate_limiter.py
+    ├── caching.py
+    └── connection_pool.py
+```
+
+### Verifikacija
+
+```bash
+# FAZA 10 verification
+cd backend
+python scripts/verify_faza10.py
+# Result: 9/9 passed
+
+# FAZA 11 verification  
+python scripts/verify_faza11.py
+# Result: 8/8 passed
+```
+
+### CI/CD
+
+```bash
+# GitHub Actions workflow
+.github/workflows/ci.yml
+
+# Pokreće se na svaki push
+# - Backend lint + tests
+# - Frontend build
+# - Docker build
+```
+
+---
+
 ## Testiranje
 
 ### Login test
@@ -351,7 +421,7 @@ curl "http://localhost:8081/api/v1/documents?skip=0&limit=10" \
 
 ### Kako dodati novi AI provajder?
 1. Dodaj konfiguraciju u `config.py`
-2. Kreiraj klijenta u odgovarajućem service fajlu
+2. Kreiraj klijenta u odgovarajućem service fajlu (quiz_clients/ ili translation/clients/)
 3. Dodaj u fallback order
 
 ### Kako testirati OCR?
@@ -366,6 +436,77 @@ curl "http://localhost:8081/api/v1/documents?skip=0&limit=10" \
 
 ---
 
+## FAZA 10 - Testiranje i CI/CD
+
+**Verzija:** 1.0.0 | **Datum:** 2026-04-10
+
+### Verifikacione skripte
+
+| Skripta | Lokacija | Funkcija |
+|---------|----------|----------|
+| `verify_faza10.py` | `backend/scripts/` | Provera testova, coverage, integracija |
+| `verify_faza11.py` | `backend/scripts/` | Provera optimizacija, CI/CD |
+
+### Pokretanje verifikacije
+
+```bash
+make verify-faza10
+make verify-faza11
+make verify
+```
+
+### CI/CD Pipeline
+
+Fajl: `.github/workflows/ci.yml`
+
+| Korak | Opis |
+|-------|------|
+| Lint | flake8 na Python kodu |
+| Test | pytest sa coverage > 60% |
+| Build | Docker image build |
+
+---
+
+## FAZA 11 - Performance Optimizacije
+
+**Verzija:** 1.0.0 | **Datum:** 2026-04-10
+
+### Novi moduli
+
+| Modul | Fajl | Opis |
+|-------|------|------|
+| Rate Limiter | `app/services/optimization/rate_limiter.py` | 100 req/60s po IP |
+| Caching | `app/services/optimization/caching.py` | Redis-based keširanje |
+| Connection Pool | `app/services/optimization/connection_pool.py` | SQLAlchemy connection pool |
+
+### Konfiguracija (.env)
+
+```env
+# Rate Limiting
+RATE_LIMIT_ENABLED=true
+RATE_LIMIT_REQUESTS=100
+RATE_LIMIT_WINDOW_SECONDS=60
+
+# Caching
+REDIS_CACHE_TTL=300
+REDIS_CACHE_ENABLED=true
+
+# Connection Pool
+DB_POOL_SIZE=5
+DB_MAX_OVERFLOW=10
+DB_POOL_TIMEOUT=30
+```
+
+### Monitoring endpoint-i
+
+| Endpoint | Opis |
+|----------|------|
+| `GET /api/monitoring/rate-limit-status` | Status rate limit-a |
+| `GET /api/monitoring/cache-stats` | Cache statistike |
+| `GET /api/monitoring/db-pool-status` | DB connection pool status |
+
+---
+
 ## Reference
 
 - [FastAPI](https://fastapi.tiangolo.com/)
@@ -374,8 +515,9 @@ curl "http://localhost:8081/api/v1/documents?skip=0&limit=10" \
 - [MinIO](https://min.io/)
 - [Ollama](https://ollama.ai/)
 - [LangChain](https://python.langchain.com/)
+- [GitHub Actions](https://docs.github.com/en/actions)
 
 ---
 
 *Document generated on 08.03.2026*
-*Last updated: 08.03.2026*
+*Last updated: 2026-04-10*

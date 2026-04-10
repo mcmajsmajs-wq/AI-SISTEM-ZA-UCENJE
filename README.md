@@ -84,13 +84,15 @@ Nakon pokretanja, sledeći servisi su dostupni:
 
 | Servis | URL | Opis |
 |--------|-----|------|
-| FastAPI App | http://localhost:8000 | Glavna API aplikacija |
+| FastAPI App | http://localhost:8000 | Glavna API aplikacija (direct) |
+| Nginx/Frontend | http://localhost:8083 | Frontend preko NGINX |
 | API Docs | http://localhost:8000/docs | Swagger UI dokumentacija |
 | PostgreSQL | localhost:5432 | Database |
 | Redis | localhost:6379 | Cache & Queue |
 | MinIO | http://localhost:9001 | File Storage Console |
 | Grafana | http://localhost:3000 | Monitoring Dashboards |
 | Prometheus | http://localhost:9090 | Metrics |
+| Ollama | http://localhost:11434 | Local AI LLM |
 
 ## API Endpoint-i
 
@@ -183,7 +185,29 @@ pytest --cov=app --cov-report=html
 open htmlcov/index.html
 ```
 
-## Test Coverage (~185 testova)
+### Verifikacija sistema (FAZA 10-11)
+
+```bash
+# Verifikacija FAZA 10 - Testovi i integracija
+make verify-faza10
+# Ili: docker compose exec app python backend/scripts/verify_faza10.py
+
+# Verifikacija FAZA 11 - Optimizacije i CI/CD
+make verify-faza11
+# Ili: docker compose exec app python backend/scripts/verify_faza11.py
+
+# Sve verifikacije
+make verify
+```
+
+### FAZA 10-11 Komanda
+
+```bash
+# Provera optimizacija (cache, rate limit, DB pool)
+make optimize-stats
+```
+
+## Test Coverage (~386 testova)
 
 | Komponenta | Testovi |
 |------------|---------|

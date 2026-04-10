@@ -395,3 +395,62 @@ curl http://localhost:8083/api/v1/health
 ## datum: 19.03.2026
 ## Verzija: 1.3
 ## Autor: AI Assistant
+
+---
+
+## datum: 2026-04-10
+## Verzija: 1.4 - FAZA 10-11 Ažuriranje
+
+### Portovi (Ažurirano)
+
+| Servis | Direktan port | Nginx port |
+|--------|---------------|-------------|
+| Backend API | 8010 | 8083/api |
+| Frontend | - | 8083 |
+| MinIO API | 9000 | 8083/minio |
+| MinIO Console | 9001 | - |
+
+### FAZA 10 - Testiranje i verifikacija
+
+**Verifikacione skripte:**
+- `backend/scripts/verify_faza10.py` - Provera testova, coverage, integracija
+- `backend/scripts/verify_faza11.py` - Provera optimizacija, CI/CD
+
+**Pokretanje:**
+```bash
+make verify-faza10
+make verify-faza11
+make verify
+```
+
+### FAZA 11 - Performance optimizacije
+
+**Novi moduli:**
+- `app/services/optimization/rate_limiter.py` - Rate limiting (100 req/60s)
+- `app/services/optimization/caching.py` - Redis caching sa TTL
+- `app/services/optimization/connection_pool.py` - DB connection pool
+
+**Konfiguracija (.env):**
+```env
+RATE_LIMIT_ENABLED=true
+REDIS_CACHE_ENABLED=true
+REDIS_CACHE_TTL=300
+DB_POOL_SIZE=5
+```
+
+### CI/CD (GitHub Actions)
+
+Fajl: `.github/workflows/ci.yml`
+
+| Job | Aktivator | Šta radi |
+|-----|-----------|----------|
+| CI | push/PR | flake8 → pytest → coverage ≥60% |
+| Build | push main | docker build |
+
+### Monitoring endpoint-i (FAZA 11)
+
+| Endpoint | Opis |
+|----------|------|
+| `GET /api/monitoring/rate-limit-status` | Rate limit status |
+| `GET /api/monitoring/cache-stats` | Cache statistike |
+| `GET /api/monitoring/db-pool-status` | DB pool status |

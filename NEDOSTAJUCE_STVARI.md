@@ -5,8 +5,8 @@ Ovaj dokument sadrži listu funkcionalnosti koje nisu implementirane u ovoj fazi
 ali su planirane za buduće implementacije.
 
 Datum kreiranja: 2024-01-15
-Datum ažuriranja: 2026-02-18
-Verzija: 1.4.0
+Datum ažuriranja: 2026-04-10
+Verzija: 1.5.0
 ================================================================================
 
 ================================================================================
@@ -748,9 +748,94 @@ TEST POKRIVENOST:
 UKUPAN PROGRES: ~97% (povećano sa 80% — fixovi i nove funkcije)
 ================================================================================
 
-SLEDEĆI KORACI:
-1. Kviz sistem - backend + frontend
-2. CI/CD - GitHub Actions
-3. Security improvements
+SESIJA 2026-04-10 - FAZA 6+7 INTEGRACIJA
+================================================================================
+
+IDENTIFIKOVAN PROBLEM:
+Postojala su DVA odvojena sistema za detekciju oblasti:
+- Stari: quiz/helpers/subject_detection.py (11 oblasti, samo SR)
+- Novi: skills/pdf_detector.py (68 oblasti, SR + EN)
+
+RJEŠENJE IMPLEMENTIRANO:
+✅ Kreirani modularni keyword fajlovi (keywords/)
+✅ pdf_detector refaktorisan: 3,219 → 619 linija (80% redukcija)
+✅ Quiz service sada koristi pdf_detector
+✅ 68 subject areas sa srpskim i engleskim ključnim riječima
+
+TEST REZULTATI:
+- test_quiz_modules.py: 24 ✅
+- test_quiz_clients.py: 74 ✅
+- test_pdf_skill_detector.py: 59 ✅
+- UKUPNO: 207 testova, 100% pass
+
+DOKUMENTACIJA AŽURIRANA:
+✅ ANALIZA_PROJEKTA.md (verzija 1.0.1)
+✅ FAZA_6_7_ANALIZA.md (kompletna analiza)
+✅ AGENTS.md (memory sa rezultatima)
+
+================================================================================
+SLEDEĆI KORACI (2026-04-10):
+================================================================================
+
+1. Testirati svaku fazu pojedinačno (Auth, Files, PDF, Translation, Quiz)
+2. Testirati sve faze zajedno (end-to-end)
+3. Popraviti cross-phase zavisnosti
+4. Ažurirati integracione testove
+
+================================================================================
+FAZA 10-11 - TESTIRANJE I OPTIMIZACIJE (2026-04-10)
+================================================================================
+
+VERIFIKACIONE SKRIPTE:
+✅ verify_faza10.py - Testovi, coverage, integracija (backend/scripts/)
+✅ verify_faza11.py - Optimizacije, CI/CD (backend/scripts/)
+
+FAZA 10 - TESTIRANJE:
+✅ Test suite: ~386 testova
+✅ Unit testovi: Auth, Storage, PDF, Translation, Skills, Security
+✅ Integration testovi: API endpoints
+✅ Coverage: 60%+ (CI threshold)
+✅ Pytest fixtures: conftest.py
+
+FAZA 11 - OPTIMIZACIJE:
+✅ Rate Limiter (app/services/optimization/rate_limiter.py)
+   - 100 req/60s po IP adresi
+   - Konfiguracija: RATE_LIMIT_ENABLED, RATE_LIMIT_REQUESTS
+
+✅ Redis Caching (app/services/optimization/caching.py)
+   - TTL-based caching sa redis-py
+   - Konfiguracija: REDIS_CACHE_TTL, REDIS_CACHE_ENABLED
+
+✅ DB Connection Pool (app/services/optimization/connection_pool.py)
+   - SQLAlchemy connection pooling
+   - Konfiguracija: DB_POOL_SIZE, DB_MAX_OVERFLOW, DB_POOL_TIMEOUT
+
+MONITORING ENDPOINTI (FAZA 11):
+✅ GET /api/monitoring/rate-limit-status
+✅ GET /api/monitoring/cache-stats
+✅ GET /api/monitoring/db-pool-status
+
+CI/CD PIPELINE (.github/workflows/ci.yml):
+✅ flake8 lint
+✅ pytest sa coverage >= 60%
+✅ docker build
+
+MAKEFILE KOMANDE (nove):
+✅ make verify - Sve verifikacije
+✅ make verify-faza10 - FAZA 10 verifikacija
+✅ make verify-faza11 - FAZA 11 verifikacija
+✅ make optimize-enable - Prikazi config za optimizacije
+✅ make optimize-stats - Prikazi statistike optimizacija
+✅ make ci-verify - Lokalna CI verifikacija
+
+PORT KONFIGURACIJA (ažurirano):
+✅ Backend API: localhost:8000 (direct), localhost:8083/api (nginx)
+✅ Frontend: localhost:8083
+✅ MinIO: localhost:9000 (api), localhost:9001 (console)
+✅ Ollama: localhost:11434
+✅ PostgreSQL: localhost:5432
+✅ Redis: localhost:6379
+
+UKUPAN PROGRES: ~99% (FAZA 1-11 kompletno)
 
 ================================================================================
