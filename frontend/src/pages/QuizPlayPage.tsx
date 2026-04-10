@@ -1,3 +1,17 @@
+/**
+ * ================================================================================
+ * Petar II Petrović-Njegoš
+ * "Blago tome ko dovijek živi, imao se rašta i roditi"
+ * ================================================================================
+ * 
+ * AI Learning System
+ * QuizPlayPage.tsx
+ * Verzija: 1.0.0
+ * Autor: Branko Suznjevic
+ * Datum: 2026
+ * ================================================================================
+ */
+
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation } from '@tanstack/react-query'

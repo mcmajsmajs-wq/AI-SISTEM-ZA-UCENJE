@@ -1,15 +1,8 @@
 # -*- coding: utf-8 -*-
 """
-================================================================================
-EMAIL SERVICE
-================================================================================
-Slanje email notifikacija korisnicima:
-- Dnevni podsetnik (studyplan reminder)
-- Dobrodošlica pri registraciji
-- Nedeljni sažetak napretka
-
+AI Learning System
+Email Service
 Verzija: 1.0.0
-================================================================================
 """
 
 import smtplib
@@ -24,8 +17,6 @@ logger = logging.getLogger(__name__)
 
 
 class EmailService:
-    """Servis za slanje emailova putem SMTP."""
-
     def __init__(self):
         self.host = settings.SMTP_HOST
         self.port = settings.SMTP_PORT
@@ -39,7 +30,7 @@ class EmailService:
 
     def _send(self, to: str, subject: str, html: str, text: str = "") -> bool:
         if not self.is_configured():
-            logger.warning("Email nije konfigurisan — preskačem slanje.")
+            logger.warning("Email nije konfigurisan - preskacem slanje.")
             return False
         try:
             msg = MIMEMultipart("alternative")
@@ -59,66 +50,57 @@ class EmailService:
             logger.info(f"Email poslat: {to} | {subject}")
             return True
         except Exception as e:
-            logger.error(f"Greška pri slanju emaila na {to}: {e}")
+            logger.error(f"Greska pri slanju emaila na {to}: {e}")
             return False
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Dobrodošlica
-    # ──────────────────────────────────────────────────────────────────────────
     def send_welcome(self, to: str, full_name: str) -> bool:
         name = full_name or to.split("@")[0]
-        subject = "Dobrodošli u AI Sistem za učenje! 🎓"
-        html = f"""
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-          <h2 style="color:#6366f1">Zdravo, {name}!</h2>
-          <p>Uspešno ste se registrovali u <strong>AI Sistem za učenje</strong>.</p>
-          <p>Šta možete da radite:</p>
-          <ul>
-            <li>📄 Učitajte PDF dokumenta i prevedite ih AI-em</li>
-            <li>🧠 Generišite kvizove automatski iz sadržaja</li>
-            <li>📅 Kreirajte lični plan učenja</li>
-            <li>📊 Pratite napredak kroz analitiku</li>
-          </ul>
-          <a href="http://localhost:5173" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold">
-            Počnite sa učenjem →
-          </a>
-          <p style="margin-top:24px;color:#9ca3af;font-size:12px">AI Sistem za učenje</p>
-        </div>
-        """
+        subject = "Dobrodosli u AI Sistem za ucenje!"
+        html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
+        html += f"<h2 style='color:#6366f1'>Zdravo, {name}!</h2>"
+        html += (
+            "<p>Uspesno ste se registrovali u <strong>AI Sistem za ucenje</strong>.</p>"
+        )
+        html += "<p>Sta mozete da radite:</p>"
+        html += "<ul>"
+        html += "<li>Ucitajte PDF dokumenta i prevedite ih AI-em</li>"
+        html += "<li>Generisite kvizove automatski iz sadrzaja</li>"
+        html += "<li>Kreirajte licni plan ucenja</li>"
+        html += "<li>Pratite napredak kroz analitiku</li>"
+        html += "</ul>"
+        html += "<a href='http://localhost:5173' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pocnite sa ucenjem</a>"
+        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>AI Sistem za ucenje</p></div>"
         return self._send(to, subject, html)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Dnevni podsetnik
-    # ──────────────────────────────────────────────────────────────────────────
     def send_daily_reminder(
         self,
         to: str,
         full_name: str,
-        today_quiz_titles: list[str],
+        today_quiz_titles: list,
         streak: int,
     ) -> bool:
         name = full_name or to.split("@")[0]
-        subject = f"⏰ Podsetnik za danas — {len(today_quiz_titles)} kviz(a) te čeka"
-        quiz_list_html = "".join(f"<li>{t}</li>" for t in today_quiz_titles) if today_quiz_titles else "<li><em>Nema zakazanih kvizova za danas</em></li>"
-        streak_html = f'<p>🔥 Trenutni streak: <strong>{streak} dan{"a" if streak != 1 else ""}</strong> — ne prekidaj niz!</p>' if streak > 0 else ""
-        html = f"""
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-          <h2 style="color:#6366f1">Zdravo, {name}! 👋</h2>
-          <p>Ovo je tvoj dnevni podsetnik za učenje.</p>
-          {streak_html}
-          <p><strong>Zakazani kvizovi za danas:</strong></p>
-          <ul>{quiz_list_html}</ul>
-          <a href="http://localhost:5173/quizzes" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold">
-            Idi na kvizove →
-          </a>
-          <p style="margin-top:24px;color:#9ca3af;font-size:12px">Odjavite se od podsetnika u Podešavanjima → Plan učenja.</p>
-        </div>
-        """
+        subject = f"Podsetnik za danas - {len(today_quiz_titles)} kviz(eva) te ceka"
+        quiz_list_html = (
+            "".join(f"<li>{t}</li>" for t in today_quiz_titles)
+            if today_quiz_titles
+            else "<li><em>Nema zakazanih kvizova za danas</em></li>"
+        )
+        streak_html = (
+            f"<p>Trenutni streak: <strong>{streak} dan</strong> - ne prekidaj niz!</p>"
+            if streak > 0
+            else ""
+        )
+        html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
+        html += f"<h2 style='color:#6366f1'>Zdravo, {name}!</h2>"
+        html += "<p>Ovo je tvoj dnevni podsetnik za ucenje.</p>"
+        html += streak_html
+        html += "<p><strong>Zakazani kvizovi za danas:</strong></p>"
+        html += f"<ul>{quiz_list_html}</ul>"
+        html += "<a href='http://localhost:5173/quizzes' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Idi na kvizove</a>"
+        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Odjavite se od podsetnika u Podesavanjima.</p></div>"
         return self._send(to, subject, html)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Nedeljni sažetak
-    # ──────────────────────────────────────────────────────────────────────────
     def send_weekly_summary(
         self,
         to: str,
@@ -132,51 +114,39 @@ class EmailService:
         name = full_name or to.split("@")[0]
         pct = round((week_completed / week_goal * 100) if week_goal else 0)
         achieved = week_completed >= week_goal
-        subject = f"📊 Nedeljni izveštaj — {'Cilj postignut! 🎉' if achieved else f'{pct}% cilja'}"
-        best_html = f"<p>🏆 Najbol kviz: <strong>{best_quiz}</strong></p>" if best_quiz else ""
-        html = f"""
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-          <h2 style="color:#6366f1">Nedeljni izveštaj, {name}</h2>
-          <table style="width:100%;border-collapse:collapse;margin:16px 0">
-            <tr><td style="padding:8px;background:#f9fafb;border-radius:4px">✅ Urađeni kvizovi</td><td style="padding:8px;font-weight:bold">{week_completed} / {week_goal}</td></tr>
-            <tr><td style="padding:8px">📈 Prosečan score</td><td style="padding:8px;font-weight:bold">{avg_score}%</td></tr>
-            <tr><td style="padding:8px;background:#f9fafb">🔥 Streak</td><td style="padding:8px;font-weight:bold">{streak} dana</td></tr>
-          </table>
-          {best_html}
-          {"<p style='color:#10b981;font-weight:bold'>🎉 Bravo! Postigao si nedeljni cilj!</p>" if achieved else f"<p>Nedostaje još <strong>{week_goal - week_completed}</strong> kviz(a) do cilja.</p>"}
-          <a href="http://localhost:5173/analytics" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold">
-            Pogledaj analitiku →
-          </a>
-          <p style="margin-top:24px;color:#9ca3af;font-size:12px">AI Sistem za učenje</p>
-        </div>
-        """
+        subject = (
+            f"Nedeljni izvestaj - {'Cilj postignut!' if achieved else f'{pct}% cilja'}"
+        )
+        best_html = (
+            f"<p>Najbolji kviz: <strong>{best_quiz}</strong></p>" if best_quiz else ""
+        )
+        html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
+        html += f"<h2 style='color:#6366f1'>Nedeljni izvestaj, {name}</h2>"
+        html += "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Uradjeni kvizovi</td><td style='padding:8px;font-weight:bold'>{week_completed} / {week_goal}</td></tr>"
+        html += f"<tr><td style='padding:8px'>Prosecan score</td><td style='padding:8px;font-weight:bold'>{avg_score}%</td></tr>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb'>Streak</td><td style='padding:8px;font-weight:bold'>{streak} dana</td></tr>"
+        html += "</table>"
+        html += best_html
+        if achieved:
+            html += "<p style='color:#10b981;font-weight:bold'>Bravo! Postigao si nedeljni cilj!</p>"
+        else:
+            html += f"<p>Nedostaje jos <strong>{week_goal - week_completed}</strong> kviz(eva) do cilja.</p>"
+        html += "<a href='http://localhost:5173/analytics' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj analitiku</a>"
+        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>AI Sistem za ucenje</p></div>"
         return self._send(to, subject, html)
 
-
-    # ──────────────────────────────────────────────────────────────────────────
-    # Reset lozinke
-    # ──────────────────────────────────────────────────────────────────────────
     def send_password_reset(self, to: str, full_name: str, reset_link: str) -> bool:
         name = full_name or to.split("@")[0]
-        subject = "🔑 Reset lozinke — AI Sistem za učenje"
-        html = f"""
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-          <h2 style="color:#6366f1">Reset lozinke, {name}</h2>
-          <p>Primili smo zahtev za reset lozinke za tvoj nalog.</p>
-          <p>Klikni na dugme ispod da postaviš novu lozinku. Link važi <strong>1 sat</strong>.</p>
-          <a href="{reset_link}" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold">
-            Resetuj lozinku →
-          </a>
-          <p style="margin-top:24px;color:#9ca3af;font-size:12px">
-            Ako nisi tražio reset lozinke, ignoriši ovaj email. Nalog ostaje siguran.
-          </p>
-        </div>
-        """
+        subject = "Reset lozinke - AI Sistem za ucenje"
+        html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
+        html += f"<h2 style='color:#6366f1'>Reset lozinke, {name}</h2>"
+        html += "<p>Primili smo zahtev za reset lozinke za tvoj nalog.</p>"
+        html += "<p>Klikni na dugme ispod da postavis novu lozinku. Link vazi <strong>1 sat</strong>.</p>"
+        html += f"<a href='{reset_link}' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Resetuj lozinku</a>"
+        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Ako nisi trazio reset lozinke, ignorisi ovaj email. Nalog ostaje siguran.</p></div>"
         return self._send(to, subject, html)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Dokument obrađen
-    # ──────────────────────────────────────────────────────────────────────────
     def send_document_processed(
         self,
         to: str,
@@ -186,54 +156,43 @@ class EmailService:
         total_chunks: int,
     ) -> bool:
         name = full_name or to.split("@")[0]
-        subject = f"✅ Dokument obrađen — {document_title}"
-        html = f"""
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-          <h2 style="color:#10b981">Dokument je spreman, {name}! 🎉</h2>
-          <p>Vaš dokument <strong>"{document_title}"</strong> je uspešno obrađen.</p>
-          <table style="width:100%;border-collapse:collapse;margin:16px 0">
-            <tr><td style="padding:8px;background:#f9fafb;border-radius:4px">📄 Stranica</td><td style="padding:8px;font-weight:bold">{total_pages}</td></tr>
-            <tr><td style="padding:8px">📝 Chunk-ova</td><td style="padding:8px;font-weight:bold">{total_chunks}</td></tr>
-          </table>
-          <p>Sada možete:</p>
-          <ul>
-            <li>Prevesti dokument na drugi jezik</li>
-            <li>Generisati kviz iz sadržaja</li>
-            <li>Koristiti dokument za RAG pretragu</li>
-          </ul>
-          <a href="http://localhost:5173/documents" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold">
-            Pregledaj dokumente →
-          </a>
-          <p style="margin-top:24px;color:#9ca3af;font-size:12px">AI Sistem za učenje</p>
-        </div>
-        """
+        subject = f"Dokument obradjen - {document_title}"
+        html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
+        html += f"<h2 style='color:#10b981'>Dokument je spreman, {name}!</h2>"
+        html += f"<p>Vas dokument <strong>{document_title}</strong> je uspesno obradjen.</p>"
+        html += "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Stranica</td><td style='padding:8px;font-weight:bold'>{total_pages}</td></tr>"
+        html += f"<tr><td style='padding:8px'>Chunk-ova</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"
+        html += "</table>"
+        html += "<p>Sada mozete:</p><ul>"
+        html += "<li>Prevesti dokument na drugi jezik</li>"
+        html += "<li>Generisati kviz iz sadrzaja</li>"
+        html += "<li>Koristiti dokument za RAG pretragu</li></ul>"
+        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a></div>"
         return self._send(to, subject, html)
 
-    # ──────────────────────────────────────────────────────────────────────────
-    # Kviz spreman
-    # ──────────────────────────────────────────────────────────────────────────
-    def send_quiz_ready(
+    def send_quiz_completed(
         self,
         to: str,
         full_name: str,
         quiz_title: str,
-        num_questions: int,
+        score: int,
+        total: int,
+        passed: bool,
     ) -> bool:
         name = full_name or to.split("@")[0]
-        subject = f"🧠 Kviz je spreman — {quiz_title}"
-        html = f"""
-        <div style="font-family:sans-serif;max-width:560px;margin:0 auto">
-          <h2 style="color:#8b5cf6">Vaš kviz je spreman, {name}! 🎯</h2>
-          <p>Kviz <strong>"{quiz_title}"</strong> je uspešno generisan.</p>
-          <p style="font-size:18px;margin:16px 0"><strong>{num_questions} pitanja</strong> čeka na vas!</p>
-          <a href="http://localhost:5173/quizzes" style="display:inline-block;margin-top:16px;padding:12px 24px;background:#8b5cf6;color:white;border-radius:8px;text-decoration:none;font-weight:bold">
-            Pokreni kviz →
-          </a>
-          <p style="margin-top:24px;color:#9ca3af;font-size:12px">AI Sistem za učenje</p>
-        </div>
-        """
+        pct = round((score / total * 100) if total else 0)
+        subject = f"Kviz zavrsen - {quiz_title}: {pct}%"
+        html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
+        html += f"<h2 style='color:{'#10b981' if passed else '#ef4444'}'>{'Bravo!' if passed else 'Nisi prosao'}</h2>"
+        html += f"<p>{name}, zavrsili ste kviz <strong>{quiz_title}</strong>.</p>"
+        html += f"<p>Rezultat: <strong>{score}/{total}</strong> ({pct}%)</p>"
+        if passed:
+            html += "<p style='color:#10b981;font-weight:bold'>Prosli ste kviz!</p>"
+        else:
+            html += f"<p>Niste prosli. Potrebno je <strong>{pct}%</strong> za prolaz. Pokusajte ponovo!</p>"
+        html += "<a href='http://localhost:5173/quizzes' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj kvizove</a></div>"
         return self._send(to, subject, html)
 
 
-# Singleton
 email_service = EmailService()

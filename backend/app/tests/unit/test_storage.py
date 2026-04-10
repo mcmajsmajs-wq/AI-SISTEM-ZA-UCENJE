@@ -16,7 +16,7 @@ import os
 from io import BytesIO
 from pathlib import Path
 
-from app.services.storage import StorageService
+from app.services.storage_local import StorageService
 
 
 @pytest.fixture
@@ -51,25 +51,23 @@ class TestFileUpload:
             file_content=BytesIO(content),
             filename="test.pdf",
             user_id="user-123",
-            content_type="application/pdf"
+            content_type="application/pdf",
         )
 
-        assert 'storage_path' in result
-        assert 'checksum' in result
-        assert result['size'] == len(content)
-        assert result['storage_path'].startswith("user-123/")
-        assert result['storage_path'].endswith(".pdf")
+        assert "storage_path" in result
+        assert "checksum" in result
+        assert result["size"] == len(content)
+        assert result["storage_path"].startswith("user-123/")
+        assert result["storage_path"].endswith(".pdf")
 
     def test_upload_creates_file_on_disk(self, tmp_storage):
         """Test da se fajl fizički upisuje na disk."""
         content = b"File content here"
         result = tmp_storage.upload_file(
-            file_content=BytesIO(content),
-            filename="doc.pdf",
-            user_id="user-abc"
+            file_content=BytesIO(content), filename="doc.pdf", user_id="user-abc"
         )
 
-        full_path = tmp_storage.base_path / result['storage_path']
+        full_path = tmp_storage.base_path / result["storage_path"]
         assert full_path.exists()
         assert full_path.read_bytes() == content
 
@@ -78,19 +76,19 @@ class TestFileUpload:
         content = b"Same content"
         r1 = tmp_storage.upload_file(BytesIO(content), "a.pdf", "user-1")
         r2 = tmp_storage.upload_file(BytesIO(content), "b.pdf", "user-1")
-        assert r1['storage_path'] == r2['storage_path']
+        assert r1["storage_path"] == r2["storage_path"]
 
     def test_upload_different_content_different_path(self, tmp_storage):
         """Test da različit sadržaj daje različit storage_path."""
         r1 = tmp_storage.upload_file(BytesIO(b"content1"), "a.pdf", "user-1")
         r2 = tmp_storage.upload_file(BytesIO(b"content2"), "a.pdf", "user-1")
-        assert r1['storage_path'] != r2['storage_path']
+        assert r1["storage_path"] != r2["storage_path"]
 
     def test_upload_large_file(self, tmp_storage):
         """Test upload velikog fajla (10MB)."""
         content = b"A" * (10 * 1024 * 1024)
         result = tmp_storage.upload_file(BytesIO(content), "large.pdf", "user-1")
-        assert result['size'] == len(content)
+        assert result["size"] == len(content)
 
 
 class TestFileDownload:
@@ -101,7 +99,7 @@ class TestFileDownload:
         content = b"Download me"
         result = tmp_storage.upload_file(BytesIO(content), "file.pdf", "u1")
 
-        downloaded = tmp_storage.download_file(result['storage_path'])
+        downloaded = tmp_storage.download_file(result["storage_path"])
         assert downloaded == content
 
     def test_download_nonexistent_raises(self, tmp_storage):
@@ -117,7 +115,7 @@ class TestPresignedUrl:
         """Test da get_presigned_url vraća string URL."""
         content = b"content"
         result = tmp_storage.upload_file(BytesIO(content), "f.pdf", "u1")
-        url = tmp_storage.get_presigned_url(result['storage_path'])
+        url = tmp_storage.get_presigned_url(result["storage_path"])
         assert isinstance(url, str)
         assert len(url) > 0
 
@@ -134,10 +132,10 @@ class TestFileDeletion:
         """Test uspešnog brisanja fajla."""
         content = b"delete me"
         result = tmp_storage.upload_file(BytesIO(content), "del.pdf", "u1")
-        full_path = tmp_storage.base_path / result['storage_path']
+        full_path = tmp_storage.base_path / result["storage_path"]
 
         assert full_path.exists()
-        ret = tmp_storage.delete_file(result['storage_path'])
+        ret = tmp_storage.delete_file(result["storage_path"])
         assert ret is True
         assert not full_path.exists()
 
@@ -154,7 +152,7 @@ class TestFileInfo:
         """Test da file_exists vraća True za postojeći fajl."""
         content = b"exists"
         result = tmp_storage.upload_file(BytesIO(content), "e.pdf", "u1")
-        assert tmp_storage.file_exists(result['storage_path']) is True
+        assert tmp_storage.file_exists(result["storage_path"]) is True
 
     def test_file_exists_false(self, tmp_storage):
         """Test da file_exists vraća False za nepostojeći fajl."""
@@ -165,9 +163,9 @@ class TestFileInfo:
         content = b"metadata test"
         result = tmp_storage.upload_file(BytesIO(content), "m.pdf", "u1")
 
-        meta = tmp_storage.get_file_metadata(result['storage_path'])
-        assert meta['size'] == len(content)
-        assert 'last_modified' in meta
+        meta = tmp_storage.get_file_metadata(result["storage_path"])
+        assert meta["size"] == len(content)
+        assert "last_modified" in meta
 
     def test_get_file_metadata_nonexistent_raises(self, tmp_storage):
         """Test da metadata nepostojećeg fajla diže FileNotFoundError."""
@@ -182,7 +180,7 @@ class TestChecksum:
         """Test da je checksum SHA256 (64 hex karaktera)."""
         checksum = StorageService.calculate_checksum(b"test data")
         assert len(checksum) == 64
-        assert all(c in '0123456789abcdef' for c in checksum)
+        assert all(c in "0123456789abcdef" for c in checksum)
 
     def test_same_content_same_checksum(self, tmp_storage):
         """Test da isti sadržaj daje isti checksum."""

@@ -225,6 +225,9 @@ export const documentsApi = {
     api.get(`/documents/${id}/export/pdf?include_original=${includeOriginal}`, {
       responseType: 'blob',
     }),
+
+  getQuizAvailability: (id: string) =>
+    api.get(`/documents/${id}/quiz-availability`),
 }
 
 export const quizzesApi = {

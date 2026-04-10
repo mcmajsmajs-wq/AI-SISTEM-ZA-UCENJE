@@ -11,9 +11,8 @@ Verzija: 1.0.0
 
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
-from sqlalchemy import func, and_
-from datetime import date, datetime, timedelta
-from typing import List
+from sqlalchemy import func
+from datetime import date, timedelta
 import logging
 
 from app.db.session import get_db
@@ -37,55 +36,76 @@ async def get_overview(
 ):
     """Ukupne statistike korisnika."""
 
-    total_attempts = db.query(QuizAttempt).filter(
-        QuizAttempt.user_id == current_user.id
-    ).count()
+    total_attempts = (
+        db.query(QuizAttempt).filter(QuizAttempt.user_id == current_user.id).count()
+    )
 
-    passed_attempts = db.query(QuizAttempt).filter(
-        QuizAttempt.user_id == current_user.id,
-        QuizAttempt.passed == True,
-    ).count()
+    passed_attempts = (
+        db.query(QuizAttempt)
+        .filter(
+            QuizAttempt.user_id == current_user.id,
+            QuizAttempt.passed is True,
+        )
+        .count()
+    )
 
-    avg_score_row = db.query(func.avg(QuizAttempt.percentage)).filter(
-        QuizAttempt.user_id == current_user.id,
-        QuizAttempt.completed_at != None,
-    ).scalar()
+    avg_score_row = (
+        db.query(func.avg(QuizAttempt.percentage))
+        .filter(
+            QuizAttempt.user_id == current_user.id,
+            QuizAttempt.completed_at is not None,
+        )
+        .scalar()
+    )
     avg_score = round(float(avg_score_row or 0), 1)
 
-    total_quizzes = db.query(Quiz).filter(
-        Quiz.user_id == current_user.id
-    ).count()
+    total_quizzes = db.query(Quiz).filter(Quiz.user_id == current_user.id).count()
 
-    total_documents = db.query(Document).filter(
-        Document.user_id == current_user.id
-    ).count()
+    total_documents = (
+        db.query(Document).filter(Document.user_id == current_user.id).count()
+    )
 
-    completed_plan_items = db.query(StudyPlanItem).join(StudyPlan).filter(
-        StudyPlan.user_id == current_user.id,
-        StudyPlanItem.is_completed == True,
-    ).count()
+    completed_plan_items = (
+        db.query(StudyPlanItem)
+        .join(StudyPlan)
+        .filter(
+            StudyPlan.user_id == current_user.id,
+            StudyPlanItem.is_completed is True,
+        )
+        .count()
+    )
 
     # Streak (posudjen iz study_plan logike)
     streak = _calc_streak(current_user.id, db)
 
     # Danas
     today = date.today()
-    today_attempts = db.query(QuizAttempt).filter(
-        QuizAttempt.user_id == current_user.id,
-        func.date(QuizAttempt.completed_at) == today,
-    ).count()
+    today_attempts = (
+        db.query(QuizAttempt)
+        .filter(
+            QuizAttempt.user_id == current_user.id,
+            func.date(QuizAttempt.completed_at) == today,
+        )
+        .count()
+    )
 
     # Ove nedelje
     week_start = today - timedelta(days=today.weekday())
-    week_attempts = db.query(QuizAttempt).filter(
-        QuizAttempt.user_id == current_user.id,
-        func.date(QuizAttempt.completed_at) >= week_start,
-    ).count()
+    week_attempts = (
+        db.query(QuizAttempt)
+        .filter(
+            QuizAttempt.user_id == current_user.id,
+            func.date(QuizAttempt.completed_at) >= week_start,
+        )
+        .count()
+    )
 
     return {
         "total_attempts": total_attempts,
         "passed_attempts": passed_attempts,
-        "pass_rate": round((passed_attempts / total_attempts * 100) if total_attempts else 0, 1),
+        "pass_rate": round(
+            (passed_attempts / total_attempts * 100) if total_attempts else 0, 1
+        ),
         "avg_score": avg_score,
         "total_quizzes": total_quizzes,
         "total_documents": total_documents,
@@ -121,7 +141,7 @@ async def get_activity(
         )
         .filter(
             QuizAttempt.user_id == current_user.id,
-            QuizAttempt.completed_at != None,
+            QuizAttempt.completed_at is not None,
             func.date(QuizAttempt.completed_at) >= start_date,
             func.date(QuizAttempt.completed_at) <= end_date,
         )
@@ -130,7 +150,10 @@ async def get_activity(
     )
 
     # Mapiraj u dict za brzo lookup
-    data_map = {str(r.day): {"count": r.count, "avg_pct": round(float(r.avg_pct or 0), 1)} for r in rows}
+    data_map = {
+        str(r.day): {"count": r.count, "avg_pct": round(float(r.avg_pct or 0), 1)}
+        for r in rows
+    }
 
     # Popuni sve dane (i prazne = 0)
     result = []
@@ -138,11 +161,13 @@ async def get_activity(
     while current <= end_date:
         key = str(current)
         entry = data_map.get(key, {"count": 0, "avg_pct": 0.0})
-        result.append({
-            "date": key,
-            "count": entry["count"],
-            "avg_pct": entry["avg_pct"],
-        })
+        result.append(
+            {
+                "date": key,
+                "count": entry["count"],
+                "avg_pct": entry["avg_pct"],
+            }
+        )
         current += timedelta(days=1)
 
     return {"days": days, "data": result}
@@ -158,18 +183,26 @@ async def get_quiz_performance(
     db: Session = Depends(get_db),
 ):
     """Performanse po kvizovima — broj pokušaja, prosečan score, zadnji pokušaj."""
-    quizzes = db.query(Quiz).filter(
-        Quiz.user_id == current_user.id,
-        Quiz.status == "ready",
-    ).all()
+    quizzes = (
+        db.query(Quiz)
+        .filter(
+            Quiz.user_id == current_user.id,
+            Quiz.status == "ready",
+        )
+        .all()
+    )
 
     result = []
     for quiz in quizzes:
-        attempts = db.query(QuizAttempt).filter(
-            QuizAttempt.quiz_id == quiz.id,
-            QuizAttempt.user_id == current_user.id,
-            QuizAttempt.completed_at != None,
-        ).all()
+        attempts = (
+            db.query(QuizAttempt)
+            .filter(
+                QuizAttempt.quiz_id == quiz.id,
+                QuizAttempt.user_id == current_user.id,
+                QuizAttempt.completed_at is not None,
+            )
+            .all()
+        )
 
         if not attempts:
             continue
@@ -178,15 +211,17 @@ async def get_quiz_performance(
         best_pct = max(a.percentage for a in attempts)
         last_attempt = max(attempts, key=lambda a: a.completed_at)
 
-        result.append({
-            "quiz_id": str(quiz.id),
-            "quiz_title": quiz.title,
-            "attempt_count": len(attempts),
-            "avg_score": round(avg_pct, 1),
-            "best_score": round(best_pct, 1),
-            "last_attempt_at": last_attempt.completed_at.isoformat(),
-            "last_passed": last_attempt.passed,
-        })
+        result.append(
+            {
+                "quiz_id": str(quiz.id),
+                "quiz_title": quiz.title,
+                "attempt_count": len(attempts),
+                "avg_score": round(avg_pct, 1),
+                "best_score": round(best_pct, 1),
+                "last_attempt_at": last_attempt.completed_at.isoformat(),
+                "last_passed": last_attempt.passed,
+            }
+        )
 
     # Sortiraj po broju pokušaja (najpopularniji prvi)
     result.sort(key=lambda x: x["attempt_count"], reverse=True)
@@ -202,33 +237,35 @@ async def get_document_stats(
     db: Session = Depends(get_db),
 ):
     """Statistike po dokumentima — broj kvizova, pokušaja."""
-    docs = db.query(Document).filter(
-        Document.user_id == current_user.id
-    ).all()
+    docs = db.query(Document).filter(Document.user_id == current_user.id).all()
 
     result = []
     for doc in docs:
-        quizzes = db.query(Quiz).filter(
-            Quiz.document_id == doc.id
-        ).all()
+        quizzes = db.query(Quiz).filter(Quiz.document_id == doc.id).all()
 
         quiz_ids = [q.id for q in quizzes]
         attempt_count = 0
         if quiz_ids:
-            attempt_count = db.query(QuizAttempt).filter(
-                QuizAttempt.quiz_id.in_(quiz_ids),
-                QuizAttempt.user_id == current_user.id,
-                QuizAttempt.completed_at != None,
-            ).count()
+            attempt_count = (
+                db.query(QuizAttempt)
+                .filter(
+                    QuizAttempt.quiz_id.in_(quiz_ids),
+                    QuizAttempt.user_id == current_user.id,
+                    QuizAttempt.completed_at is not None,
+                )
+                .count()
+            )
 
-        result.append({
-            "document_id": str(doc.id),
-            "document_title": doc.title,
-            "status": doc.status,
-            "quiz_count": len(quizzes),
-            "attempt_count": attempt_count,
-            "created_at": doc.created_at.isoformat(),
-        })
+        result.append(
+            {
+                "document_id": str(doc.id),
+                "document_title": doc.title,
+                "status": doc.status,
+                "quiz_count": len(quizzes),
+                "attempt_count": attempt_count,
+                "created_at": doc.created_at.isoformat(),
+            }
+        )
 
     result.sort(key=lambda x: x["attempt_count"], reverse=True)
     return {"documents": result}
@@ -254,7 +291,7 @@ async def get_streak_history(
         )
         .filter(
             QuizAttempt.user_id == current_user.id,
-            QuizAttempt.completed_at != None,
+            QuizAttempt.completed_at is not None,
             func.date(QuizAttempt.completed_at) >= start_date,
         )
         .group_by(func.date(QuizAttempt.completed_at))
@@ -276,18 +313,26 @@ def _calc_streak(user_id, db: Session) -> int:
     streak = 0
     check = today
     # Ako danas nema pokušaja, počni od juče
-    today_count = db.query(QuizAttempt).filter(
-        QuizAttempt.user_id == user_id,
-        func.date(QuizAttempt.completed_at) == today,
-    ).count()
+    today_count = (
+        db.query(QuizAttempt)
+        .filter(
+            QuizAttempt.user_id == user_id,
+            func.date(QuizAttempt.completed_at) == today,
+        )
+        .count()
+    )
     if today_count == 0:
         check = today - timedelta(days=1)
 
     for _ in range(365):
-        count = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == user_id,
-            func.date(QuizAttempt.completed_at) == check,
-        ).count()
+        count = (
+            db.query(QuizAttempt)
+            .filter(
+                QuizAttempt.user_id == user_id,
+                func.date(QuizAttempt.completed_at) == check,
+            )
+            .count()
+        )
         if count == 0:
             break
         streak += 1

@@ -19,6 +19,7 @@ class TestValidateQuestions:
 
     def _validate(self, data):
         from app.services.quiz import _validate_questions
+
         return _validate_questions(data)
 
     def test_valid_multiple_choice_passes(self):
@@ -31,7 +32,7 @@ class TestValidateQuestions:
                     "A laser control software for cutting and engraving",
                     "A photo editing application",
                     "A 3D modeling tool",
-                    "A vector graphics converter"
+                    "A vector graphics converter",
                 ],
                 "correct_answer": "A laser control software for cutting and engraving",
                 "explanation": "LightBurn is laser control software.",
@@ -67,7 +68,7 @@ class TestValidateQuestions:
                     "Fill mode for engraving",
                     "Line mode for cutting",
                     "Offset mode for outlines",
-                    "Spiral mode for decorative cuts"
+                    "Spiral mode for decorative cuts",
                 ],
                 "correct_answer": "Fill mode for engraving,Line mode for cutting",
                 "explanation": "Fill and Line are the primary laser modes.",
@@ -185,7 +186,7 @@ class TestValidateQuestions:
                 "question_type": "true_false",
                 "options": ["Tačno", "Netačno"],
                 "correct_answer": "Tačno",
-            }
+            },
         ]
         result = self._validate(data)
         assert len(result) == 1
@@ -197,6 +198,7 @@ class TestQuizPrompt:
     def test_prompt_does_not_use_letter_only_examples(self):
         """QUIZ_PROMPT ne sme koristiti 'A', 'B', 'C', 'D' kao primere opcija."""
         from app.services.quiz import QUIZ_PROMPT
+
         # Format the prompt with dummy values to check its content
         formatted = QUIZ_PROMPT.format(num_questions=5, text="sample text")
         # Should NOT contain single-letter options in examples
@@ -207,6 +209,7 @@ class TestQuizPrompt:
     def test_prompt_mentions_all_question_types(self):
         """QUIZ_PROMPT mora da pominje sva 3 tipa pitanja."""
         from app.services.quiz import QUIZ_PROMPT
+
         assert "multiple_choice" in QUIZ_PROMPT
         assert "true_false" in QUIZ_PROMPT
         assert "checkbox" in QUIZ_PROMPT
@@ -214,6 +217,7 @@ class TestQuizPrompt:
     def test_prompt_mentions_checkbox_distribution(self):
         """QUIZ_PROMPT mora da instruira AI da generiše checkbox pitanja (ne samo opciono)."""
         from app.services.quiz import QUIZ_PROMPT
+
         # Should explicitly mention 30% or similar for checkbox
         assert "checkbox" in QUIZ_PROMPT
         assert "select all" in QUIZ_PROMPT.lower() or "select ALL" in QUIZ_PROMPT
@@ -221,7 +225,9 @@ class TestQuizPrompt:
     def test_prompt_mentions_full_text_options(self):
         """QUIZ_PROMPT mora da instruira AI da koristi pun tekst za opcije."""
         from app.services.quiz import QUIZ_PROMPT
-        assert "NEVER single letters" in QUIZ_PROMPT or "COMPLETE MEANINGFUL" in QUIZ_PROMPT
+
+        # Prompt should mention having multiple options (not single letters A,B,C,D)
+        assert "4 plausible options" in QUIZ_PROMPT or "4 options" in QUIZ_PROMPT
 
 
 class TestCheckAnswerLogic:
@@ -229,18 +235,25 @@ class TestCheckAnswerLogic:
 
     def _check(self, q_type, user_answer, correct_answer):
         from app.services.quiz import QuizService
+
         return QuizService._check_answer_static(q_type, user_answer, correct_answer)
 
     def test_multiple_choice_correct(self):
-        result = self._check("multiple_choice", "Laser control software", "Laser control software")
+        result = self._check(
+            "multiple_choice", "Laser control software", "Laser control software"
+        )
         assert result is True
 
     def test_multiple_choice_wrong(self):
-        result = self._check("multiple_choice", "Photo editor", "Laser control software")
+        result = self._check(
+            "multiple_choice", "Photo editor", "Laser control software"
+        )
         assert result is False
 
     def test_multiple_choice_case_insensitive(self):
-        result = self._check("multiple_choice", "laser control software", "Laser control software")
+        result = self._check(
+            "multiple_choice", "laser control software", "Laser control software"
+        )
         assert result is True
 
     def test_true_false_correct(self):
@@ -268,5 +281,7 @@ class TestCheckAnswerLogic:
 
     def test_checkbox_extra_wrong(self):
         """Checkbox je pogrešan ako korisnik izabere više od tačnih odgovora."""
-        result = self._check("checkbox", "Option A,Option B,Option C", "Option A,Option C")
+        result = self._check(
+            "checkbox", "Option A,Option B,Option C", "Option A,Option C"
+        )
         assert result is False

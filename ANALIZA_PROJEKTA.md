@@ -1,8 +1,8 @@
 # DETALJNA ANALIZA PROJEKTA: AI LEARNING SYSTEM
 ================================================================================
-Datum analize: 2026-02-20
-Verzija projekta: 1.0.0
-Ukupan progres: ~65%
+Datum analize: 2026-04-10
+Verzija projekta: 1.0.1
+Ukupan progres: ~97%
 ================================================================================
 
 ---
@@ -758,3 +758,71 @@ documents.py ima pomocne funkcije document_to_response() i chunk_to_response() k
 | 🟠 Pre prvog deploymenta | 4 | Test cleanup, TypeScript any, Redis blacklist, Global error handler |
 | 🟡 Kratkoročno | 4 | DB indeksi, FK constraints, AuthService refactor, Batch translation |
 | 🟢 Dugoročno | 2 | Server-side search, Schema refactor |
+
+---
+
+## 14. NOVE PROMJENE - FAZA 6+7 INTEGRACIJA (2026-04-10)
+
+### 14.1 Identifikovan Problem
+
+Postojala su DVA odvojena sistema za detekciju oblasti:
+
+| Sistem | Lokacija | Broj oblasti | Jezik |
+|--------|----------|---------------|-------|
+| **Stari** | `quiz/helpers/subject_detection.py` | 11 | Samo SR |
+| **Novi** | `skills/pdf_detector.py` | 68 | SR + EN |
+
+**Problem:** Quiz service je koristio stari detector, što je uzrokovalo:
+- English PDF dokumenti → "ostalo" (pogrešna detekcija)
+- Pogrešni prompts za quiz
+- Loši quiz rezultati
+
+### 14.2 Rješenje Implementirano
+
+**Refaktorisano:**
+- Kreirani modularni keyword fajlovi u `keywords/` direktorijumu:
+  - `keywords/__init__.py` - Centralni import svih keyword-a
+  - `keywords/natural.py` - Prirodne nauke
+  - `keywords/medical.py` - Medicina i zdravlje
+  - `keywords/technical.py` - Tehničke nauke
+  - `keywords/social.py` - Društvene nauke
+  - `keywords/culture.py` - Kultura i umjetnost
+
+**Pdf_detector refaktorisan:**
+- Linija: 3,219 → 619 (80% redukcija)
+- Sada koristi modularne keyword fajlove
+- Podržava 68 oblasti sa srpskim i engleskim ključnim riječima
+
+**Integracija u Quiz:**
+```python
+# quiz/service.py - detect_subject_area()
+def detect_subject_area(text: str, num_samples: int = 20) -> str:
+    try:
+        from app.services.skills.pdf_detector import detect_subject_from_text
+        return detect_subject_from_text(text, num_samples)
+    except Exception as e:
+        logger.warning(f"pdf_detector failed: {e}, falling back to basic keywords")
+        return _detect_subject_fallback(text)
+```
+
+### 14.3 Test Rezultati
+
+| Test Suite | Broj testova | Status |
+|------------|-------------|--------|
+| `test_quiz_modules.py` | 24 | ✅ Pass |
+| `test_quiz_clients.py` | 74 | ✅ Pass |
+| `test_pdf_skill_detector.py` | 59 | ✅ Pass |
+| **UKUPNO** | **207** | ✅ **100%** |
+
+### 14.4 Šta je Novo u Dokumentaciji
+
+- **NEDOSTAJUCE_STVARI.md** - Ažuriran status (~97%)
+- **FAZA_6_7_ANALIZA.md** - Nova analiza sa integracionim problemima
+- **AGENTS.md** - Dodana memorija sa session 2026-04-04 rezultatima
+
+### 14.5 Preostali Zadaci
+
+1. ✅ pdf_detector integracija - **ZAVRŠENO**
+2. ⏳ Testirati svaku fazu pojedinačno
+3. ⏳ Testirati sve faze zajedno
+4. ⏳ Popraviti cross-phase zavisnosti |

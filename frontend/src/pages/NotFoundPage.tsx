@@ -1,3 +1,17 @@
+/**
+ * ================================================================================
+ * Petar II Petrović-Njegoš
+ * "Blago tome ko dovijek živi, imao se rašta i roditi"
+ * ================================================================================
+ * 
+ * AI Learning System
+ * NotFoundPage.tsx
+ * Verzija: 1.0.0
+ * Autor: Branko Suznjevic
+ * Datum: 2026
+ * ================================================================================
+ */
+
 import { Link } from 'react-router-dom'
 import { Home, Search, Sparkles } from 'lucide-react'
 

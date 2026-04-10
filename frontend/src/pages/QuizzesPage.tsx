@@ -1,3 +1,17 @@
+/**
+ * ================================================================================
+ * Petar II Petrović-Njegoš
+ * "Blago tome ko dovijek živi, imao se rašta i roditi"
+ * ================================================================================
+ * 
+ * AI Learning System
+ * QuizzesPage.tsx
+ * Verzija: 1.0.0
+ * Autor: Branko Suznjevic
+ * Datum: 2026
+ * ================================================================================
+ */
+
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
@@ -104,12 +118,12 @@ export default function QuizzesPage() {
               Broj pitanja: <span className="text-indigo-600 font-bold">{numQuestions === 0 ? 'Auto (na osnovu dokumenta)' : numQuestions}</span>
             </label>
             <input
-              type="range" min={0} max={50} value={numQuestions}
+              type="range" min={0} max={30} value={numQuestions}
               onChange={(e) => setNumQuestions(Number(e.target.value))}
               className="w-full accent-indigo-600"
             />
             <div className="flex justify-between text-xs text-gray-400 mt-0.5">
-              <span>Auto</span><span>50</span>
+              <span>Auto</span><span>30</span>
             </div>
           </div>
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">

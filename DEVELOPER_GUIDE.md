@@ -1,6 +1,6 @@
 # DEVELOPER GUIDE — AI SISTEM ZA UČENJE
-**Verzija:** 2.0.0  
-**Poslednje ažuriranje:** 2026-02-25
+**Verzija:** 2.1.0  
+**Poslednje ažuriranje:** 2026-04-10
 
 ---
 
@@ -120,6 +120,91 @@ npm run dev
 
 ## 4. Struktura projekta
 
+```
+ai-learning-system/
+├── backend/
+│   ├── app/
+│   │   ├── api/
+│   │   │   ├── endpoints/       # Route handlers
+│   │   │   │   ├── auth.py
+│   │   │   │   ├── documents.py # + pipeline endpointi
+│   │   │   │   ├── quizzes.py
+│   │   │   │   ├── study_plan.py
+│   │   │   │   └── users.py
+│   │   │   └── v1/router.py     # Router registry
+│   │   ├── db/
+│   │   │   ├── models/          # SQLAlchemy modeli
+│   │   │   │   ├── document.py
+│   │   │   │   ├── quiz.py      # Quiz, Question, Attempt, Answer
+│   │   │   │   ├── study_plan.py
+│   │   │   │   └── user.py
+│   │   │   └── session.py       # DB engine + session
+│   │   ├── schemas/             # Pydantic schemas
+│   │   ├── services/
+│   │   │   ├── quiz/            # FAZA 1-3: Modular quiz service
+│   │   │   │   ├── __init__.py  # Exports
+│   │   │   │   ├── service.py   # QuizService
+│   │   │   │   ├── prompts/     # Quiz prompts
+│   │   │   │   ├── helpers/     # Parsing, validation
+│   │   │   │   └── clients/    # AI providers (7 providers)
+│   │   │   ├── translation/     # FAZA 5: Modular translation
+│   │   │   │   ├── service.py   # TranslationService
+│   │   │   │   ├── clients/    # Translation clients
+│   │   │   │   └── providers.py
+│   │   │   ├── skills/          # FAZA 6: Skill detection
+│   │   │   │   ├── detector.py # SkillDetector
+│   │   │   │   ├── templates/  # Skill templates
+│   │   │   │   ├── keywords/   # Subject keywords
+│   │   │   │   ├── models.py   # Skill models
+│   │   │   │   └── pdf_detector.py
+│   │   │   ├── security/       # FAZA 8: API key security
+│   │   │   │   ├── encryption.py
+│   │   │   │   ├── key_manager.py
+│   │   │   │   └── validators.py
+│   │   │   ├── optimization/   # FAZA 11: Performance
+│   │   │   │   ├── rate_limiter.py  # Rate limiting
+│   │   │   │   ├── caching.py       # Cache with TTL
+│   │   │   │   └── connection_pool.py # HTTP pooling
+│   │   │   ├── pdf_service.py
+│   │   │   ├── rag.py
+│   │   │   ├── storage.py
+│   │   │   └── ai_chat.py
+│   │   ├── workers/
+│   │   │   └── tasks/          # FAZA 4: Modular tasks
+│   │   │       ├── __init__.py
+│   │   │       ├── pdf_processing.py
+│   │   │       ├── translation.py
+│   │   │       ├── quiz.py
+│   │   │       ├── maintenance.py
+│   │   │       └── knowledge.py
+│   │   ├── core/
+│   │   │   ├── config.py        # Settings (pydantic-settings)
+│   │   │   └── security.py
+│   │   └── main.py
+│   ├── alembic/
+│   │   └── versions/
+│   │       ├── 001_initial.py
+│   │       ├── 002_quiz_tables.py
+│   │       └── 003_study_plan.py
+│   ├── tests/                  # FAZA 10: Test suite
+│   │   └── unit/
+│   ├── scripts/
+│   │   ├── verify_faza10.py    # FAZA 10 verification
+│   │   └── verify_faza11.py    # FAZA 11 verification
+│   └── requirements.txt
+├── mcp-server/                 # FAZA 7: MCP Server
+│   ├── src/
+│   │   └── ai_learning_mcp/
+│   │       ├── __init__.py     # MCP tools (17)
+│   │       └── tools/
+│   └── tests/
+├── frontend/
+│   └── src/
+├── docker/                     # Docker + Nginx config
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # CI/CD pipeline
+└── Makefile
 ```
 ai-learning-system/
 ├── backend/

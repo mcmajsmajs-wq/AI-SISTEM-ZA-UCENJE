@@ -1,29 +1,35 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-PDF EXPORT SERVICE
+Petar II Petrović-Njegoš
+"Blago tome ko dovijek živi, imao se rašta i roditi"
 ================================================================================
-Generisanje PDF fajla od prevedenih chunkova dokumenta.
-Koristi ReportLab za kreiranje PDF-a.
 
+AI Learning System
+PDF Export Service
 Verzija: 1.0.0
+Autor: Branko Suznjevic
+Datum: 2026
 ================================================================================
 """
 
 import io
 import logging
 from datetime import datetime
-from typing import Optional
+from typing import List
 
 from reportlab.lib.pagesizes import A4
 from reportlab.lib.styles import getSampleStyleSheet, ParagraphStyle
+from reportlab.lib.styles import ParagraphStyle as PS  # noqa: F401
 from reportlab.lib.units import cm
 from reportlab.lib import colors
 from reportlab.platypus import (
-    SimpleDocTemplate, Paragraph, Spacer, HRFlowable,
-    Table, TableStyle, PageBreak
+    SimpleDocTemplate,
+    Paragraph,
+    Spacer,
+    HRFlowable,
 )
-from reportlab.lib.enums import TA_LEFT, TA_CENTER, TA_JUSTIFY
+from reportlab.lib.enums import TA_CENTER, TA_JUSTIFY  # noqa: F401
 from reportlab.pdfbase import pdfmetrics
 from reportlab.pdfbase.ttfonts import TTFont
 
@@ -34,6 +40,7 @@ _FONT_NAME = "Helvetica"
 _FONT_BOLD = "Helvetica-Bold"
 try:
     import os
+
     _dejavu_path = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
     _dejavu_bold = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
     if os.path.exists(_dejavu_path):
@@ -46,10 +53,10 @@ except Exception:
 
 
 class PDFExportService:
-    """Generiše PDF od prevedenih delova dokumenta."""
+    """PDF Export Service - Generisanje PDF fajla od prevedenih chunkova."""
 
     def _build_styles(self):
-        styles = getSampleStyleSheet()
+        _styles = getSampleStyleSheet()
         return {
             "title": ParagraphStyle(
                 "DocTitle",
@@ -116,7 +123,7 @@ class PDFExportService:
     def generate(
         self,
         title: str,
-        chunks: list[dict],
+        chunks: List[dict],
         target_language: str = "sr",
         include_original: bool = True,
         author: str = "AI Sistem za učenje",
@@ -153,12 +160,18 @@ class PDFExportService:
         story.append(Spacer(1, 1.5 * cm))
         story.append(Paragraph(_esc(title), styles["title"]))
         story.append(Spacer(1, 0.3 * cm))
-        story.append(Paragraph(f"Prevod: {target_language.upper()}", styles["subtitle"]))
-        story.append(Paragraph(
-            f"Generisano: {datetime.now().strftime('%d.%m.%Y %H:%M')}  |  {author}",
-            styles["meta"]
-        ))
-        story.append(HRFlowable(width="100%", thickness=1, color=colors.HexColor("#e5e7eb")))
+        story.append(
+            Paragraph(f"Prevod: {target_language.upper()}", styles["subtitle"])
+        )
+        story.append(
+            Paragraph(
+                f"Generisano: {datetime.now().strftime('%d.%m.%Y %H:%M')}  |  {author}",
+                styles["meta"],
+            )
+        )
+        story.append(
+            HRFlowable(width="100%", thickness=1, color=colors.HexColor("#e5e7eb"))
+        )
         story.append(Spacer(1, 0.5 * cm))
 
         # ── Sadržaj (chunkovi) ───────────────────────────────────────────────
@@ -172,37 +185,51 @@ class PDFExportService:
 
                 if include_original and orig:
                     story.append(Paragraph(f"ORIGINAL [{i}]", styles["section_label"]))
-                    story.append(Paragraph(_esc(orig[:600] + ("..." if len(orig) > 600 else "")), styles["original"]))
-                    story.append(Paragraph(f"PREVOD", styles["section_label"]))
+                    story.append(
+                        Paragraph(
+                            _esc(orig[:600] + ("..." if len(orig) > 600 else "")),
+                            styles["original"],
+                        )
+                    )
+                    story.append(Paragraph("PREVOD", styles["section_label"]))
 
                 story.append(Paragraph(_esc(trans), styles["translated"]))
                 story.append(Spacer(1, 0.2 * cm))
 
                 # Razmak na svakih 20 chunkova radi preglednosti
                 if i % 20 == 0:
-                    story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#f3f4f6")))
+                    story.append(
+                        HRFlowable(
+                            width="100%",
+                            thickness=0.5,
+                            color=colors.HexColor("#f3f4f6"),
+                        )
+                    )
                     story.append(Spacer(1, 0.3 * cm))
 
         # ── Footer ───────────────────────────────────────────────────────────
         story.append(Spacer(1, 1 * cm))
-        story.append(HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e5e7eb")))
+        story.append(
+            HRFlowable(width="100%", thickness=0.5, color=colors.HexColor("#e5e7eb"))
+        )
         story.append(Spacer(1, 0.2 * cm))
-        story.append(Paragraph(
-            f"AI Sistem za učenje  •  {len(translated_chunks)} segmenata  •  {datetime.now().strftime('%Y')}",
-            styles["footer"]
-        ))
+        story.append(
+            Paragraph(
+                f"AI Sistem za učenje  •  {len(translated_chunks)} segmenata  •  {datetime.now().strftime('%Y')}",
+                styles["footer"],
+            )
+        )
 
         doc.build(story)
         return buf.getvalue()
 
 
 def _esc(text: str) -> str:
-    """Escapes special XML/HTML characters za ReportLab Paragraph."""
     return (
         text.replace("&", "&amp;")
-            .replace("<", "&lt;")
-            .replace(">", "&gt;")
-            .replace('"', "&quot;")
+        .replace("<", "&lt;")
+        .replace(">", "&gt;")
+        .replace('"', "&quot;")
     )
 
 

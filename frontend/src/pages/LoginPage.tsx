@@ -1,3 +1,17 @@
+/**
+ * ================================================================================
+ * Petar II Petrović-Njegoš
+ * "Blago tome ko dovijek živi, imao se rašta i roditi"
+ * ================================================================================
+ * 
+ * AI Learning System
+ * LoginPage.tsx
+ * Verzija: 1.0.0
+ * Autor: Branko Suznjevic
+ * Datum: 2026
+ * ================================================================================
+ */
+
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'

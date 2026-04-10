@@ -40,7 +40,7 @@ export default function DocumentsPage() {
     queryFn: () => documentsApi.list((page - 1) * 10, 10, statusFilter || undefined),
     // Poll every 5s if any document is in an active state
     refetchInterval: (query) => {
-      const docs = (query.state.data as any)?.data?.documents || (query.state.data as any)?.data
+      const docs = (query.state.data as any)?.data?.items || (query.state.data as any)?.data || (query.state.data as any)
       if (Array.isArray(docs) && docs.some((d: any) => ['pending', 'processing', 'translating'].includes(d.status))) {
         return 5000
       }
@@ -232,9 +232,33 @@ export default function DocumentsPage() {
                 <p className="text-base font-semibold text-gray-800 mb-1">
                   {isDragActive ? 'Pustite PDF fajl ovde' : 'Prevucite PDF fajl ovde'}
                 </p>
-                <p className="text-sm text-gray-400">ili kliknite da izaberete • max 50MB</p>
+                <p className="text-sm text-gray-400">ili kliknite da izaberete • max 100MB</p>
               </div>
             )}
+          </div>
+
+          {/* Manual file upload button */}
+          <div className="px-4 pb-4">
+            <input
+              type="file"
+              id="manual-upload-input"
+              accept="application/pdf"
+              className="hidden"
+              onChange={(e) => {
+                const file = e.target.files?.[0]
+                if (file) onDrop([file])
+              }}
+            />
+            <button
+              type="button"
+              className="btn btn-secondary w-full"
+              onClick={() => {
+                document.getElementById('manual-upload-input')?.click()
+              }}
+            >
+              <Upload className="w-4 h-4" />
+              Izaberi PDF fajl sa računara
+            </button>
           </div>
 
           {/* Title input + confirm button — shown after file is selected */}

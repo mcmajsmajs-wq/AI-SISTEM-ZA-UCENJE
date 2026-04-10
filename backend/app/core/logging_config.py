@@ -27,7 +27,7 @@ class JSONFormatter(logging.Formatter):
     JSON FORMATTER
     ================================================================================
     Formatira logove u JSON format za lakšu analizu i obradu.
-    
+
     Struktura:
         {
             "timestamp": "2024-01-15T10:30:00.123456",
@@ -42,7 +42,7 @@ class JSONFormatter(logging.Formatter):
         }
     ================================================================================
     """
-    
+
     def format(self, record: logging.LogRecord) -> str:
         """Formatira log record u JSON string."""
         log_data: Dict[str, Any] = {
@@ -55,20 +55,20 @@ class JSONFormatter(logging.Formatter):
             "line": record.lineno,
             "thread": record.thread,
         }
-        
+
         # Dodaj exception info ako postoji
         if record.exc_info:
             log_data["exception"] = self.formatException(record.exc_info)
-        
+
         # Dodaj extra fields
         if hasattr(record, "extra"):
             log_data["extra"] = record.extra
-        
+
         # Dodaj sve ostale atribute koji počinju sa '_'
         for key, value in record.__dict__.items():
             if key.startswith('_') and key not in ['_name', '_level', '_msg']:
                 log_data[key[1:]] = value
-        
+
         return json.dumps(log_data, ensure_ascii=False, default=str)
 
 
@@ -81,7 +81,7 @@ class ColoredFormatter(logging.Formatter):
     Pogodno za čitanje u terminalu.
     ================================================================================
     """
-    
+
     # ANSI color codes
     COLORS = {
         'DEBUG': '\033[36m',      # Cyan
@@ -91,14 +91,14 @@ class ColoredFormatter(logging.Formatter):
         'CRITICAL': '\033[35m',   # Magenta
         'RESET': '\033[0m'
     }
-    
+
     def format(self, record: logging.LogRecord) -> str:
         """Formatira log record sa bojama."""
         # Dodaj boju
         levelname = record.levelname
         if levelname in self.COLORS:
             record.levelname = f"{self.COLORS[levelname]}{levelname}{self.COLORS['RESET']}"
-        
+
         return super().format(record)
 
 
@@ -108,7 +108,7 @@ def setup_logging() -> None:
     SETUP LOGGING
     ================================================================================
     Inicijalizuje logging sistem za celu aplikaciju.
-    
+
     Konfiguriše:
         - Root logger sa zadatim log level-om
         - Console handler (sa bojama u dev, bez u prod)
@@ -119,20 +119,20 @@ def setup_logging() -> None:
     # Kreiraj logs direktorijum ako ne postoji
     log_dir = Path(settings.LOG_FILE).parent
     log_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Root logger
     root_logger = logging.getLogger()
     root_logger.setLevel(getattr(logging, settings.LOG_LEVEL.upper()))
-    
+
     # Ukloni postojeće handlere da izbegnemo dupliranje
     root_logger.handlers = []
-    
+
     # ================================================================================
     # CONSOLE HANDLER
     # ================================================================================
     console_handler = logging.StreamHandler(sys.stdout)
     console_handler.setLevel(logging.DEBUG)
-    
+
     if settings.DEBUG:
         # Development: colored text format
         console_format = (
@@ -146,10 +146,10 @@ def setup_logging() -> None:
         # Production: simple text format
         console_format = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
         console_formatter = logging.Formatter(console_format)
-    
+
     console_handler.setFormatter(console_formatter)
     root_logger.addHandler(console_handler)
-    
+
     # ================================================================================
     # FILE HANDLER (JSON)
     # ================================================================================
@@ -160,7 +160,7 @@ def setup_logging() -> None:
         encoding='utf-8'
     )
     file_handler.setLevel(logging.INFO)
-    
+
     if settings.LOG_FORMAT == "json":
         file_formatter = JSONFormatter()
     else:
@@ -168,10 +168,10 @@ def setup_logging() -> None:
             "%(asctime)s | %(levelname)-8s | %(name)s | %(module)s:%(funcName)s:%(lineno)d | %(message)s"
         )
         file_formatter = logging.Formatter(file_format)
-    
+
     file_handler.setFormatter(file_formatter)
     root_logger.addHandler(file_handler)
-    
+
     # ================================================================================
     # ERROR FILE HANDLER
     # ================================================================================
@@ -185,7 +185,7 @@ def setup_logging() -> None:
     error_handler.setLevel(logging.ERROR)
     error_handler.setFormatter(JSONFormatter() if settings.LOG_FORMAT == "json" else logging.Formatter())
     root_logger.addHandler(error_handler)
-    
+
     # ================================================================================
     # THIRD-PARTY LOGGER CONFIGURATION
     # ================================================================================
@@ -193,7 +193,7 @@ def setup_logging() -> None:
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
     logging.getLogger("sqlalchemy.engine").setLevel(logging.WARNING)
     logging.getLogger("celery").setLevel(logging.INFO)
-    
+
     # Log successful setup
     logger = logging.getLogger(__name__)
     logger.info("Logging system initialized")
@@ -208,10 +208,10 @@ def get_logger(name: str) -> logging.Logger:
     GET LOGGER
     ================================================================================
     Factory funkcija za kreiranje loggera sa dodatnim funkcionalnostima.
-    
+
     Args:
         name: Ime loggera (obično __name__)
-    
+
     Returns:
         Logger instanca
     ================================================================================
@@ -225,13 +225,13 @@ class LoggerMixin:
     LOGGER MIXIN
     ================================================================================
     Mixin klasa za dodavanje loggera bilo kojoj klasi.
-    
+
     Usage:
         class MyService(LoggerMixin):
             def do_something(self):
                 self.logger.info("Doing something")
     ================================================================================
     """
-    
+
     def __init__(self):
         self.logger = logging.getLogger(self.__class__.__module__ + "." + self.__class__.__name__)

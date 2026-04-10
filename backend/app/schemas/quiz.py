@@ -74,7 +74,7 @@ class QuestionWithAnswer(QuestionResponse):
 class QuizCreate(BaseModel):
     """Pokretanje generisanja kviza."""
     document_id: str
-    num_questions: int = Field(0, ge=0, le=50, description="Broj pitanja (0 = automatski na osnovu veličine dokumenta)")
+    num_questions: int = Field(0, ge=0, le=30, description="Broj pitanja (0 = automatski na osnovu veličine dokumenta)")
     time_limit: Optional[int] = Field(None, ge=60, description="Vreme u sekundama")
     passing_score: int = Field(60, ge=1, le=100)
     shuffle_questions: bool = Field(False, description="Mešanje redosleda pitanja")
@@ -179,7 +179,7 @@ class PipelineRequest(BaseModel):
     target_language: str = "sr"
     translation_provider: Optional[str] = Field(None, description="ollama|deepl|openai|google|claude")
     quiz_provider: Optional[str] = Field(None, description="ollama|openai|claude")
-    num_questions: int = Field(0, ge=0, le=50, description="Broj pitanja (0 = automatski)")
+    num_questions: int = Field(0, ge=0, le=30, description="Broj pitanja (0 = automatski)")
     skip_translation: bool = False
     passing_score: int = Field(60, ge=1, le=100)
 

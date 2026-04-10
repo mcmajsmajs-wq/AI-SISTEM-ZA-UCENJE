@@ -9,20 +9,22 @@ Verzija: 1.0.0
 
 from pydantic import BaseModel, Field
 from datetime import datetime, date
-from typing import List, Optional, Any
+from typing import List, Optional
 
 
 # ============================================================
 # STUDY PLAN
 # ============================================================
 
+
 class StudyPlanBase(BaseModel):
     daily_quiz_goal: int = Field(1, ge=1, le=20, description="Cilj: kvizova dnevno")
     weekly_quiz_goal: int = Field(5, ge=1, le=50, description="Cilj: kvizova nedeljno")
-    session_duration_min: int = Field(20, ge=5, le=180, description="Trajanje sesije (minuti)")
+    session_duration_min: int = Field(
+        20, ge=5, le=180, description="Trajanje sesije (minuti)"
+    )
     study_days: List[int] = Field(
-        default=[1, 2, 3, 4, 5],
-        description="Dani u nedelji: 0=ned, 1=pon...6=sub"
+        default=[1, 2, 3, 4, 5], description="Dani u nedelji: 0=ned, 1=pon...6=sub"
     )
     reminder_enabled: bool = False
     reminder_time: str = Field("09:00", pattern=r"^\d{2}:\d{2}$")
@@ -58,6 +60,7 @@ class StudyPlanResponse(StudyPlanBase):
 # ============================================================
 # STUDY PLAN ITEM
 # ============================================================
+
 
 class StudyPlanItemCreate(BaseModel):
     quiz_id: str
@@ -107,6 +110,7 @@ class CompleteItemRequest(BaseModel):
 # STUDY PLAN + ITEMS (puna slika)
 # ============================================================
 
+
 class StudyPlanWithItems(StudyPlanResponse):
     items: List[StudyPlanItemResponse] = []
 
@@ -115,8 +119,10 @@ class StudyPlanWithItems(StudyPlanResponse):
 # PROGRESS / STATISTIKE
 # ============================================================
 
+
 class StudyPlanProgress(BaseModel):
     """Nedeljni/dnevni progres prema planu."""
+
     plan: StudyPlanResponse
 
     # Tekuća nedelja

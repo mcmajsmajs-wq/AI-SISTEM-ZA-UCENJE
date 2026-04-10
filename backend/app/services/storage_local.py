@@ -1,15 +1,19 @@
 # -*- coding: utf-8 -*-
 """
 ================================================================================
-LOCAL STORAGE SERVICE
+Petar II Petrović-Njegoš
+"Blago tome ko dovijek živi, imao se rašta i roditi"
 ================================================================================
-Servis za upravljanje fajlovima na lokalnom disku (uploads/).
 
-Interfejs je identičan cloud verziji tako da se po potrebi može zameniti
-cloud provajderom (S3, GCS, Azure Blob) bez izmena u ostatku koda.
-
+AI Learning System
+Local Storage Service
 Verzija: 2.0.0
+Autor: Branko Suznjevic
+Datum: 2026
 ================================================================================
+
+Servis za upravljanje fajlovima na lokalnom disku (uploads/).
+Interfejs je identičan cloud verziji.
 """
 
 import hashlib
@@ -24,22 +28,13 @@ logger = logging.getLogger(__name__)
 
 class StorageService:
     """
-    ================================================================================
     LOCAL STORAGE SERVICE
-    ================================================================================
     Čuva fajlove na lokalnom fajl sistemu u UPLOAD_FOLDER direktorijumu.
-
-    Struktura:
-        uploads/
-          <user_id>/
-            <sha256_checksum>.<ext>   ← svaki fajl je jedinstven po sadržaju
-
+    Struktura: uploads/<user_id>/<sha256_checksum>.<ext>
     Metode su identične cloud verziji radi lakog prebacivanja.
-    ================================================================================
     """
 
     def __init__(self, base_path: Optional[str] = None):
-        """Inicijalizuje lokalni storage u zadatoj putanji."""
         self.base_path = Path(base_path or settings.UPLOAD_FOLDER)
         self.base_path.mkdir(parents=True, exist_ok=True)
         self._bucket_ready = True  # uvek True za lokalni storage
@@ -47,11 +42,9 @@ class StorageService:
 
     @staticmethod
     def calculate_checksum(file_content: bytes) -> str:
-        """Računa SHA256 checksum sadržaja fajla."""
         return hashlib.sha256(file_content).hexdigest()
 
     def _full_path(self, storage_path: str) -> Path:
-        """Vraća apsolutnu putanju za dati storage_path."""
         return self.base_path / storage_path
 
     def upload_file(
@@ -60,7 +53,7 @@ class StorageService:
         filename: str,
         user_id: str,
         content_type: str = "application/octet-stream",
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
         """
         Upisuje fajl na lokalni disk.
@@ -83,9 +76,9 @@ class StorageService:
             logger.debug(f"Already exists (dedup): {storage_path}")
 
         return {
-            'storage_path': storage_path,
-            'checksum': checksum,
-            'size': len(content)
+            "storage_path": storage_path,
+            "checksum": checksum,
+            "size": len(content),
         }
 
     def download_file(self, storage_path: str) -> bytes:
@@ -113,21 +106,15 @@ class StorageService:
             logger.info(f"Deleted: {storage_path}")
         return True
 
-    def get_presigned_url(
-        self,
-        storage_path: str,
-        expiration: int = 3600
-    ) -> str:
+    def get_presigned_url(self, storage_path: str, expiration: int = 3600) -> str:
         """
         Vraća URL za direktan download fajla putem API-ja.
-
         Za lokalni storage ovo je relativni URL na /api/v1/files/serve/{storage_path}.
         """
         encoded = storage_path.replace("/", "%2F")
         return f"/api/v1/files/serve/{encoded}"
 
     def file_exists(self, storage_path: str) -> bool:
-        """Proverava da li fajl postoji na disku."""
         return self._full_path(storage_path).exists()
 
     def get_file_metadata(self, storage_path: str) -> Dict[str, Any]:
@@ -142,8 +129,8 @@ class StorageService:
             raise FileNotFoundError(f"File not found: {storage_path}")
         stat = path.stat()
         return {
-            'size': stat.st_size,
-            'content_type': 'application/octet-stream',
-            'last_modified': stat.st_mtime,
-            'metadata': {}
+            "size": stat.st_size,
+            "content_type": "application/octet-stream",
+            "last_modified": stat.st_mtime,
+            "metadata": {},
         }

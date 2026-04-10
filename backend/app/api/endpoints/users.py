@@ -12,16 +12,17 @@ Verzija: 1.0.0
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from typing import List
 from datetime import date, timedelta
+from pydantic import BaseModel
+from typing import Optional as _Optional
 import logging
 
 from app.db.session import get_db
 from app.db.models.user import User
 from app.db.models.document import Document, Chunk
-from app.db.models.quiz import Quiz, QuizAttempt
+from app.db.models.quiz import QuizAttempt
 from app.schemas.user import UserResponse, UserUpdate, UserStats
-from app.services.auth import get_current_user, get_current_active_user, AuthService
+from app.services.auth import get_current_user, AuthService
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -37,14 +38,14 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
     ================================================================================
     """
     logger.debug(f"Fetching current user data: {current_user.email}")
-    
+
     return UserResponse(
         id=str(current_user.id),
         email=current_user.email,
         full_name=current_user.full_name,
         is_active=current_user.is_active,
         is_verified=current_user.is_verified,
-        created_at=current_user.created_at
+        created_at=current_user.created_at,
     )
 
 
@@ -52,7 +53,7 @@ async def get_current_user_info(current_user: User = Depends(get_current_user)):
 async def update_current_user(
     user_data: UserUpdate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -62,29 +63,29 @@ async def update_current_user(
     ================================================================================
     """
     logger.info(f"Updating user data for: {current_user.email}")
-    
+
     # Ažuriranje polja koja su prosleđena
     if user_data.full_name is not None:
         current_user.full_name = user_data.full_name
-    
+
     if user_data.timezone is not None:
         current_user.timezone = user_data.timezone
-    
+
     if user_data.language is not None:
         current_user.language = user_data.language
-    
+
     db.commit()
     db.refresh(current_user)
-    
+
     logger.info(f"User updated successfully: {current_user.email}")
-    
+
     return UserResponse(
         id=str(current_user.id),
         email=current_user.email,
         full_name=current_user.full_name,
         is_active=current_user.is_active,
         is_verified=current_user.is_verified,
-        created_at=current_user.created_at
+        created_at=current_user.created_at,
     )
 
 
@@ -93,7 +94,7 @@ async def change_password(
     current_password: str,
     new_password: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -103,28 +104,27 @@ async def change_password(
     ================================================================================
     """
     logger.info(f"Password change request for: {current_user.email}")
-    
+
     # Verifikacija trenutnog password-a
     if not AuthService.verify_password(current_password, current_user.hashed_password):
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Current password is incorrect"
+            detail="Current password is incorrect",
         )
-    
+
     # Hash novog password-a
     current_user.hashed_password = AuthService.get_password_hash(new_password)
-    
+
     db.commit()
-    
+
     logger.info(f"Password changed successfully for: {current_user.email}")
-    
+
     return {"message": "Password changed successfully"}
 
 
 @router.get("/me/stats", response_model=UserStats)
 async def get_user_stats(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     ================================================================================
@@ -138,7 +138,9 @@ async def get_user_stats(
     uid = current_user.id
 
     # Documents & chunks
-    total_documents = db.query(func.count(Document.id)).filter(Document.user_id == uid).scalar() or 0
+    total_documents = (
+        db.query(func.count(Document.id)).filter(Document.user_id == uid).scalar() or 0
+    )
 
     chunk_stats = (
         db.query(
@@ -156,7 +158,11 @@ async def get_user_stats(
     attempts = db.query(QuizAttempt).filter(QuizAttempt.user_id == uid).all()
     total_quizzes_taken = len([a for a in attempts if a.completed_at is not None])
     if attempts:
-        scores = [a.score / a.total_points * 100 for a in attempts if (a.total_points or 0) > 0 and a.completed_at]
+        scores = [
+            a.score / a.total_points * 100
+            for a in attempts
+            if (a.total_points or 0) > 0 and a.completed_at
+        ]
         average_score = round(sum(scores) / len(scores), 1) if scores else 0.0
     else:
         average_score = 0.0
@@ -201,8 +207,7 @@ async def get_user_stats(
 
 @router.delete("/me", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_current_user(
-    current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    current_user: User = Depends(get_current_user), db: Session = Depends(get_db)
 ):
     """
     ================================================================================
@@ -212,17 +217,17 @@ async def delete_current_user(
     ================================================================================
     """
     logger.warning(f"User account deletion requested: {current_user.email}")
-    
+
     # Soft delete - deaktiviramo nalog
     current_user.is_active = False
-    
+
     # TODO: Implementirati GDPR compliant brisanje podataka
     # TODO: Zakazati hard delete nakon X dana
-    
+
     db.commit()
-    
+
     logger.info(f"User account deactivated: {current_user.email}")
-    
+
     return None
 
 
@@ -230,8 +235,6 @@ async def delete_current_user(
 # AI SETTINGS ENDPOINTS
 # ================================================================================
 
-from pydantic import BaseModel
-from typing import Optional as _Optional
 
 class AISettingsRequest(BaseModel):
     ai_provider: str = "auto"  # auto | ollama | openai | claude | gemini | groq | mistral | deepseek | custom
@@ -243,6 +246,7 @@ class AISettingsRequest(BaseModel):
     ai_api_key_deepseek: _Optional[str] = None
     ai_custom_base_url: _Optional[str] = None
     ai_api_key_custom: _Optional[str] = None
+
 
 class AISettingsResponse(BaseModel):
     ai_provider: str
@@ -266,6 +270,7 @@ class AISettingsResponse(BaseModel):
 @router.get("/me/ai-settings", response_model=AISettingsResponse)
 async def get_ai_settings(current_user: User = Depends(get_current_user)):
     """Vraća AI podešavanja korisnika."""
+
     def preview(key):
         if key and len(key) > 8:
             return "..." + key[-4:]
@@ -295,12 +300,24 @@ async def get_ai_settings(current_user: User = Depends(get_current_user)):
 async def update_ai_settings(
     data: AISettingsRequest,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """Čuva AI podešavanja korisnika."""
-    valid_providers = {"auto", "ollama", "openai", "claude", "gemini", "groq", "mistral", "deepseek", "custom"}
+    valid_providers = {
+        "auto",
+        "ollama",
+        "openai",
+        "claude",
+        "gemini",
+        "groq",
+        "mistral",
+        "deepseek",
+        "custom",
+    }
     if data.ai_provider not in valid_providers:
-        raise HTTPException(status_code=400, detail=f"Nevažeći provajder. Dozvoljeni: {valid_providers}")
+        raise HTTPException(
+            status_code=400, detail=f"Nevažeći provajder. Dozvoljeni: {valid_providers}"
+        )
 
     current_user.ai_provider = data.ai_provider
 
@@ -322,7 +339,9 @@ async def update_ai_settings(
 
     db.commit()
     db.refresh(current_user)
-    logger.info(f"AI settings updated for {current_user.email}: provider={data.ai_provider}")
+    logger.info(
+        f"AI settings updated for {current_user.email}: provider={data.ai_provider}"
+    )
 
     def preview(key):
         if key and len(key) > 8:

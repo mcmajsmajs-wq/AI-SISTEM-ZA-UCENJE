@@ -9,11 +9,10 @@ Verzija: 1.2.0
 ================================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
+from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy import and_
 from typing import List, Optional
-from datetime import datetime
 import uuid
 import logging
 
@@ -22,13 +21,11 @@ from app.db.models.file import File
 from app.db.models.document import Document, Chunk
 from app.db.models.user import User
 from app.schemas.document import (
-    DocumentCreate, 
-    DocumentResponse, 
+    DocumentCreate,
+    DocumentResponse,
     DocumentListResponse,
     ChunkResponse,
-    ChunkUpdate
 )
-from app.schemas.file import FileResponse
 from app.services.auth import get_current_user
 from app.workers.tasks import process_pdf_task, auto_pipeline_task
 from app.core.config import settings
@@ -41,9 +38,11 @@ def document_to_response(doc: Document, db=None) -> DocumentResponse:
     """Konvertuje Document model u DocumentResponse schema."""
     translated_count = 0
     if db is not None:
-        translated_count = db.query(Chunk).filter(
-            Chunk.document_id == doc.id, Chunk.is_translated == 1
-        ).count()
+        translated_count = (
+            db.query(Chunk)
+            .filter(Chunk.document_id == doc.id, Chunk.is_translated == 1)
+            .count()
+        )
     return DocumentResponse(
         id=str(doc.id),
         file_id=str(doc.file_id) if doc.file_id else None,
@@ -58,7 +57,7 @@ def document_to_response(doc: Document, db=None) -> DocumentResponse:
         target_language=doc.target_language,
         metadata=doc.file_metadata or {},
         created_at=doc.created_at.isoformat() if doc.created_at else None,
-        updated_at=doc.updated_at.isoformat() if doc.updated_at else None
+        updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
     )
 
 
@@ -76,7 +75,7 @@ def chunk_to_response(chunk: Chunk) -> ChunkResponse:
         is_translated=bool(chunk.is_translated),
         is_reviewed=bool(chunk.is_reviewed),
         created_at=chunk.created_at.isoformat() if chunk.created_at else None,
-        updated_at=chunk.updated_at.isoformat() if chunk.updated_at else None
+        updated_at=chunk.updated_at.isoformat() if chunk.updated_at else None,
     )
 
 
@@ -86,14 +85,14 @@ async def list_documents(
     limit: int = 20,
     status_filter: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     LIST DOCUMENTS
     ================================================================================
     Vraća listu dokumenata korisnika.
-    
+
     Args:
         skip: Offset za paginaciju
         limit: Limit rezultata
@@ -102,21 +101,25 @@ async def list_documents(
         db: Database session
     ================================================================================
     """
-    logger.debug(f"Listing documents for user {current_user.id}: skip={skip}, limit={limit}")
-    
+    logger.debug(
+        f"Listing documents for user {current_user.id}: skip={skip}, limit={limit}"
+    )
+
     query = db.query(Document).filter(Document.user_id == current_user.id)
-    
+
     if status_filter:
         query = query.filter(Document.status == status_filter)
-    
+
     total = query.count()
-    documents = query.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
-    
+    documents = (
+        query.order_by(Document.created_at.desc()).offset(skip).limit(limit).all()
+    )
+
     return DocumentListResponse(
         items=[document_to_response(doc, db) for doc in documents],
         total=total,
         skip=skip,
-        limit=limit
+        limit=limit,
     )
 
 
@@ -124,7 +127,7 @@ async def list_documents(
 async def create_document(
     document: DocumentCreate,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -132,7 +135,7 @@ async def create_document(
     ================================================================================
     Kreira novi dokument iz postojećeg fajla.
     Pokreće procesiranje u background-u.
-    
+
     Args:
         document: Podaci za kreiranje dokumenta
         current_user: Trenutni korisnik
@@ -140,30 +143,34 @@ async def create_document(
     ================================================================================
     """
     logger.info(f"Creating document from file: {document.file_id}")
-    
-    file = db.query(File).filter(
-        and_(File.id == document.file_id, File.user_id == current_user.id)
-    ).first()
-    
+
+    file = (
+        db.query(File)
+        .filter(and_(File.id == document.file_id, File.user_id == current_user.id))
+        .first()
+    )
+
     if not file:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found or does not belong to user"
+            detail="File not found or does not belong to user",
         )
-    
+
     if file.status == "deleted":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Cannot create document from deleted file"
+            detail="Cannot create document from deleted file",
         )
-    
-    existing_doc = db.query(Document).filter(Document.file_id == document.file_id).first()
+
+    existing_doc = (
+        db.query(Document).filter(Document.file_id == document.file_id).first()
+    )
     if existing_doc:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document already exists for this file"
+            detail="Document already exists for this file",
         )
-    
+
     new_document = Document(
         user_id=current_user.id,
         file_id=file.id,
@@ -171,15 +178,15 @@ async def create_document(
         description=document.description,
         status="pending",
         source_language=document.source_language or "en",
-        target_language=document.target_language or "sr"
+        target_language=document.target_language or "sr",
     )
     db.add(new_document)
     db.commit()
     db.refresh(new_document)
-    
+
     task = process_pdf_task.delay(str(new_document.id), str(file.id))
     logger.info(f"Started PDF processing task: {task.id}")
-    
+
     return document_to_response(new_document, db)
 
 
@@ -187,14 +194,14 @@ async def create_document(
 async def get_document(
     document_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     GET DOCUMENT
     ================================================================================
     Vraća detalje o dokumentu.
-    
+
     Args:
         document_id: ID dokumenta
         current_user: Trenutni korisnik
@@ -202,25 +209,25 @@ async def get_document(
     ================================================================================
     """
     logger.debug(f"Fetching document: {document_id}")
-    
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid document ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-    
+
     return document_to_response(document, db)
 
 
@@ -228,48 +235,51 @@ async def get_document(
 async def delete_document(
     document_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     DELETE DOCUMENT
     ================================================================================
     Briše dokument i sve njegove povezane zapise (chunks, quizzes, quiz_images).
-    
+
     Returns:
         204: Document deleted successfully
         409: Document has related data that needs to be deleted first
     ================================================================================
     """
     logger.warning(f"Document deletion requested: {document_id}")
-    
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nevalidan format ID dokumenta"
+            detail="Nevalidan format ID dokumenta",
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Dokument nije pronađen"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Dokument nije pronađen"
         )
-    
+
     # Check for related data and provide smart messages
     from app.db.models.quiz import Quiz, QuizImage, QuizAttempt, Question
-    
+
     # Count related data
     chunks_count = db.query(Chunk).filter(Chunk.document_id == doc_uuid).count()
-    quiz_images_count = db.query(QuizImage).filter(QuizImage.document_id == doc_uuid).count()
+    quiz_images_count = (
+        db.query(QuizImage).filter(QuizImage.document_id == doc_uuid).count()
+    )
     quizzes = db.query(Quiz).filter(Quiz.document_id == doc_uuid).all()
     quizzes_count = len(quizzes)
-    
+
     total_questions = 0
     total_attempts = 0
     for quiz in quizzes:
@@ -277,88 +287,116 @@ async def delete_document(
         total_questions += questions_count
         attempts = db.query(QuizAttempt).filter(QuizAttempt.quiz_id == quiz.id).count()
         total_attempts += attempts
-    
+
     # Build smart response message
     if chunks_count > 0 or quizzes_count > 0 or quiz_images_count > 0:
         message_parts = []
         if chunks_count > 0:
             message_parts.append(f"• {chunks_count} odlomaka")
         if quizzes_count > 0:
-            message_parts.append(f"• {quizzes_count} kvizova ({total_questions} pitanja)")
+            message_parts.append(
+                f"• {quizzes_count} kvizova ({total_questions} pitanja)"
+            )
         if quiz_images_count > 0:
             message_parts.append(f"• {quiz_images_count} slika")
         if total_attempts > 0:
             message_parts.append(f"• {total_attempts} pokušaja")
-        
+
         # Provide helpful message based on what needs to be deleted
         if quizzes_count > 0:
             detail_msg = (
-                f"⚠️ Da biste obrisali ovaj dokument, prvo morate obrisati povezane kvizove!\n\n"
-                f"Da li želite da automatski obrišemo sve povezane podatke?\n\n"
-                f"Povezani podaci:\n" + "\n".join(message_parts) + "\n\n"
-                f"📝 Ili možete ručno obrisati kvizove prvo, pa onda dokument."
+                "⚠️ Da biste obrisali ovaj dokument, prvo morate obrisati povezane kvizove!\n\n"
+                "Da li želite da automatski obrišemo sve povezane podatke?\n\n"
+                "Povezani podaci:\n" + "\n".join(message_parts) + "\n\n"
+                "📝 Ili možete ručno obrisati kvizove prvo, pa onda dokument."
             )
         else:
             detail_msg = (
-                f"⚠️ Dokument ima povezane podatke:\n" + "\n".join(message_parts) + "\n\n"
-                f"Pokušavamo automatski da obrišemo..."
+                "⚠️ Dokument ima povezane podatke:\n" + "\n".join(message_parts) + "\n\n"
+                "Pokušavamo automatski da obrišemo..."
             )
-        
+
         # Try to delete, if fails provide detailed message
         try:
             # Delete in correct order due to foreign keys
             for quiz in quizzes:
-                # Delete questions first
-                db.query(Question).filter(Question.quiz_id == quiz.id).delete(synchronize_session=False)
-                # Delete attempts
-                db.query(QuizAttempt).filter(QuizAttempt.quiz_id == quiz.id).delete(synchronize_session=False)
-            
+                # First get all attempt IDs for this quiz
+                attempts = (
+                    db.query(QuizAttempt).filter(QuizAttempt.quiz_id == quiz.id).all()
+                )
+                attempt_ids = [a.id for a in attempts]
+
+                # Delete quiz_answers (references questions)
+                if attempt_ids:
+                    from app.db.models.quiz import QuizAnswer
+
+                    db.query(QuizAnswer).filter(
+                        QuizAnswer.attempt_id.in_(attempt_ids)
+                    ).delete(synchronize_session=False)
+
+                # Delete quiz attempts
+                db.query(QuizAttempt).filter(QuizAttempt.quiz_id == quiz.id).delete(
+                    synchronize_session=False
+                )
+
+                # Delete questions
+                db.query(Question).filter(Question.quiz_id == quiz.id).delete(
+                    synchronize_session=False
+                )
+
             # Delete quizzes
-            db.query(Quiz).filter(Quiz.document_id == doc_uuid).delete(synchronize_session=False)
-            
+            db.query(Quiz).filter(Quiz.document_id == doc_uuid).delete(
+                synchronize_session=False
+            )
+
             # Delete quiz images
-            db.query(QuizImage).filter(QuizImage.document_id == doc_uuid).delete(synchronize_session=False)
-            
+            db.query(QuizImage).filter(QuizImage.document_id == doc_uuid).delete(
+                synchronize_session=False
+            )
+
             # Delete chunks
-            db.query(Chunk).filter(Chunk.document_id == doc_uuid).delete(synchronize_session=False)
-            
+            db.query(Chunk).filter(Chunk.document_id == doc_uuid).delete(
+                synchronize_session=False
+            )
+
             # Save file_id before deleting document
             file_id = document.file_id
-            
+
             # Delete document
             db.delete(document)
-            
+
             # Delete file if exists
             if file_id:
-                db.query(File).filter(File.id == file_id).delete(synchronize_session=False)
-            
+                db.query(File).filter(File.id == file_id).delete(
+                    synchronize_session=False
+                )
+
             db.commit()
-            logger.warning(f"Document {document_id} and all related data deleted successfully")
-            
+            logger.warning(
+                f"Document {document_id} and all related data deleted successfully"
+            )
+
             return {"message": "Dokument uspešno obrisan!", "deleted": True}
-            
+
         except Exception as e:
             db.rollback()
             logger.error(f"Error deleting document {document_id}: {e}")
-            raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT,
-                detail=detail_msg
-            )
-    
-    
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=detail_msg)
+
     # Obriši dokument
     db.delete(document)
     db.commit()
-    
+
     # Obriši fajl ako postoji
     file_id = document.file_id
     if file_id:
         from app.db.models.file import File
+
         file = db.query(File).filter(File.id == file_id).first()
         if file:
             db.delete(file)
             db.commit()
-    
+
     logger.warning(f"Document {document_id} deleted successfully")
     return {"message": "Dokument uspešno obrisan!", "deleted": True}
 
@@ -367,65 +405,65 @@ async def delete_document(
 async def process_document(
     document_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     PROCESS DOCUMENT
     ================================================================================
     Pokreće obradu dokumenta (PDF parsing, chunking).
-    
+
     Args:
         document_id: ID dokumenta
         current_user: Trenutni korisnik
         db: Database session
-    
+
     Returns:
         Task ID za praćenje progresa
     ================================================================================
     """
     logger.info(f"Processing document: {document_id}")
-    
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid document ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-    
+
     if document.status == "processing":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document is already being processed"
+            detail="Document is already being processed",
         )
-    
+
     if not document.file_id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document has no associated file"
+            detail="Document has no associated file",
         )
-    
+
     document.status = "pending"
     db.commit()
-    
+
     task = process_pdf_task.delay(str(document.id), str(document.file_id))
-    
+
     return {
         "document_id": document_id,
         "task_id": task.id,
         "status": "queued",
-        "message": "Document processing queued"
+        "message": "Document processing queued",
     }
 
 
@@ -434,59 +472,62 @@ async def translate_document(
     document_id: str,
     provider: Optional[str] = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     TRANSLATE DOCUMENT
     ================================================================================
     Pokreće AI prevod dokumenta.
-    
+
     Args:
         document_id: ID dokumenta
         provider: Provajder za prevod (ollama, deepl, openai, google, claude)
         current_user: Trenutni korisnik
         db: Database session
-    
+
     Returns:
         Task ID za praćenje progresa
     ================================================================================
     """
-    logger.info(f"Translation requested for document: {document_id}, provider: {provider}")
-    
+    logger.info(
+        f"Translation requested for document: {document_id}, provider: {provider}"
+    )
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid document ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-    
+
     if document.status not in ["completed", "translating"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document must be processed before translation"
+            detail="Document must be processed before translation",
         )
-    
+
     from app.workers.tasks import translate_document_task
+
     task = translate_document_task.delay(str(document.id), provider)
-    
+
     return {
         "document_id": document_id,
         "task_id": task.id,
         "status": "queued",
         "provider": provider or "auto",
-        "message": f"Translation queued using {provider or 'auto-selected'} provider"
+        "message": f"Translation queued using {provider or 'auto-selected'} provider",
     }
 
 
@@ -497,18 +538,18 @@ async def get_translation_providers():
     GET TRANSLATION PROVIDERS
     ================================================================================
     Vraća listu dostupnih AI provajdera za prevod.
-    
+
     Returns:
         Lista dostupnih provajdera sa statusom
     ================================================================================
     """
     from app.services.translation import translation_service
-    
+
     providers = translation_service.get_available_providers()
-    
+
     return {
         "providers": providers,
-        "default_order": settings.TRANSLATION_FALLBACK_ORDER
+        "default_order": settings.TRANSLATION_FALLBACK_ORDER,
     }
 
 
@@ -517,18 +558,18 @@ async def estimate_translation(
     document_id: str,
     provider: str = "deepl",
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     ESTIMATE TRANSLATION COST
     ================================================================================
     Estimira cenu prevoda dokumenta.
-    
+
     Args:
         document_id: ID dokumenta
         provider: Provajder za estimaciju
-        
+
     Returns:
         Estimacija cene i vremena
     ================================================================================
@@ -537,81 +578,87 @@ async def estimate_translation(
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid document ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-    
+
     chunks = db.query(Chunk).filter(Chunk.document_id == document.id).all()
     texts = [chunk.content for chunk in chunks]
-    
+
     from app.services.translation import translation_service
+
     estimate = translation_service.estimate_cost(texts, provider)
-    
-    return {
-        "document_id": document_id,
-        "estimate": estimate
-    }
+
+    return {"document_id": document_id, "estimate": estimate}
 
 
 @router.get("/{document_id}/progress")
 async def get_document_progress(
     document_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     GET DOCUMENT PROGRESS
     ================================================================================
     Vraća progres obrade dokumenta.
-    
+
     Args:
         document_id: ID dokumenta
         current_user: Trenutni korisnik
         db: Database session
-    
+
     Returns:
         Progress information
     ================================================================================
     """
     logger.debug(f"Checking progress for document: {document_id}")
-    
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid document ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-    
+
     total_chunks = document.total_chunks or 0
-    translated_chunks = db.query(Chunk).filter(
-        and_(Chunk.document_id == document.id, Chunk.is_translated == 1)
-    ).count() if total_chunks > 0 else 0
-    
-    reviewed_chunks = db.query(Chunk).filter(
-        and_(Chunk.document_id == document.id, Chunk.is_reviewed == 1)
-    ).count() if total_chunks > 0 else 0
+    translated_chunks = (
+        db.query(Chunk)
+        .filter(and_(Chunk.document_id == document.id, Chunk.is_translated == 1))
+        .count()
+        if total_chunks > 0
+        else 0
+    )
+
+    reviewed_chunks = (
+        db.query(Chunk)
+        .filter(and_(Chunk.document_id == document.id, Chunk.is_reviewed == 1))
+        .count()
+        if total_chunks > 0
+        else 0
+    )
 
     # Read granular progress written by Celery task
     meta = document.file_metadata or {}
@@ -622,9 +669,8 @@ async def get_document_progress(
     elapsed_seconds = proc_progress.get("elapsed_seconds", 0)
     # last_activity_at: from processing or translation progress
     trans_progress = meta.get("translation_progress", {})
-    last_activity_at = (
-        proc_progress.get("last_activity_at")
-        or trans_progress.get("last_activity_at")
+    last_activity_at = proc_progress.get("last_activity_at") or trans_progress.get(
+        "last_activity_at"
     )
 
     progress_percentage = 0
@@ -649,7 +695,9 @@ async def get_document_progress(
         else:
             phase_label = "Pokretanje prevodioca..."
         # Use 0-100% range for translation (not 85-100%) so progress bar is meaningful
-        progress_percentage = int(translated_chunks / total_chunks * 100) if total_chunks > 0 else 0
+        progress_percentage = (
+            int(translated_chunks / total_chunks * 100) if total_chunks > 0 else 0
+        )
     elif document.status == "completed":
         current_phase = "completed"
         phase_label = "Obrada završena"
@@ -674,7 +722,7 @@ async def get_document_progress(
         "chunks_so_far": chunks_so_far,
         "elapsed_seconds": elapsed_seconds,
         "last_activity_at": last_activity_at,
-        "message": f"Document is {document.status}"
+        "message": f"Document is {document.status}",
     }
 
 
@@ -684,14 +732,14 @@ async def get_document_chunks(
     skip: int = 0,
     limit: int = 50,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     GET DOCUMENT CHUNKS
     ================================================================================
     Vraća chunk-ove dokumenta (za review i editovanje).
-    
+
     Args:
         document_id: ID dokumenta
         skip: Offset
@@ -701,29 +749,34 @@ async def get_document_chunks(
     ================================================================================
     """
     logger.debug(f"Fetching chunks for document: {document_id}")
-    
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid document ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-    
-    chunks = db.query(Chunk).filter(
-        Chunk.document_id == document.id
-    ).order_by(Chunk.sequence_number).offset(skip).limit(limit).all()
-    
+
+    chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == document.id)
+        .order_by(Chunk.sequence_number)
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
     return [chunk_to_response(chunk) for chunk in chunks]
 
 
@@ -735,14 +788,14 @@ async def update_chunk(
     translated_content: str = None,
     is_reviewed: bool = None,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     UPDATE CHUNK
     ================================================================================
     Ažurira sadržaj chunk-a (ručna korekcija prevoda).
-    
+
     Args:
         document_id: ID dokumenta
         chunk_id: ID chunk-a
@@ -754,53 +807,54 @@ async def update_chunk(
     ================================================================================
     """
     logger.info(f"Updating chunk {chunk_id} in document {document_id}")
-    
+
     try:
         doc_uuid = uuid.UUID(document_id)
         chunk_uuid = uuid.UUID(chunk_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid ID format"
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-    
-    chunk = db.query(Chunk).filter(
-        and_(Chunk.id == chunk_uuid, Chunk.document_id == document.id)
-    ).first()
-    
+
+    chunk = (
+        db.query(Chunk)
+        .filter(and_(Chunk.id == chunk_uuid, Chunk.document_id == document.id))
+        .first()
+    )
+
     if not chunk:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Chunk not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Chunk not found"
         )
-    
+
     if content is not None:
         chunk.content = content
-    
+
     if translated_content is not None:
         chunk.translated_content = translated_content
         chunk.is_translated = 1
-    
+
     if is_reviewed is not None:
         chunk.is_reviewed = 1 if is_reviewed else 0
-    
+
     db.commit()
     db.refresh(chunk)
-    
+
     return {
         "chunk_id": chunk_id,
         "status": "updated",
-        "message": "Chunk updated successfully"
+        "message": "Chunk updated successfully",
     }
 
 
@@ -808,60 +862,61 @@ async def update_chunk(
 async def export_document(
     document_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     EXPORT DOCUMENT
     ================================================================================
     Eksportuje dokument kao PDF.
-    
+
     Args:
         document_id: ID dokumenta
         current_user: Trenutni korisnik
         db: Database session
-    
+
     Returns:
         URL za download generisanog PDF-a
     ================================================================================
     """
     logger.info(f"Export requested for document: {document_id}")
-    
+
     try:
         doc_uuid = uuid.UUID(document_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid document ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
         )
-    
-    document = db.query(Document).filter(
-        and_(Document.id == doc_uuid, Document.user_id == current_user.id)
-    ).first()
-    
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
     if not document:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Document not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
-    
+
     if document.status != "completed":
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Document must be fully processed before export"
+            detail="Document must be fully processed before export",
         )
-    
+
     return {
         "document_id": document_id,
         "status": "queued",
         "download_url": None,
-        "message": "Export feature coming soon"
+        "message": "Export feature coming soon",
     }
 
 
 # ============================================================
 # PIPELINE ENDPOINTS
 # ============================================================
+
 
 @router.post("/{document_id}/pipeline")
 async def start_pipeline(
@@ -887,10 +942,11 @@ async def start_pipeline(
       "passing_score": 60
     }
     """
-    document = db.query(Document).filter(
-        Document.id == document_id,
-        Document.user_id == current_user.id
-    ).first()
+    document = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.user_id == current_user.id)
+        .first()
+    )
     if not document:
         raise HTTPException(status_code=404, detail="Dokument nije pronađen")
 
@@ -898,15 +954,24 @@ async def start_pipeline(
     detected_lang = None
     first_chunk = db.query(Chunk).filter(Chunk.document_id == document.id).first()
     if first_chunk and first_chunk.content:
+        text = first_chunk.content[:1000]  # Proveri prvih 1000 karaktera
+
         # Proveri da li sadrži ćirilične karaktere
-        cyrillic_chars = sum(1 for c in first_chunk.content if '\u0400' <= c <= '\u04FF')
-        latin_chars = sum(1 for c in first_chunk.content if 'a' <= c.lower() <= 'z')
-        
-        if cyrillic_chars > latin_chars * 0.1:  # Ako ima dosta ćirilice
+        cyrillic_chars = sum(1 for c in text if "\u0400" <= c <= "\u04ff")
+        latin_chars = sum(1 for c in text if "a" <= c.lower() <= "z")
+
+        # Proveri srpske latinične karaktere
+        serbian_latin_chars = sum(1 for c in text if c in "čćžšđČĆŽŠĐ")
+
+        # Detekcija:
+        # 1. Ako ima dosta ćirilice (>10%) → srpski
+        # 2. Ako ima srpskih latiničnih karaktera → srpski
+        # 3. Ako ima samo latiničnih bez ćirilice → engleski
+        if cyrillic_chars > latin_chars * 0.1 or serbian_latin_chars > 3:
             detected_lang = "sr"
-        elif latin_chars > 10:
+        elif latin_chars > 10 and cyrillic_chars < 5 and serbian_latin_chars < 3:
             detected_lang = "en"
-    
+
     # Koristi auto-detektovani jezik ili default
     source_language = pipeline_data.get("source_language") or detected_lang or "en"
     # Target language je uvek suprotan od source
@@ -946,7 +1011,10 @@ async def start_pipeline(
         "message": f"Pipeline pokrenut: PDF → {'→ Prevod ' if not skip_translation else ''}→ Kviz",
         "stages": [
             {"name": "PDF Processing", "skipped": document.status == "completed"},
-            {"name": f"Prevod ({source_language}→{target_language})", "skipped": skip_translation or source_language == target_language},
+            {
+                "name": f"Prevod ({source_language}→{target_language})",
+                "skipped": skip_translation or source_language == target_language,
+            },
             {"name": f"Generisanje kviza ({num_questions} pitanja)", "skipped": False},
         ],
         "providers": {
@@ -988,20 +1056,32 @@ async def export_document_pdf(
     from fastapi.responses import Response
     from app.services.pdf_export_service import pdf_export_service
 
-    document = db.query(Document).filter(
-        Document.id == document_id,
-        Document.user_id == str(current_user.id),
-    ).first()
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.user_id == str(current_user.id),
+        )
+        .first()
+    )
     if not document:
         raise HTTPException(status_code=404, detail="Dokument nije pronađen")
 
-    chunks = db.query(Chunk).filter(
-        Chunk.document_id == document_id,
-        Chunk.translated_content.isnot(None),
-    ).order_by(Chunk.sequence_number).all()
+    chunks = (
+        db.query(Chunk)
+        .filter(
+            Chunk.document_id == document_id,
+            Chunk.translated_content.isnot(None),
+        )
+        .order_by(Chunk.sequence_number)
+        .all()
+    )
 
     if not chunks:
-        raise HTTPException(status_code=422, detail="Dokument nema prevedenih segmenata. Pokrenite prevod pre eksporta.")
+        raise HTTPException(
+            status_code=422,
+            detail="Dokument nema prevedenih segmenata. Pokrenite prevod pre eksporta.",
+        )
 
     chunk_dicts = [
         {"original_text": c.content, "translated_text": c.translated_content}
@@ -1017,7 +1097,9 @@ async def export_document_pdf(
         author=author,
     )
 
-    safe_title = "".join(c if c.isalnum() or c in "-_ " else "_" for c in document.title)[:60]
+    safe_title = "".join(
+        c if c.isalnum() or c in "-_ " else "_" for c in document.title
+    )[:60]
     filename = f"{safe_title}_prevod.pdf"
 
     return Response(
@@ -1025,3 +1107,50 @@ async def export_document_pdf(
         media_type="application/pdf",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
+
+
+@router.get("/{document_id}/quiz-availability")
+async def get_quiz_availability(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """
+    Vraća dostupnost pitanja za kviz za dati dokument.
+
+    Returns:
+        - total: Ukupno generisanih pitanja za dokument
+        - used: Broj pitanja koja su vec koriscena u kvizovima
+        - available: Broj dostupnih pitanja za nove kvizove
+    """
+    from app.db.models.quiz import Quiz, Question
+
+    doc_uuid = uuid.UUID(document_id)
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == doc_uuid,
+            Document.user_id == str(current_user.id),
+        )
+        .first()
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Dokument nije pronađen")
+
+    quizzes = db.query(Quiz).filter(Quiz.document_id == doc_uuid).all()
+
+    total = 0
+    used = 0
+
+    for quiz in quizzes:
+        questions = db.query(Question).filter(Question.quiz_id == quiz.id).all()
+        total += len(questions)
+        used += sum(1 for q in questions if q.used)
+
+    available = total - used
+
+    return {
+        "total": total,
+        "used": used,
+        "available": available,
+    }

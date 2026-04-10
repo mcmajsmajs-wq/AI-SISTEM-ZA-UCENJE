@@ -1,3 +1,17 @@
+/**
+ * ================================================================================
+ * Petar II Petrović-Njegoš
+ * "Blago tome ko dovijek živi, imao se rašta i roditi"
+ * ================================================================================
+ * 
+ * AI Learning System
+ * DashboardPage.tsx
+ * Verzija: 1.0.0
+ * Autor: Branko Suznjevic
+ * Datum: 2026
+ * ================================================================================
+ */
+
 import { useQuery } from '@tanstack/react-query'
 import { usersApi, documentsApi, analyticsApi, aiSettingsApi } from '@/services/api'
 import { 

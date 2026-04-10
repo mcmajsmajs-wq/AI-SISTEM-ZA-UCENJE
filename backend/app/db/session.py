@@ -11,12 +11,11 @@ Verzija: 1.0.0
 """
 
 from sqlalchemy import create_engine, text
-from sqlalchemy.orm import sessionmaker, Session
+from sqlalchemy.orm import sessionmaker
 from sqlalchemy.pool import QueuePool
 import logging
 
 from app.core.config import settings
-from app.db.base import Base
 
 logger = logging.getLogger(__name__)
 
@@ -31,17 +30,13 @@ engine = create_engine(
     pool_timeout=settings.SQLALCHEMY_POOL_TIMEOUT,
     pool_recycle=settings.SQLALCHEMY_POOL_RECYCLE,
     pool_pre_ping=True,  # Proveri konekciju pre korišćenja
-    echo=settings.DEBUG  # Loguj SQL u debug modu
+    echo=settings.DEBUG,  # Loguj SQL u debug modu
 )
 
 # ================================================================================
 # SESSION FACTORY
 # ================================================================================
-SessionLocal = sessionmaker(
-    autocommit=False,
-    autoflush=False,
-    bind=engine
-)
+SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 # ================================================================================
@@ -54,7 +49,7 @@ def get_db():
     ================================================================================
     Generator funkcija za FastAPI dependency injection.
     Automatski otvara i zatvara database session.
-    
+
     Usage:
         @router.get("/items")
         def get_items(db: Session = Depends(get_db)):
@@ -82,7 +77,7 @@ def check_database_connection() -> bool:
     ================================================================================
     Proverava da li je konekcija ka bazi aktivna.
     Koristi se za health check endpoint.
-    
+
     Returns:
         True ako je konekcija uspešna, False inače
     ================================================================================

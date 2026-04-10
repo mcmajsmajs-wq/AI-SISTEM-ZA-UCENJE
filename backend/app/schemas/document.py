@@ -39,7 +39,7 @@ class DocumentResponse(DocumentBase):
     metadata: Dict[str, Any] = {}
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -76,4 +76,3 @@ class ChunkUpdate(BaseModel):
     content: Optional[str] = None
     translated_content: Optional[str] = None
     is_reviewed: Optional[bool] = None
-

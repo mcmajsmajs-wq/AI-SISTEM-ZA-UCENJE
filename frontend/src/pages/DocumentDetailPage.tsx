@@ -1,5 +1,19 @@
-import { useParams, Link } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+/**
+ * ================================================================================
+ * Petar II Petrović-Njegoš
+ * "Blago tome ko dovijek živi, imao se rašta i roditi"
+ * ================================================================================
+ * 
+ * AI Learning System
+ * DocumentDetailPage.tsx
+ * Verzija: 1.0.0
+ * Autor: Branko Suznjevic
+ * Datum: 2026
+ * ================================================================================
+ */
+
+import { useParams, Link, useNavigate } from 'react-router-dom'
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { documentsApi } from '@/services/api'
 import { 
@@ -17,7 +31,8 @@ import {
   Download,
   AlertTriangle,
   AlertCircle,
-  Activity
+  Activity,
+  Trash2
 } from 'lucide-react'
 import clsx from 'clsx'
 import PipelineModal from '@/components/PipelineModal'
@@ -25,9 +40,21 @@ import toast from 'react-hot-toast'
 
 export default function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
+  const navigate = useNavigate()
+  const queryClient = useQueryClient()
   const [showPipeline, setShowPipeline] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
   const docId = id || ''
+
+  const deleteMutation = useMutation({
+    mutationFn: () => documentsApi.delete(docId),
+    onSuccess: () => {
+      toast.success('Dokument obrisan')
+      queryClient.invalidateQueries({ queryKey: ['documents'] })
+      navigate('/documents')
+    },
+    onError: () => toast.error('Greška pri brisanju dokumenta'),
+  })
 
   const handleExportPdf = async () => {
     if (!docId) return
@@ -67,10 +94,21 @@ export default function DocumentDetailPage() {
   const { data: progressData } = useQuery({
     queryKey: ['document-progress', docId],
     queryFn: () => documentsApi.getProgress(docId),
-    enabled: !!docId && activeStatuses.includes(docQueryData?.data?.status ?? ''),
-    refetchInterval: 2000,
+    enabled: !!docId,
+    refetchInterval: (query) => {
+      const status = (query.state.data as any)?.data?.status
+      return activeStatuses.includes(status) ? 2000 : false
+    },
   })
   const progress = (progressData as any)?.data
+
+  const { data: quizAvailabilityData } = useQuery({
+    queryKey: ['document-quiz-availability', docId],
+    queryFn: () => documentsApi.getQuizAvailability(docId),
+    enabled: !!docId && docQueryData?.data?.status === 'completed',
+    refetchInterval: 30000,
+  })
+  const quizAvailability = (quizAvailabilityData as any)?.data
 
   // Update "seconds since last activity" counter every second
   useEffect(() => {
@@ -98,11 +136,11 @@ export default function DocumentDetailPage() {
 
   const doc = docQueryData?.data
 
-  const getStatusConfig = (status: string) => {
+  const getStatusConfig = (status: string, translatedChunks: number, totalChunks: number) => {
     const configs: Record<string, { badge: string; strip: string; label: string }> = {
       pending:     { badge: 'badge-gray',    strip: 'from-gray-500 to-slate-600',     label: 'Na čekanju' },
       processing:  { badge: 'badge-primary', strip: 'from-indigo-500 to-blue-600',    label: 'Obrađuje se' },
-      completed:   { badge: 'badge-success', strip: 'from-emerald-500 to-green-600',  label: 'Obrađeno' },
+      completed:   { badge: 'badge-success', strip: 'from-emerald-500 to-green-600',  label: totalChunks === 0 ? 'Bez odlomaka' : (translatedChunks === 0 ? 'Nije prevedeno' : 'Obrađeno') },
       translating: { badge: 'badge-primary', strip: 'from-violet-500 to-purple-600',  label: 'Prevodi se' },
       error:       { badge: 'badge-error',   strip: 'from-red-500 to-rose-600',       label: 'Greška' },
     }
@@ -150,7 +188,7 @@ export default function DocumentDetailPage() {
     )
   }
 
-  const cfg = getStatusConfig(doc.status)
+  const cfg = getStatusConfig(doc.status, doc.translated_chunks || 0, doc.total_chunks || 0)
   const translatedCount = Array.isArray(chunks?.data) 
     ? chunks.data.filter((c: any) => c.translated_content).length 
     : 0
@@ -206,8 +244,8 @@ export default function DocumentDetailPage() {
         </div>
       </div>
 
-      {/* Processing progress card */}
-      {(doc.status === 'processing' || doc.status === 'pending' || doc.status === 'translating') && (
+      {/* Processing progress card - always show for all statuses */}
+      {(doc.status === 'processing' || doc.status === 'pending' || doc.status === 'translating' || doc.status === 'completed') && (
         <div className={clsx(
           'rounded-2xl border overflow-hidden',
           doc.status === 'translating' ? 'border-violet-200 bg-violet-50' : 'border-indigo-200 bg-indigo-50'
@@ -228,10 +266,12 @@ export default function DocumentDetailPage() {
                 'font-semibold text-sm',
                 doc.status === 'translating' ? 'text-violet-900' : 'text-indigo-900'
               )}>
-                {progress?.phase_label || (
-                  doc.status === 'pending' ? 'Dokument čeka na obradu...' :
-                  doc.status === 'processing' ? 'Pokretanje procesora PDF-a...' :
-                  'Pokretanje prevodioca...'
+                {doc.status === 'completed' ? 'Obrada završena' : (
+                  progress?.phase_label || (
+                    doc.status === 'pending' ? 'Dokument čeka na obradu...' :
+                    doc.status === 'processing' ? 'Pokretanje procesora PDF-a...' :
+                    'Pokretanje prevodioca...'
+                  )
                 )}
               </p>
               <p className={clsx('text-xs flex items-center gap-1.5', doc.status === 'translating' ? 'text-violet-500' : 'text-indigo-400')}>
@@ -255,9 +295,12 @@ export default function DocumentDetailPage() {
             </div>
             <span className={clsx(
               'text-2xl font-extrabold tabular-nums',
-              doc.status === 'translating' ? 'text-violet-700' : 'text-indigo-700'
+              doc.status === 'translating' ? 'text-violet-700' : 
+              (doc.status === 'completed' && (doc.translated_chunks || 0) === 0) ? 'text-orange-700' : 'text-indigo-700'
             )}>
-              {progress?.progress_percentage ?? 0}%
+              {doc.status === 'completed' 
+                ? ((doc.translated_chunks || 0) === 0 && (doc.total_chunks || 0) > 0 ? '0' : '100')
+                : (progress?.progress_percentage ?? 0)}%
             </span>
           </div>
 
@@ -269,24 +312,32 @@ export default function DocumentDetailPage() {
                   'h-full rounded-full transition-all duration-700',
                   doc.status === 'translating'
                     ? 'bg-gradient-to-r from-violet-500 to-purple-500'
-                    : 'bg-gradient-to-r from-indigo-500 to-blue-500'
+                    : doc.status === 'completed' && (doc.translated_chunks || 0) === 0
+                      ? 'bg-gradient-to-r from-orange-500 to-red-500'
+                      : 'bg-gradient-to-r from-indigo-500 to-blue-500'
                 )}
-                style={{ width: `${progress?.progress_percentage ?? (doc.status === 'pending' ? 0 : 10)}%` }}
+                style={{ width: `${doc.status === 'completed' 
+                  ? ((doc.translated_chunks || 0) === 0 && (doc.total_chunks || 0) > 0 ? 0 : 100)
+                  : (progress?.progress_percentage ?? (doc.status === 'pending' ? 0 : 10))}%` }}
               />
             </div>
           </div>
 
-          {/* Stats row */}
-          {progress && (doc.status === 'processing' || doc.status === 'translating') && (
+          {/* Stats row - always show for all statuses */}
+          {progress && (
             <div className="grid grid-cols-3 gap-px bg-white/30 border-t border-white/40 mt-1">
               {(doc.status === 'processing' ? [
                 { label: 'Strana obrađeno', value: progress.pages_done > 0 ? `${progress.pages_done} / ${progress.pages_total || '?'}` : '...' },
                 { label: 'Odlomaka kreirano', value: progress.chunks_so_far > 0 ? progress.chunks_so_far : '...' },
                 { label: 'Ukupno strana', value: progress.pages_total || doc.total_pages || '...' },
+              ] : doc.status === 'completed' ? [
+                { label: 'Odlomaka ukupno', value: progress.total_chunks },
+                { label: 'Prevedeno', value: progress.translated_chunks },
+                { label: 'Neprevedeno', value: progress.total_chunks - progress.translated_chunks },
               ] : [
                 { label: 'Prevedeno', value: `${progress.translated_chunks} / ${progress.total_chunks}` },
                 { label: 'Odlomaka ukupno', value: progress.total_chunks },
-                { label: 'Ostalo', value: progress.total_chunks - progress.translated_chunks },
+                { label: 'Neprevedeno', value: progress.total_chunks - progress.translated_chunks },
               ]).map((s, i) => (
                 <div key={i} className="px-4 py-2.5 bg-white/40">
                   <p className="text-xs text-gray-500">{s.label}</p>
@@ -298,31 +349,110 @@ export default function DocumentDetailPage() {
         </div>
       )}
 
+      {/* Quiz availability status - show when document is completed */}
+      {docQueryData?.data?.status === 'completed' && quizAvailability && (
+        <div className="card bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
+          <div className="px-5 py-3 flex items-center justify-between border-b border-amber-100">
+            <div className="flex items-center gap-2">
+              <Activity className="w-4 h-4 text-amber-600" />
+              <span className="font-semibold text-amber-900">Kviz pitanja</span>
+            </div>
+            {quizAvailability.available === 0 && quizAvailability.total > 0 ? (
+              <span className="text-xs font-medium text-red-600 bg-red-50 px-2 py-1 rounded">
+                Sva pitanja su iskorišćena u kvizovima
+              </span>
+            ) : quizAvailability.total === 0 ? (
+              <span className="text-xs font-medium text-gray-500 bg-gray-100 px-2 py-1 rounded">
+                Nema generisanih pitanja
+              </span>
+            ) : null}
+          </div>
+          {quizAvailability.total > 0 && (
+            <>
+              <div className="px-5 py-2">
+                <div className="h-2.5 bg-amber-100 rounded-full overflow-hidden">
+                  <div
+                    className="h-full rounded-full bg-gradient-to-r from-amber-500 to-orange-500 transition-all duration-700"
+                    style={{ width: `${((quizAvailability.total - quizAvailability.available) / quizAvailability.total) * 100}%` }}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-3 gap-px bg-amber-100/50 border-t border-amber-100">
+                <div className="px-4 py-2.5 bg-white/60">
+                  <p className="text-xs text-gray-500">Ukupno pitanja</p>
+                  <p className="text-sm font-bold text-gray-800">{quizAvailability.total}</p>
+                </div>
+                <div className="px-4 py-2.5 bg-white/60">
+                  <p className="text-xs text-gray-500">Iskorišćeno</p>
+                  <p className="text-sm font-bold text-amber-700">{quizAvailability.used}</p>
+                </div>
+                <div className="px-4 py-2.5 bg-white/60">
+                  <p className="text-xs text-gray-500">Dostupno</p>
+                  <p className="text-sm font-bold text-green-700">{quizAvailability.available}</p>
+                </div>
+              </div>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Action buttons */}
       <div className="flex flex-wrap gap-3">
-        <Link
-          to={`/review/${docId}`}
-          className={clsx('btn-primary', doc.status !== 'completed' && 'opacity-50 pointer-events-none')}
-        >
-          <Languages className="w-4 h-4" />
-          Pregledaj prevode
-        </Link>
-        <button
-          onClick={() => setShowPipeline(true)}
-          disabled={doc.status !== 'completed'}
-          className={clsx('btn-primary bg-violet-600 hover:bg-violet-700', doc.status !== 'completed' && 'opacity-50 pointer-events-none')}
-        >
-          <Zap className="w-4 h-4" />
-          Auto Pipeline
-        </button>
-        <button
-          onClick={handleExportPdf}
-          disabled={doc.status !== 'completed' || downloadingPdf}
-          className={clsx('btn-primary bg-emerald-600 hover:bg-emerald-700', doc.status !== 'completed' && 'opacity-50 pointer-events-none')}
-        >
-          {downloadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-          Preuzmi PDF
-        </button>
+        {doc.status === 'error' && (
+          <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mb-2">
+            <div className="flex items-center gap-2 text-red-700 font-medium mb-2">
+              <AlertTriangle className="w-5 h-5" />
+              Greška pri obradi dokumenta
+            </div>
+            <p className="text-red-600 text-sm mb-3">
+              {doc.description || 'Nije moguće izvući tekst iz dokumenta. Dokument je možda skeniran (samo slike) ili zaštićen.'}
+            </p>
+            <p className="text-gray-600 text-xs">
+              Morate obrisati dokument i ponovo ga uploudovati kao novi dokument.
+            </p>
+          </div>
+        )}
+        {doc.status === 'error' && (
+          <button
+            onClick={() => {
+              if (confirm('Da li želite da obrisete ovaj dokument?')) {
+                deleteMutation.mutate()
+              }
+            }}
+            disabled={deleteMutation.isPending}
+            className="btn-primary bg-red-600 hover:bg-red-700 disabled:opacity-50"
+          >
+            <Trash2 className="w-4 h-4" />
+            {deleteMutation.isPending ? 'Brisanje...' : 'Obriši dokument'}
+          </button>
+        )}
+        {doc.status !== 'error' && (
+          <>
+            <Link
+              to={`/review/${docId}`}
+              className={clsx('btn-primary', doc.status !== 'completed' && 'opacity-50 pointer-events-none')}
+            >
+              <Languages className="w-4 h-4" />
+              Pregledaj prevode
+            </Link>
+            <button
+              onClick={() => setShowPipeline(true)}
+              disabled={doc.status !== 'completed'}
+              className={clsx('btn-primary bg-violet-600 hover:bg-violet-700', doc.status !== 'completed' && 'opacity-50 pointer-events-none')}
+            >
+              <Zap className="w-4 h-4" />
+              Auto Pipeline
+            </button>
+            <button
+              onClick={handleExportPdf}
+              disabled={doc.status !== 'completed' || downloadingPdf}
+              className={clsx('btn-primary bg-emerald-600 hover:bg-emerald-700', doc.status !== 'completed' && 'opacity-50 pointer-events-none')}
+            >
+              {downloadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              Preuzmi PDF
+            </button>
+          </>
+        )}
         <div className="flex items-center gap-2 text-sm text-gray-500 ml-auto">
           <Calendar className="w-4 h-4" />
           {new Date(doc.created_at).toLocaleString('sr-RS', {
@@ -445,8 +575,23 @@ export default function DocumentDetailPage() {
             </div>
           ) : (
             <div className="p-14 text-center">
-              <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-3" />
-              <p className="text-gray-500 text-sm">Odlomci se obrađuju...</p>
+              {doc.status === 'completed' && doc.total_chunks > 0 ? (
+                <>
+                  <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">Učitavanje odlomaka...</p>
+                </>
+              ) : doc.status === 'completed' && doc.total_chunks === 0 ? (
+                <>
+                  <AlertCircle className="w-8 h-8 text-orange-400 mx-auto mb-3" />
+                  <p className="text-orange-600 text-sm font-medium">Nema odlomaka za prikaz</p>
+                  <p className="text-gray-400 text-xs mt-1">Obrada dokumenta nije uspela da kreira odlomke</p>
+                </>
+              ) : (
+                <>
+                  <Loader2 className="w-8 h-8 text-indigo-400 animate-spin mx-auto mb-3" />
+                  <p className="text-gray-500 text-sm">Odlomci se obrađuju...</p>
+                </>
+              )}
             </div>
           )}
 

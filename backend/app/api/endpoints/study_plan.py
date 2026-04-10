@@ -20,9 +20,16 @@ from app.db.models.study_plan import StudyPlan, StudyPlanItem
 from app.db.models.quiz import Quiz
 from app.db.models.user import User
 from app.schemas.study_plan import (
-    StudyPlanCreate, StudyPlanUpdate, StudyPlanResponse, StudyPlanWithItems,
-    StudyPlanItemCreate, StudyPlanItemUpdate, StudyPlanItemResponse,
-    CompleteItemRequest, StudyPlanProgress, QuizBrief,
+    StudyPlanCreate,
+    StudyPlanUpdate,
+    StudyPlanResponse,
+    StudyPlanWithItems,
+    StudyPlanItemCreate,
+    StudyPlanItemUpdate,
+    StudyPlanItemResponse,
+    CompleteItemRequest,
+    StudyPlanProgress,
+    QuizBrief,
 )
 from app.services.auth import get_current_user
 
@@ -33,6 +40,7 @@ logger = logging.getLogger(__name__)
 # ============================================================
 # HELPERS
 # ============================================================
+
 
 def plan_to_response(plan: StudyPlan) -> StudyPlanResponse:
     return StudyPlanResponse(
@@ -79,6 +87,7 @@ def item_to_response(item: StudyPlanItem) -> StudyPlanItemResponse:
 # CRUD PLAN
 # ============================================================
 
+
 @router.get("/me", response_model=StudyPlanWithItems)
 async def get_my_plan(
     db: Session = Depends(get_db),
@@ -118,7 +127,9 @@ async def update_my_plan(
     return plan_to_response(plan)
 
 
-@router.post("/me", response_model=StudyPlanResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/me", response_model=StudyPlanResponse, status_code=status.HTTP_201_CREATED
+)
 async def create_my_plan(
     data: StudyPlanCreate,
     db: Session = Depends(get_db),
@@ -144,6 +155,7 @@ async def create_my_plan(
 # CRUD PLAN ITEMS
 # ============================================================
 
+
 @router.get("/me/items", response_model=list[StudyPlanItemResponse])
 async def list_plan_items(
     from_date: Optional[date] = None,
@@ -164,17 +176,20 @@ async def list_plan_items(
     if to_date:
         query = query.filter(StudyPlanItem.scheduled_for <= to_date)
     if only_pending:
-        query = query.filter(StudyPlanItem.is_completed == False)
+        query = query.filter(StudyPlanItem.is_completed is False)
 
     items = query.order_by(
-        StudyPlanItem.scheduled_for,
-        StudyPlanItem.priority.desc()
+        StudyPlanItem.scheduled_for, StudyPlanItem.priority.desc()
     ).all()
 
     return [item_to_response(i) for i in items]
 
 
-@router.post("/me/items", response_model=StudyPlanItemResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/me/items",
+    response_model=StudyPlanItemResponse,
+    status_code=status.HTTP_201_CREATED,
+)
 async def add_plan_item(
     data: StudyPlanItemCreate,
     db: Session = Depends(get_db),
@@ -189,10 +204,11 @@ async def add_plan_item(
         db.refresh(plan)
 
     # Proveri da li kviz pripada korisniku
-    quiz = db.query(Quiz).filter(
-        Quiz.id == data.quiz_id,
-        Quiz.user_id == current_user.id
-    ).first()
+    quiz = (
+        db.query(Quiz)
+        .filter(Quiz.id == data.quiz_id, Quiz.user_id == current_user.id)
+        .first()
+    )
     if not quiz:
         raise HTTPException(status_code=404, detail="Kviz nije pronađen")
 
@@ -221,10 +237,11 @@ async def update_plan_item(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan nije pronađen")
 
-    item = db.query(StudyPlanItem).filter(
-        StudyPlanItem.id == item_id,
-        StudyPlanItem.plan_id == plan.id
-    ).first()
+    item = (
+        db.query(StudyPlanItem)
+        .filter(StudyPlanItem.id == item_id, StudyPlanItem.plan_id == plan.id)
+        .first()
+    )
     if not item:
         raise HTTPException(status_code=404, detail="Stavka nije pronađena")
 
@@ -248,10 +265,11 @@ async def complete_plan_item(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan nije pronađen")
 
-    item = db.query(StudyPlanItem).filter(
-        StudyPlanItem.id == item_id,
-        StudyPlanItem.plan_id == plan.id
-    ).first()
+    item = (
+        db.query(StudyPlanItem)
+        .filter(StudyPlanItem.id == item_id, StudyPlanItem.plan_id == plan.id)
+        .first()
+    )
     if not item:
         raise HTTPException(status_code=404, detail="Stavka nije pronađena")
 
@@ -276,10 +294,11 @@ async def delete_plan_item(
     if not plan:
         raise HTTPException(status_code=404, detail="Plan nije pronađen")
 
-    item = db.query(StudyPlanItem).filter(
-        StudyPlanItem.id == item_id,
-        StudyPlanItem.plan_id == plan.id
-    ).first()
+    item = (
+        db.query(StudyPlanItem)
+        .filter(StudyPlanItem.id == item_id, StudyPlanItem.plan_id == plan.id)
+        .first()
+    )
     if not item:
         raise HTTPException(status_code=404, detail="Stavka nije pronađena")
 
@@ -290,6 +309,7 @@ async def delete_plan_item(
 # ============================================================
 # PROGRESS
 # ============================================================
+
 
 @router.get("/me/progress", response_model=StudyPlanProgress)
 async def get_plan_progress(
@@ -315,39 +335,55 @@ async def get_plan_progress(
     week_end = week_start + timedelta(days=6)
 
     # Nedeljni progres
-    week_items = db.query(StudyPlanItem).filter(
-        StudyPlanItem.plan_id == plan.id,
-        StudyPlanItem.scheduled_for >= week_start,
-        StudyPlanItem.scheduled_for <= week_end,
-    ).all()
+    week_items = (
+        db.query(StudyPlanItem)
+        .filter(
+            StudyPlanItem.plan_id == plan.id,
+            StudyPlanItem.scheduled_for >= week_start,
+            StudyPlanItem.scheduled_for <= week_end,
+        )
+        .all()
+    )
     week_completed = sum(1 for i in week_items if i.is_completed)
 
     # Dnevni progres
-    today_items = db.query(StudyPlanItem).filter(
-        StudyPlanItem.plan_id == plan.id,
-        StudyPlanItem.scheduled_for == today,
-    ).order_by(StudyPlanItem.priority.desc()).all()
+    today_items = (
+        db.query(StudyPlanItem)
+        .filter(
+            StudyPlanItem.plan_id == plan.id,
+            StudyPlanItem.scheduled_for == today,
+        )
+        .order_by(StudyPlanItem.priority.desc())
+        .all()
+    )
     today_completed = sum(1 for i in today_items if i.is_completed)
 
     # Naredni zakazani (sledeća 7 dana, nezavršeni)
-    upcoming = db.query(StudyPlanItem).filter(
-        StudyPlanItem.plan_id == plan.id,
-        StudyPlanItem.scheduled_for >= today,
-        StudyPlanItem.is_completed == False,
-    ).order_by(
-        StudyPlanItem.scheduled_for,
-        StudyPlanItem.priority.desc()
-    ).limit(10).all()
+    upcoming = (
+        db.query(StudyPlanItem)
+        .filter(
+            StudyPlanItem.plan_id == plan.id,
+            StudyPlanItem.scheduled_for >= today,
+            StudyPlanItem.is_completed is False,
+        )
+        .order_by(StudyPlanItem.scheduled_for, StudyPlanItem.priority.desc())
+        .limit(10)
+        .all()
+    )
 
     # Streak — uzastopni dani unazad sa bar jednim završenim
     streak = 0
     check_date = today
     while True:
-        day_items = db.query(StudyPlanItem).filter(
-            StudyPlanItem.plan_id == plan.id,
-            StudyPlanItem.scheduled_for == check_date,
-            StudyPlanItem.is_completed == True,
-        ).count()
+        day_items = (
+            db.query(StudyPlanItem)
+            .filter(
+                StudyPlanItem.plan_id == plan.id,
+                StudyPlanItem.scheduled_for == check_date,
+                StudyPlanItem.is_completed is True,
+            )
+            .count()
+        )
         if day_items == 0 and check_date < today:
             break
         if day_items > 0:
@@ -356,7 +392,11 @@ async def get_plan_progress(
         if (today - check_date).days > 365:
             break
 
-    week_pct = round((week_completed / plan.weekly_quiz_goal) * 100, 1) if plan.weekly_quiz_goal else 0
+    week_pct = (
+        round((week_completed / plan.weekly_quiz_goal) * 100, 1)
+        if plan.weekly_quiz_goal
+        else 0
+    )
 
     return StudyPlanProgress(
         plan=plan_to_response(plan),

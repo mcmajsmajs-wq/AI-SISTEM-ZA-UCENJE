@@ -10,10 +10,9 @@ Autor: AI Learning System Team
 ================================================================================
 """
 
-from fastapi import FastAPI, Request
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
-from fastapi.responses import JSONResponse
 from contextlib import asynccontextmanager
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.util import get_remote_address
@@ -24,6 +23,7 @@ from app.core.logging_config import setup_logging
 from app.api.v1.router import api_router
 from app.db.session import engine
 from app.db.base import Base
+
 # Registrovanje svih modela za create_all
 from app.db.models.user import User, UserSession  # noqa
 from app.db.models.file import File  # noqa
@@ -34,7 +34,10 @@ from app.db.models.conversation import Conversation, Message  # noqa
 from app.workers.celery_app import celery_app  # noqa: ensure celery app is registered
 
 # Import automatic migration utility
-from app.utils.database_migration import check_and_add_missing_columns, verify_database_health
+from app.utils.database_migration import (
+    check_and_add_missing_columns,
+    verify_database_health,
+)
 
 import logging
 
@@ -50,12 +53,12 @@ async def lifespan(app: FastAPI):
     LIFESPAN MANAGER
     ================================================================================
     Upravlja inicijalizacijom i shutdown-om aplikacije.
-    
+
     Startup:
         - Loguje pokretanje aplikacije
         - Proverava konekcije ka bazama
         - Inicijalizuje servise
-    
+
     Shutdown:
         - Zatvara konekcije
         - Čisti resurse
@@ -69,13 +72,13 @@ async def lifespan(app: FastAPI):
     logger.info(f"Environment: {settings.ENVIRONMENT}")
     logger.info(f"Debug mode: {settings.DEBUG}")
     logger.info(f"Log level: {settings.LOG_LEVEL}")
-    
+
     # Kreiranje tabela (samo u developmentu, u produkciji koristiti Alembic)
     if settings.ENVIRONMENT == "development":
         logger.info("Creating database tables...")
         Base.metadata.create_all(bind=engine)
         logger.info("Database tables created successfully")
-    
+
     # Automatska provera i migracija kolona (radi i u produkciji)
     if verify_database_health():
         try:
@@ -85,12 +88,12 @@ async def lifespan(app: FastAPI):
             logger.warning("Aplikacija će pokušati da nastavi bez automatske migracije")
     else:
         logger.error("Baza podataka nije dostupna!")
-    
+
     logger.info("Application started successfully!")
     logger.info("=" * 80)
-    
+
     yield
-    
+
     # SHUTDOWN
     logger.info("=" * 80)
     logger.info("AI LEARNING SYSTEM - SHUTTING DOWN")
@@ -114,7 +117,7 @@ app = FastAPI(
     docs_url="/docs" if settings.DEBUG else None,
     redoc_url="/redoc" if settings.DEBUG else None,
     openapi_url="/openapi.json" if settings.DEBUG else None,
-    lifespan=lifespan
+    lifespan=lifespan,
 )
 
 app.state.limiter = limiter
@@ -145,6 +148,7 @@ app.include_router(api_router, prefix=settings.API_V1_STR)
 # HEALTH CHECK ENDPOINTS
 # ================================================================================
 
+
 @app.get("/health", tags=["Health"])
 async def health_check():
     """
@@ -155,7 +159,7 @@ async def health_check():
         "status": "healthy",
         "version": settings.VERSION,
         "environment": settings.ENVIRONMENT,
-        "timestamp": __import__('datetime').datetime.utcnow().isoformat()
+        "timestamp": __import__("datetime").datetime.utcnow().isoformat(),
     }
 
 
@@ -166,18 +170,14 @@ async def readiness_check():
     Proverava konekcije ka bazama i servisima.
     """
     from app.db.session import check_database_connection
-    
+
     db_healthy = check_database_connection()
-    
+
     if db_healthy:
-        return {
-            "status": "ready",
-            "checks": {
-                "database": "healthy"
-            }
-        }
+        return {"status": "ready", "checks": {"database": "healthy"}}
     else:
         from fastapi import HTTPException
+
         raise HTTPException(status_code=503, detail="Service not ready")
 
 
@@ -199,5 +199,5 @@ async def root():
         "version": settings.VERSION,
         "description": settings.PROJECT_DESCRIPTION,
         "documentation": "/docs",
-        "health": "/health"
+        "health": "/health",
     }

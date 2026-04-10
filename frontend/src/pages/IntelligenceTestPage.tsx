@@ -1,3 +1,17 @@
+/**
+ * ================================================================================
+ * Petar II Petrović-Njegoš
+ * "Blago tome ko dovijek živi, imao se rašta i roditi"
+ * ================================================================================
+ * 
+ * AI Learning System
+ * IntelligenceTestPage.tsx
+ * Verzija: 1.0.0
+ * Autor: Branko Suznjevic
+ * Datum: 2026
+ * ================================================================================
+ */
+
 import { useState } from 'react'
 import { useMutation } from '@tanstack/react-query'
 import { intelligenceTestApi } from '@/services/api'
@@ -688,8 +702,23 @@ export default function IntelligenceTestPage() {
       
       for (let i = 0; i < count && i < shuffled.length; i++) {
         if (!usedIds.has(shuffled[i].id)) {
-          questions.push(shuffled[i])
-          usedIds.add(shuffled[i].id)
+          const q = shuffled[i]
+          
+          // Shuffle options and update correctAnswer index
+          if (q.options && q.options.length > 1) {
+            const originalCorrect = q.options[q.correctAnswer]
+            const shuffledOptions = [...q.options].sort(() => Math.random() - 0.5)
+            const newCorrectIndex = shuffledOptions.indexOf(originalCorrect)
+            questions.push({
+              ...q,
+              options: shuffledOptions,
+              correctAnswer: newCorrectIndex
+            })
+          } else {
+            questions.push(q)
+          }
+          
+          usedIds.add(q.id)
         }
       }
     }

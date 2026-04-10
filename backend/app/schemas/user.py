@@ -38,7 +38,7 @@ class UserResponse(UserBase):
     is_verified: bool
     created_at: datetime
     updated_at: Optional[datetime] = None
-    
+
     class Config:
         from_attributes = True
 
@@ -54,6 +54,6 @@ class UserStats(BaseModel):
     current_streak_days: int = 0
     longest_streak_days: int = 0
     study_streak: int = 0  # alias for current_streak_days (frontend compat)
-    
+
     class Config:
         from_attributes = True

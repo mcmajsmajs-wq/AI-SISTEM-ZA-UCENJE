@@ -1,0 +1,65 @@
+{
+  "skill_name": "ai-learning-skills",
+  "evals": [
+    {
+      "id": 1,
+      "prompt": "Detektuj tip dokumenta iz teksta: 'Ugovor o pružanju usluga između naručioca i izvršioca'",
+      "expected_output": "legal",
+      "files": []
+    },
+    {
+      "id": 2,
+      "prompt": "Kreiraj quiz iz pravnog dokumenta sa 10 pitanja",
+      "expected_output": "quiz sa pravnim pitanjima, difficulty: medium",
+      "files": []
+    },
+    {
+      "id": 3,
+      "prompt": "Detektuj tip medicinske dokumentacije: 'Pacijent ima simptome bola u grudima. Dijagnoza: angina pectoris. Terapija: nitroglycerin 0.5mg sublingvalno.'",
+      "expected_output": "medical",
+      "files": []
+    },
+    {
+      "id": 4,
+      "prompt": "Detektuj tip iz tehničkog priručnika: 'Installation guide for API. Step 1: Configure settings.json. Step 2: Run npm install. Error code: E001'",
+      "expected_output": "technical",
+      "files": []
+    },
+    {
+      "id": 5,
+      "prompt": "Koji je prompt template za akademski rad?",
+      "expected_output": "academic template sa metodologija, rezultati, diskusija",
+      "files": []
+    },
+    {
+      "id": 6,
+      "prompt": "Generiši quiz iz udžbenika matematike za srednju školu sa 10 pitanja",
+      "expected_output": "textbook template, difficulty: medium, focus na formule",
+      "files": []
+    },
+    {
+      "id": 7,
+      "prompt": "Detektuj tip iz chunks-ova: ['Chapter 1: Introduction', 'Theorem 1: For any a,b', 'Proof: Therefore']",
+      "expected_output": "textbook",
+      "files": []
+    },
+    {
+      "id": 8,
+      "prompt": "Šta vraća detect_and_get_template za opšti članak?",
+      "expected_output": "general category, template sa osnovnim pravilima",
+      "files": []
+    },
+    {
+      "id": 9,
+      "prompt": "Integracija sa quiz sistemom - detektuj tip pravnog ugovora i generiši pitanja",
+      "expected_output": "legal category + quiz pravila (definitions, obligations, deadlines)",
+      "files": []
+    },
+    {
+      "id": 10,
+      "prompt": "Detektuj tip dokumenta: 'Research methodology: Survey of 500 participants. Results: p<0.05. Statistical analysis using t-test.'",
+      "expected_output": "academic",
+      "files": []
+    }
+  ]
+}

@@ -241,7 +241,7 @@ export default function PipelineModal({ documentId, documentTitle, onClose, onSt
                 <label className="text-xs font-semibold text-gray-600 mb-1 block">
                   Pitanja: <span className="text-indigo-600">{numQuestions === 0 ? 'Auto' : numQuestions}</span>
                 </label>
-                <input type="range" min={0} max={50} value={numQuestions}
+                <input type="range" min={0} max={30} value={numQuestions}
                   onChange={e => setNumQuestions(Number(e.target.value))}
                   className="w-full accent-indigo-600" />
               </div>

@@ -12,7 +12,6 @@ Verzija: 1.0.0
 from fastapi import APIRouter, Depends, HTTPException, status, UploadFile, File
 from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
-from typing import List
 import logging
 import uuid
 from pathlib import Path
@@ -22,7 +21,6 @@ from app.db.session import get_db
 from app.db.models.user import User
 from app.db.models.file import File as FileModel
 from app.schemas.file import FileResponse, FileUploadResponse, FileListResponse
-from app.core.config import settings
 from app.services.auth import get_current_user
 from app.services.storage import storage_service
 
@@ -30,100 +28,110 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-ALLOWED_EXTENSIONS = {'.pdf', '.txt', '.docx', '.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.webp'}
+ALLOWED_EXTENSIONS = {
+    ".pdf",
+    ".txt",
+    ".docx",
+    ".jpg",
+    ".jpeg",
+    ".png",
+    ".gif",
+    ".bmp",
+    ".tiff",
+    ".webp",
+}
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB
 
 
-@router.post("/upload", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED)
+@router.post(
+    "/upload", response_model=FileUploadResponse, status_code=status.HTTP_201_CREATED
+)
 async def upload_file(
     file: UploadFile = File(...),
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
     UPLOAD FAJLA
     ================================================================================
     Uploaduje fajl (PDF, TXT, DOCX, slike) za obradu.
-    
+
     Validacije:
         - Mora biti dozvoljeni format (PDF, TXT, DOCX, JPG, PNG, itd.)
         - Maksimalna veličina: 50MB
-    
+
     Args:
         file: UploadFile objekat
         current_user: Trenutno ulogovani korisnik
         db: Database session
-    
+
     Returns:
         FileUploadResponse sa ID-jem i statusom
     ================================================================================
     """
     logger.info(f"File upload started: {file.filename} by user {current_user.email}")
-    
+
     # Validacija ekstenzije
     file_ext = Path(file.filename).suffix.lower()
     if file_ext not in ALLOWED_EXTENSIONS:
         logger.warning(f"Invalid file extension: {file_ext}")
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid file type. Allowed types: PDF, TXT, DOCX, JPG, PNG, GIF, BMP, TIFF, WebP. Got: {file_ext}"
+            detail=f"Invalid file type. Allowed types: PDF, TXT, DOCX, JPG, PNG, GIF, BMP, TIFF, WebP. Got: {file_ext}",
         )
-    
+
     # Čitanje sadržaja
     content = await file.read()
     file_size = len(content)
-    
+
     # Validacija veličine
     if file_size > MAX_FILE_SIZE:
         logger.warning(f"File too large: {file_size} bytes")
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE // 1024 // 1024}MB. Got: {file_size // 1024 // 1024}MB"
+            detail=f"File too large. Maximum size is {MAX_FILE_SIZE // 1024 // 1024}MB. Got: {file_size // 1024 // 1024}MB",
         )
-    
+
     # Upload u MinIO
     try:
         upload_result = storage_service.upload_file(
             file_content=BytesIO(content),
             filename=file.filename,
             user_id=str(current_user.id),
-            content_type=file.content_type or "application/pdf"
+            content_type=file.content_type or "application/pdf",
         )
     except Exception as e:
         logger.error(f"Failed to upload to storage: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to upload file to storage"
+            detail="Failed to upload file to storage",
         )
-    
+
     # Kreiranje zapisa u bazi
     db_file = FileModel(
         user_id=current_user.id,
         original_filename=file.filename,
-        storage_path=upload_result['storage_path'],
+        storage_path=upload_result["storage_path"],
         file_size=file_size,
         mime_type=file.content_type or "application/pdf",
-        checksum=upload_result['checksum'],
+        checksum=upload_result["checksum"],
         status="uploaded",
-        metadata={
-            'original_size': file_size,
-            'upload_source': 'web'
-        }
+        metadata={"original_size": file_size, "upload_source": "web"},
     )
-    
+
     db.add(db_file)
     db.commit()
     db.refresh(db_file)
-    
+
     logger.info(f"File uploaded successfully: {db_file.id}")
-    
+
     return FileUploadResponse(
         id=str(db_file.id),
         filename=db_file.original_filename,
         size=db_file.file_size,
         status=db_file.status,
-        message="File uploaded successfully"
+        message="File uploaded successfully",
     )
 
 
@@ -132,7 +140,7 @@ async def list_files(
     skip: int = 0,
     limit: int = 20,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -142,19 +150,24 @@ async def list_files(
     ================================================================================
     """
     logger.debug(f"Listing files for user: {current_user.email}")
-    
+
     # Query za ukupan broj
-    total = db.query(FileModel).filter(
-        FileModel.user_id == current_user.id,
-        FileModel.deleted_at.is_(None)
-    ).count()
-    
+    total = (
+        db.query(FileModel)
+        .filter(FileModel.user_id == current_user.id, FileModel.deleted_at.is_(None))
+        .count()
+    )
+
     # Query sa paginacijom
-    files = db.query(FileModel).filter(
-        FileModel.user_id == current_user.id,
-        FileModel.deleted_at.is_(None)
-    ).order_by(FileModel.created_at.desc()).offset(skip).limit(limit).all()
-    
+    files = (
+        db.query(FileModel)
+        .filter(FileModel.user_id == current_user.id, FileModel.deleted_at.is_(None))
+        .order_by(FileModel.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+        .all()
+    )
+
     return FileListResponse(
         items=[
             FileResponse(
@@ -163,13 +176,13 @@ async def list_files(
                 size=f.file_size,
                 mime_type=f.mime_type,
                 status=f.status,
-                created_at=f.created_at
+                created_at=f.created_at,
             )
             for f in files
         ],
         total=total,
         skip=skip,
-        limit=limit
+        limit=limit,
     )
 
 
@@ -177,7 +190,7 @@ async def list_files(
 async def get_file(
     file_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -187,34 +200,36 @@ async def get_file(
     ================================================================================
     """
     logger.debug(f"Fetching file: {file_id}")
-    
+
     try:
         file_uuid = uuid.UUID(file_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file ID format"
         )
-    
-    db_file = db.query(FileModel).filter(
-        FileModel.id == file_uuid,
-        FileModel.user_id == current_user.id,
-        FileModel.deleted_at.is_(None)
-    ).first()
-    
+
+    db_file = (
+        db.query(FileModel)
+        .filter(
+            FileModel.id == file_uuid,
+            FileModel.user_id == current_user.id,
+            FileModel.deleted_at.is_(None),
+        )
+        .first()
+    )
+
     if not db_file:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
-    
+
     return FileResponse(
         id=str(db_file.id),
         filename=db_file.original_filename,
         size=db_file.file_size,
         mime_type=db_file.mime_type,
         status=db_file.status,
-        created_at=db_file.created_at
+        created_at=db_file.created_at,
     )
 
 
@@ -222,7 +237,7 @@ async def get_file(
 async def download_file(
     file_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -232,42 +247,44 @@ async def download_file(
     ================================================================================
     """
     logger.info(f"Download requested for file: {file_id}")
-    
+
     try:
         file_uuid = uuid.UUID(file_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file ID format"
         )
-    
-    db_file = db.query(FileModel).filter(
-        FileModel.id == file_uuid,
-        FileModel.user_id == current_user.id,
-        FileModel.deleted_at.is_(None)
-    ).first()
-    
+
+    db_file = (
+        db.query(FileModel)
+        .filter(
+            FileModel.id == file_uuid,
+            FileModel.user_id == current_user.id,
+            FileModel.deleted_at.is_(None),
+        )
+        .first()
+    )
+
     if not db_file:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
-    
+
     try:
         content = storage_service.download_file(db_file.storage_path)
     except Exception as e:
         logger.error(f"Failed to download from storage: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to download file"
+            detail="Failed to download file",
         )
-    
+
     return StreamingResponse(
         BytesIO(content),
         media_type=db_file.mime_type,
         headers={
-            'Content-Disposition': f'attachment; filename="{db_file.original_filename}"'
-        }
+            "Content-Disposition": f'attachment; filename="{db_file.original_filename}"'
+        },
     )
 
 
@@ -275,7 +292,7 @@ async def download_file(
 async def delete_file(
     file_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -285,35 +302,38 @@ async def delete_file(
     ================================================================================
     """
     logger.warning(f"File deletion requested: {file_id}")
-    
+
     try:
         file_uuid = uuid.UUID(file_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file ID format"
         )
-    
-    db_file = db.query(FileModel).filter(
-        FileModel.id == file_uuid,
-        FileModel.user_id == current_user.id,
-        FileModel.deleted_at.is_(None)
-    ).first()
-    
+
+    db_file = (
+        db.query(FileModel)
+        .filter(
+            FileModel.id == file_uuid,
+            FileModel.user_id == current_user.id,
+            FileModel.deleted_at.is_(None),
+        )
+        .first()
+    )
+
     if not db_file:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
-    
+
     # Soft delete
     from datetime import datetime
+
     db_file.deleted_at = datetime.utcnow()
     db_file.status = "deleted"
     db.commit()
-    
+
     logger.info(f"File soft deleted: {file_id}")
-    
+
     return None
 
 
@@ -321,7 +341,7 @@ async def delete_file(
 async def get_file_status(
     file_id: str,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -331,26 +351,25 @@ async def get_file_status(
     ================================================================================
     """
     logger.debug(f"Checking status for file: {file_id}")
-    
+
     try:
         file_uuid = uuid.UUID(file_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file ID format"
         )
-    
-    db_file = db.query(FileModel).filter(
-        FileModel.id == file_uuid,
-        FileModel.user_id == current_user.id
-    ).first()
-    
+
+    db_file = (
+        db.query(FileModel)
+        .filter(FileModel.id == file_uuid, FileModel.user_id == current_user.id)
+        .first()
+    )
+
     if not db_file:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
-    
+
     return {
         "file_id": str(db_file.id),
         "filename": db_file.original_filename,
@@ -358,7 +377,7 @@ async def get_file_status(
         "progress": 100 if db_file.status == "uploaded" else 0,
         "message": f"File is {db_file.status}",
         "created_at": db_file.created_at.isoformat() if db_file.created_at else None,
-        "updated_at": db_file.updated_at.isoformat() if db_file.updated_at else None
+        "updated_at": db_file.updated_at.isoformat() if db_file.updated_at else None,
     }
 
 
@@ -367,7 +386,7 @@ async def get_presigned_url(
     file_id: str,
     expiration: int = 3600,
     current_user: User = Depends(get_current_user),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
 ):
     """
     ================================================================================
@@ -377,41 +396,38 @@ async def get_presigned_url(
     ================================================================================
     """
     logger.debug(f"Generating presigned URL for file: {file_id}")
-    
+
     try:
         file_uuid = uuid.UUID(file_id)
     except ValueError:
         raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Invalid file ID format"
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid file ID format"
         )
-    
-    db_file = db.query(FileModel).filter(
-        FileModel.id == file_uuid,
-        FileModel.user_id == current_user.id,
-        FileModel.deleted_at.is_(None)
-    ).first()
-    
+
+    db_file = (
+        db.query(FileModel)
+        .filter(
+            FileModel.id == file_uuid,
+            FileModel.user_id == current_user.id,
+            FileModel.deleted_at.is_(None),
+        )
+        .first()
+    )
+
     if not db_file:
         raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="File not found"
+            status_code=status.HTTP_404_NOT_FOUND, detail="File not found"
         )
-    
+
     try:
         url = storage_service.get_presigned_url(
-            db_file.storage_path,
-            expiration=expiration
+            db_file.storage_path, expiration=expiration
         )
     except Exception as e:
         logger.error(f"Failed to generate presigned URL: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to generate download URL"
+            detail="Failed to generate download URL",
         )
-    
-    return {
-        "url": url,
-        "expires_in": expiration,
-        "filename": db_file.original_filename
-    }
+
+    return {"url": url, "expires_in": expiration, "filename": db_file.original_filename}
