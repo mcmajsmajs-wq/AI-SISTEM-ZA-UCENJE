@@ -98,8 +98,8 @@ pytz==2023.3
 # OCR - Tesseract (already included in Dockerfile)
 # srpski jezik: tesseract-ocr-srp
 # Surya OCR - modern ML-based OCR (fallback for better accuracy)
-# ================================================================================
-surya-ocr
+# NOTE: surya-ocr requires Python 3.10+, not available for Python 3.8
+# surya-ocr  # Removed - requires Python 3.10+, not compatible with CI Python 3.8
 
 # ================================================================================
 # DEVELOPMENT & TESTING
