@@ -91,7 +91,7 @@ jobs:
       - name: Build Docker image
         run: |
           docker build -t ai-learning-backend:${{ github.sha }} ./backend
-          docker build -t ai-learning-frontend:${{ github.sha }} ./frontend
+          # Frontend uses pre-built dist in nginx, no separate Dockerfile needed
       
       - name: Run container health check
         run: |
