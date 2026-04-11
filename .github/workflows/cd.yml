@@ -189,7 +189,6 @@ jobs:
       (github.ref == 'refs/heads/main' || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'staging'))
     environment:
       name: staging
-      url: http://${{ secrets.STAGING_SSH_HOST }}
 
     steps:
       - name: Checkout koda
@@ -300,7 +299,6 @@ jobs:
       (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && github.event.inputs.environment == 'production'))
     environment:
       name: production
-      url: http://${{ secrets.PRODUCTION_SSH_HOST }}
 
     steps:
       - name: Checkout koda
