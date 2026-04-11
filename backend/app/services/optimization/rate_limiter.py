@@ -14,7 +14,6 @@ Datum: 2026-04-10
 ================================================================================
 """
 
-import time
 from typing import Optional
 
 import redis

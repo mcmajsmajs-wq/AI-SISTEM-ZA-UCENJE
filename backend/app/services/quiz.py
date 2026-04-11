@@ -15,32 +15,29 @@ Verzija: 2.1.0
 """
 
 # Re-export everything from the new modular structure for backwards compatibility
+# noqa: F401 - intentionally re-exported for backwards compatibility
 from app.services.quiz import (
-    # Prompts
-    QUIZ_PROMPT,
-    # Helpers
-    _parse_questions,
-    _validate_questions,
-    _fallback_questions,
-    is_chunk_quality,
-    select_chunks_for_quiz,
-    get_images_for_chunks,
-    get_quiz_usage_stats,
-    mark_chunks_as_used,
-    # Clients
-    BaseQuizClient,
-    OllamaQuizClient,
-    OpenAIQuizClient,
-    ClaudeQuizClient,
-    OpenAICompatQuizClient,
-    get_provider,
-    get_available_providers,
-    get_clients,
-    # Service
-    QuizService,
-    quiz_service,
-    detect_subject_area,
-    get_specialized_prompt,
+    BaseQuizClient,  # noqa: F401
+    ClaudeQuizClient,  # noqa: F401
+    OllamaQuizClient,  # noqa: F401
+    OpenAICompatQuizClient,  # noqa: F401
+    OpenAIQuizClient,  # noqa: F401
+    _fallback_questions,  # noqa: F401
+    _parse_questions,  # noqa: F401
+    _validate_questions,  # noqa: F401
+    detect_subject_area,  # noqa: F401
+    get_available_providers,  # noqa: F401
+    get_clients,  # noqa: F401
+    get_images_for_chunks,  # noqa: F401
+    get_quiz_usage_stats,  # noqa: F401
+    get_provider,  # noqa: F401
+    get_specialized_prompt,  # noqa: F401
+    is_chunk_quality,  # noqa: F401
+    mark_chunks_as_used,  # noqa: F401
+    QUIZ_PROMPT,  # noqa: F401
+    QuizService,  # noqa: F401
+    quiz_service,  # noqa: F401
+    select_chunks_for_quiz,  # noqa: F401
 )
 
 
@@ -48,6 +45,7 @@ from app.services.quiz import (
 def _get_redis():
     """Get Redis connection for progress tracking."""
     import redis as redis_client
+
     from app.core.config import settings
 
     try:
@@ -61,6 +59,7 @@ def _get_redis():
 def update_quiz_progress(quiz_id: str, current: int, total: int):
     """Update quiz progress in Redis."""
     import redis as redis_lib
+
     from app.core.config import settings
 
     try:

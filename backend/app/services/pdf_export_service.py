@@ -56,7 +56,7 @@ class PDFExportService:
     """PDF Export Service - Generisanje PDF fajla od prevedenih chunkova."""
 
     def _build_styles(self):
-        _styles = getSampleStyleSheet()
+        getSampleStyleSheet()
         return {
             "title": ParagraphStyle(
                 "DocTitle",

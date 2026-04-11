@@ -17,12 +17,10 @@ Datum: 2026-04-10
 ================================================================================
 """
 
-import time
-from typing import Any, Dict, Optional, Callable
-from contextlib import contextmanager
+from typing import Any, Dict, Optional
 
 import httpx
-from httpx import Client as HTTPClient, Timeout, Limits, ConnectError, ReadTimeout
+from httpx import Client as HTTPClient, Timeout, Limits
 
 
 class ConnectionPool:
@@ -170,7 +168,7 @@ class ConnectionPool:
             }
 
         try:
-            pools = self._client._transport._pool
+            self._client._transport._pool  # noqa: F841
             return {
                 "status": "active",
                 "max_connections": self.max_connections,

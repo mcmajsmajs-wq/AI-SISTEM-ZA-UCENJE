@@ -62,17 +62,19 @@ def _build_clients(
     gemini_key = user_gemini_key or getattr(settings, "GEMINI_API_KEY", "") or ""
     groq_key = user_groq_key or getattr(settings, "GROQ_API_KEY", "") or ""
     mistral_key = user_mistral_key or getattr(settings, "MISTRAL_API_KEY", "") or ""
-    openai_key = user_openai_key or getattr(settings, "OPENAI_API_KEY", "") or ""
-    claude_key = user_claude_key or getattr(settings, "ANTHROPIC_API_KEY", "") or ""
     deepseek_key = user_deepseek_key or getattr(settings, "DEEPSEEK_API_KEY", "") or ""
 
     ollama = OllamaQuizClient()
     openai = OpenAIQuizClient()
     if user_openai_key:
         openai.api_key = user_openai_key
+    elif getattr(settings, "OPENAI_API_KEY", ""):
+        openai.api_key = settings.OPENAI_API_KEY
     claude = ClaudeQuizClient()
     if user_claude_key:
         claude.api_key = user_claude_key
+    elif getattr(settings, "ANTHROPIC_API_KEY", ""):
+        claude.api_key = settings.ANTHROPIC_API_KEY
 
     return {
         "ollama": ollama,

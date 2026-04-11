@@ -16,8 +16,7 @@ Datum: 2026-04-10
 
 import json
 import pickle
-from typing import Any, Optional, Union
-from datetime import timedelta
+from typing import Any, Optional
 
 import redis
 from redis.exceptions import RedisError

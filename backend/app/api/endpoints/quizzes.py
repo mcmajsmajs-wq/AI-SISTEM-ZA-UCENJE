@@ -593,16 +593,6 @@ async def get_attempt_result(
     )
 
 
-@router.get("/providers/list")
-async def get_quiz_providers(
-    current_user: User = Depends(get_current_user),
-):
-    """Lista dostupnih AI provajdera za generisanje kvizova."""
-    from app.services.quiz import quiz_service
-
-    return {"providers": quiz_service.get_available_providers()}
-
-
 # ============================================================
 # QUIZ QUESTION CHAT
 # ============================================================
@@ -901,6 +891,7 @@ AI odgovor: {reply}"""
     # Generate embedding for the content
     try:
         from app.services.rag import embed_text
+
         embedding = embed_text(content)
         embedding_str = "[" + ",".join(str(v) for v in embedding) + "]"
     except Exception:
