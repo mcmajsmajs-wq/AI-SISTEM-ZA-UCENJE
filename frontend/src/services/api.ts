@@ -12,6 +12,17 @@ const api = axios.create({
   timeout: 30000,
 })
 
+// Helper function for form data requests
+const postForm = async (url: string, data: Record<string, string>) => {
+  const formData = new URLSearchParams()
+  Object.entries(data).forEach(([key, value]) => {
+    formData.append(key, value)
+  })
+  return axios.post(`${API_BASE_URL}${url}`, formData, {
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+  })
+}
+
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = useAuthStore.getState().token
@@ -68,7 +79,7 @@ api.interceptors.response.use(
 
 export const authApi = {
   login: (username: string, password: string) =>
-    api.postForm('/auth/login', { username, password }),
+    postForm('/auth/login', { username, password }),
   
   loginJson: (email: string, password: string) =>
     api.post('/auth/login/json', { email, password }),

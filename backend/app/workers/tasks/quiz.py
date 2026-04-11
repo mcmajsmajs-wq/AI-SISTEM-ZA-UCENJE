@@ -18,7 +18,7 @@ from sqlalchemy.orm import sessionmaker
 import logging
 from typing import Optional
 
-from app.core.config import settings
+from app.core.config import settings  # noqa: F401
 from app.db.session import engine
 from app.db.models.document import Document
 from app.db.models.quiz import Quiz
@@ -181,7 +181,7 @@ def auto_pipeline_task(
         document.status = "processing"
         db.commit()
 
-        from app.workers.tasks.pdf_processing import process_pdf_task as _pdf_task
+        from app.workers.tasks.pdf_processing import process_pdf_task as _pdf_task  # noqa: F401
 
         # We can't call task directly - we need to call the logic
         # For pipeline, we'll inline the processing logic
@@ -223,7 +223,7 @@ def auto_pipeline_task(
         # Step 2: Translation (optional)
         if not skip_translation:
             logger.info("[PIPELINE] Korak 2: Prevod dokumenta")
-            from app.workers.tasks.translation import translate_document_task
+            from app.workers.tasks.translation import translate_document_task  # noqa: F401
 
             # This would run as separate task in production
             # For now, we just set status
@@ -245,9 +245,8 @@ def auto_pipeline_task(
         db.add(quiz)
         db.commit()
 
-        from app.workers.tasks.quiz import generate_quiz_task
-
-        # This would run as separate task in production
+        # NOTE: In production, this would be a separate Celery task
+        # from app.workers.tasks.quiz import generate_quiz_task
         quiz.status = "ready"
         db.commit()
 

@@ -15,14 +15,12 @@ Verzija: 2.0.0 (FAZA 4 - Modularizacija)
 
 # Import flag_modified for backward compatibility test
 # Koristi se u translation task za update JSON polja (document.file_metadata)
-# flag_modified(document, "file_metadata") - koristi se u app.workers.tasks.translation
-# flag_modified(document, "file_metadata") - koristi se u translation.py
-# flag_modified(document, "file_metadata") - koristi se u translate_document_task
-
-from sqlalchemy.orm.attributes import flag_modified
+# noqa: F401 - intentionally imported for backward compatibility
+from sqlalchemy.orm.attributes import flag_modified  # noqa: F401
 
 # Re-export everything from the new modular structure for backwards compatibility
-from app.workers.tasks import (
+# noqa: F401 - intentionally re-exported for backward compatibility
+from app.workers.tasks import (  # noqa: F401
     # PDF Processing
     process_pdf_task,
     # Translation

@@ -16,29 +16,30 @@ import sys
 
 logger = logging.getLogger(__name__)
 
+
 class ActionLogger:
     """Logger za praćenje akcija u sistemu."""
-    
+
     def __init__(self):
         self.actions = []
         self.errors = []
-    
+
     def log_action(self, action_type: str, details: dict, status: str = "success"):
         """Beleži akciju."""
         entry = {
             "timestamp": datetime.now().isoformat(),
             "type": action_type,
             "details": details,
-            "status": status
+            "status": status,
         }
         self.actions.append(entry)
-        
+
         if status == "error":
             self.errors.append(entry)
             logger.error(f"[{action_type}] GREŠKA: {details}")
         else:
             logger.info(f"[{action_type}] {status}: {details}")
-    
+
     def log_error(self, action_type: str, error: Exception, context: dict = None):
         """Beleži grešku sa kompletnim traceback-om."""
         error_entry = {
@@ -47,15 +48,15 @@ class ActionLogger:
             "error": str(error),
             "error_type": type(error).__name__,
             "traceback": traceback.format_exc(),
-            "context": context or {}
+            "context": context or {},
         }
         self.errors.append(error_entry)
-        
+
         logger.error(f"[{action_type}] GREŠKA: {error}")
         logger.error(f"Traceback: {traceback.format_exc()}")
-        
+
         return error_entry
-    
+
     def get_actions(self, action_type: str = None, status: str = None):
         """Vraća filtrirane akcije."""
         result = self.actions
@@ -64,15 +65,16 @@ class ActionLogger:
         if status:
             result = [a for a in result if a["status"] == status]
         return result
-    
+
     def get_errors(self):
         """Vraća sve greške."""
         return self.errors
-    
+
     def clear(self):
         """Čisti log."""
         self.actions.clear()
         self.errors.clear()
+
 
 # Globalna instanca
 action_logger = ActionLogger()
@@ -80,6 +82,7 @@ action_logger = ActionLogger()
 
 def log_action(action_type: str):
     """Dekorator za automatsko beleženje akcija."""
+
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs) -> Any:
@@ -87,40 +90,38 @@ def log_action(action_type: str):
             context = {
                 "function": func.__name__,
                 "args": str(args)[:100],
-                "kwargs": str(kwargs)[:100]
+                "kwargs": str(kwargs)[:100],
             }
-            
+
             try:
                 result = func(*args, **kwargs)
                 duration = time.time() - start_time
-                
+
                 action_logger.log_action(
                     action_type=action_type,
                     details={
                         **context,
                         "duration_seconds": round(duration, 2),
-                        "result": str(result)[:100] if result else None
+                        "result": str(result)[:100] if result else None,
                     },
-                    status="success"
+                    status="success",
                 )
-                
+
                 return result
-                
+
             except Exception as e:
                 duration = time.time() - start_time
                 error_entry = action_logger.log_error(
                     action_type=action_type,
                     error=e,
-                    context={
-                        **context,
-                        "duration_seconds": round(duration, 2)
-                    }
+                    context={**context, "duration_seconds": round(duration, 2)},
                 )
-                
+
                 # Baci dalje da se propagira
                 raise
-        
+
         return wrapper
+
     return decorator
 
 
@@ -131,13 +132,15 @@ def log_quiz_generation(provider: str, document_id: str, num_questions: int):
         details={
             "provider": provider,
             "document_id": document_id,
-            "num_questions": num_questions
+            "num_questions": num_questions,
         },
-        status="started"
+        status="started",
     )
 
 
-def log_quiz_progress(quiz_id: str, current: int, total: int, status: str = "in_progress"):
+def log_quiz_progress(
+    quiz_id: str, current: int, total: int, status: str = "in_progress"
+):
     """Beleži progres kviza."""
     action_logger.log_action(
         action_type="quiz_progress",
@@ -145,9 +148,9 @@ def log_quiz_progress(quiz_id: str, current: int, total: int, status: str = "in_
             "quiz_id": quiz_id,
             "current_question": current,
             "total_questions": total,
-            "progress_percent": round(current/total*100, 1) if total > 0 else 0
+            "progress_percent": round(current / total * 100, 1) if total > 0 else 0,
         },
-        status=status
+        status=status,
     )
 
 
@@ -159,9 +162,9 @@ def log_quiz_complete(quiz_id: str, num_questions: int, provider: str, duration:
             "quiz_id": quiz_id,
             "num_questions": num_questions,
             "provider": provider,
-            "duration_seconds": round(duration, 2)
+            "duration_seconds": round(duration, 2),
         },
-        status="completed"
+        status="completed",
     )
 
 
@@ -169,15 +172,14 @@ def log_pdf_processing(document_id: str, total_pages: int, status: str):
     """Beleži procesiranje PDF-a."""
     action_logger.log_action(
         action_type="pdf_processing",
-        details={
-            "document_id": document_id,
-            "total_pages": total_pages
-        },
-        status=status
+        details={"document_id": document_id, "total_pages": total_pages},
+        status=status,
     )
 
 
-def log_ocr_progress(document_id: str, current_page: int, total_pages: int, method: str):
+def log_ocr_progress(
+    document_id: str, current_page: int, total_pages: int, method: str
+):
     """Beleži progres OCR-a."""
     action_logger.log_action(
         action_type="ocr_progress",
@@ -186,9 +188,9 @@ def log_ocr_progress(document_id: str, current_page: int, total_pages: int, meth
             "current_page": current_page,
             "total_pages": total_pages,
             "method": method,
-            "progress_percent": round(current_page/total_pages*100, 1)
+            "progress_percent": round(current_page / total_pages * 100, 1),
         },
-        status="in_progress"
+        status="in_progress",
     )
 
 
@@ -198,7 +200,7 @@ def get_system_status():
         "total_actions": len(action_logger.actions),
         "total_errors": len(action_logger.errors),
         "recent_actions": action_logger.actions[-10:],
-        "recent_errors": action_logger.errors[-5:]
+        "recent_errors": action_logger.errors[-5:],
     }
 
 

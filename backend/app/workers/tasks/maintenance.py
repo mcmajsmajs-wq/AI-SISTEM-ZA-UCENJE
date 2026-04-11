@@ -18,7 +18,7 @@ from celery import shared_task
 from sqlalchemy.orm import sessionmaker
 import logging
 
-from app.core.config import settings
+from app.core.config import settings  # noqa: F401
 from app.db.session import engine
 
 logger = logging.getLogger(__name__)
@@ -84,8 +84,8 @@ def send_study_reminders():
     from datetime import date, datetime
     from app.db.models.user import User
     from app.db.models.study_plan import StudyPlan, StudyPlanItem
-    from app.db.models.quiz import QuizAttempt
-    from sqlalchemy import func
+    from app.db.models.quiz import QuizAttempt  # noqa: F401
+    from sqlalchemy import func  # noqa: F401
     from app.services.email_service import email_service
 
     logger.info("Pokretanje dnevnih podsetnika...")
@@ -155,8 +155,8 @@ def send_weekly_summaries():
     from datetime import date, timedelta
     from app.db.models.user import User
     from app.db.models.study_plan import StudyPlan, StudyPlanItem
-    from app.db.models.quiz import Quiz, QuizAttempt
-    from sqlalchemy import func
+    from app.db.models.quiz import QuizAttempt  # noqa: F841
+    from sqlalchemy import func  # noqa: F401
     from app.services.email_service import email_service
     from app.api.endpoints.analytics import _calc_streak
 

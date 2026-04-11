@@ -20,7 +20,7 @@ import logging
 import time
 from typing import Any, Optional
 
-from app.core.config import settings
+from app.core.config import settings  # noqa: F401
 from app.db.session import engine
 from app.db.models.document import Document, Chunk
 from app.db.models.user import User
@@ -95,9 +95,7 @@ def translate_with_fallback(
         if client:
             for attempt in range(3):
                 try:
-                    result = client.translate(
-                        text, source_language, target_language
-                    )
+                    result = client.translate(text, source_language, target_language)
                     if result.success:
                         return result
                     last_error = result.error
@@ -216,7 +214,7 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
         import re as _re
 
         for batch_start in range(0, len(untranslated), BATCH_SIZE):
-            batch = untranslated[batch_start:batch_start + BATCH_SIZE]
+            batch = untranslated[batch_start : batch_start + BATCH_SIZE]
 
             separator = "\n\n### {}\n"
             batch_text = ""
@@ -273,6 +271,7 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
             db.commit()
 
             import datetime as _dt
+
             _meta = dict(document.file_metadata or {})
             _meta["translation_progress"] = {
                 "translated_chunks": translated_count,

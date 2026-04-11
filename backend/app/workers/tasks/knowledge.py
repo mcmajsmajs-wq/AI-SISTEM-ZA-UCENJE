@@ -210,7 +210,7 @@ def crawl_site_task(
     from bs4 import BeautifulSoup
 
     parsed_start = urlparse(start_url)
-    base_domain = f"{parsed_start.scheme}://{parsed_start.netloc}"
+    base_domain = f"{parsed_start.scheme}://{parsed_start.netloc}"  # noqa: F841
 
     visited: set[str] = set()
     queue: list[tuple[str, int]] = [(start_url, 0)]

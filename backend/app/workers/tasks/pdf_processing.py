@@ -16,7 +16,7 @@ from sqlalchemy.orm import sessionmaker
 import logging
 import uuid
 
-from app.core.config import settings
+from app.core.config import settings  # noqa: F401
 from app.db.session import engine
 from app.db.models.file import File
 from app.db.models.document import Document, Chunk
@@ -134,7 +134,9 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
                 document.file_metadata["processing_error"] = str(exc)
                 db.commit()
 
-            file = db.query(File).filter(File.id == file_id).first() if file_id else None
+            file = (
+                db.query(File).filter(File.id == file_id).first() if file_id else None
+            )
             if file:
                 file.status = "error"
                 file.file_metadata = {"error": str(exc)}
