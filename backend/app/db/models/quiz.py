@@ -106,6 +106,8 @@ class Question(Base):
             "odd_one_out",  # Pronađi uljeza
             "estimation",  # Procena vrednosti (klizač)
             "matrix",  # True/False matrica
+            # TEKSTUALNI ODGOVOR (2026-04-15)
+            "text_input",  # Korisnik kuca tekstualni odgovor
             name="question_type",
         ),
         nullable=False,

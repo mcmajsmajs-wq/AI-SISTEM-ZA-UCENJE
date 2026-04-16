@@ -30,6 +30,47 @@ import {
 } from 'lucide-react'
 import clsx from 'clsx'
 
+// Smart pagination helper - prikazuje relevantne stranice sa ... gde je potrebno
+function generatePageNumbers(currentPage: number, totalPages: number): (number | '...')[] {
+  if (totalPages <= 10) {
+    return Array.from({ length: totalPages }, (_, i) => i)
+  }
+
+  const pages: (number | '...')[] = []
+  const delta = 2 // broj stranica oko trenutne
+
+  // Uvek prikazi prvih 5
+  const firstPages = [0, 1, 2, 3, 4]
+  
+  // Uvek prikazi poslednjih 5
+  const lastPages = [
+    totalPages - 5,
+    totalPages - 4,
+    totalPages - 3,
+    totalPages - 2,
+    totalPages - 1,
+  ]
+
+  // Stranice oko trenutne
+  const aroundCurrent = Array.from(
+    { length: delta * 2 + 1 },
+    (_, i) => currentPage - delta + i
+  ).filter((p) => p > 4 && p < totalPages - 5)
+
+  // Kombinuj i sortiraj
+  const allPages = [...new Set([...firstPages, ...aroundCurrent, ...lastPages])].sort((a, b) => a - b)
+
+  // Dodaj ... gde je potrebno
+  for (let i = 0; i < allPages.length; i++) {
+    pages.push(allPages[i])
+    if (i < allPages.length - 1 && allPages[i + 1] - allPages[i] > 1) {
+      pages.push('...')
+    }
+  }
+
+  return pages
+}
+
 export default function ReviewPage() {
   const { id } = useParams<{ id: string }>()
   const docId = id || ''
@@ -58,7 +99,8 @@ export default function ReviewPage() {
   })
 
   const chunkList: any[] = Array.isArray(chunks?.data) ? chunks.data : []
-  const currentChunk = chunkList[currentPage % CHUNKS_PER_PAGE] // Handle case where page changed
+  const chunkIndex = currentPage % chunkList.length
+  const currentChunk = chunkList[chunkIndex]
 
   useEffect(() => {
     if (currentChunk?.translated_content) {
@@ -311,7 +353,7 @@ export default function ReviewPage() {
       {/* Page navigation */}
       <div className="card px-5 py-4">
         <p className="text-xs text-gray-400 mb-3 font-medium">Navigacija stranica</p>
-        <div className="flex flex-wrap gap-2">
+        <div className="flex flex-wrap gap-2 items-center justify-center">
           {/* Previous button */}
           <button
             onClick={handlePrevious}
@@ -320,33 +362,35 @@ export default function ReviewPage() {
           >
             <ChevronLeft className="w-4 h-4" />
           </button>
-          
-          {/* Page numbers - simple version */}
-          {Array.from({ length: Math.min(totalPages, 30) }, (_, i) => {
-            const isCurrentPage = i === currentPage
+
+          {/* Page numbers - smart pagination */}
+          {generatePageNumbers(currentPage, totalPages).map((page, idx) => {
+            if (page === '...') {
+              return (
+                <span key={`ellipsis-${idx}`} className="w-10 h-10 flex items-center justify-center text-gray-400 text-sm">
+                  ...
+                </span>
+              )
+            }
+            const pageNum = page as number
+            const isCurrentPage = pageNum === currentPage
             return (
               <button
-                key={i}
-                onClick={() => { setCurrentPage(i); setIsEditing(false) }}
-                title={`Stranica ${i + 1}`}
+                key={pageNum}
+                onClick={() => { setCurrentPage(pageNum); setIsEditing(false) }}
+                title={`Stranica ${pageNum + 1}`}
                 className={clsx(
                   'w-10 h-10 rounded-xl text-sm font-bold transition-all duration-150',
                   isCurrentPage
                     ? 'bg-gradient-to-br from-indigo-500 to-violet-500 text-white shadow-md shadow-indigo-500/30'
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                    : 'bg-gray-100 text-gray-600 hover:bg-indigo-100 hover:text-indigo-700'
                 )}
               >
-                {i + 1}
+                {pageNum + 1}
               </button>
             )
           })}
-          
-          {totalPages > 30 && (
-            <span className="self-center text-gray-400 text-sm font-medium ml-1">
-              ... do {totalPages} stranica
-            </span>
-          )}
-          
+
           {/* Next button */}
           <button
             onClick={handleNext}
@@ -356,6 +400,29 @@ export default function ReviewPage() {
             <ChevronRight className="w-4 h-4" />
           </button>
         </div>
+
+        {/* Quick jump to page */}
+        <div className="flex items-center justify-center gap-2 mt-3">
+          <span className="text-xs text-gray-400">Idi na stranicu:</span>
+          <input
+            type="number"
+            min={1}
+            max={totalPages}
+            defaultValue={currentPage + 1}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') {
+                const input = e.currentTarget
+                const page = Math.min(Math.max(1, parseInt(input.value) || 1), totalPages)
+                setCurrentPage(page - 1)
+                setIsEditing(false)
+              }
+            }}
+            className="w-16 h-8 px-2 text-sm text-center border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
+            placeholder="1"
+          />
+          <span className="text-xs text-gray-400">od {totalPages}</span>
+        </div>
+
         <p className="text-xs text-gray-400 mt-3 text-center">
           Ukupno {totalChunks} odlomaka na {totalPages} stranica
         </p>

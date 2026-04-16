@@ -85,21 +85,22 @@ echo "=================================================="
 # Health check - proverava oba porta
 echo ""
 echo "Health check (backend):"
-curl -s http://localhost:8000/health 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s http://localhost:8000/health
+curl -s http://localhost:8010/health 2>/dev/null | python3 -m json.tool 2>/dev/null || curl -s http://localhost:8010/health
 
 echo ""
 echo "Health check (nginx):"
-curl -s -o /dev/null -w "%{http_code}" http://localhost:8083/ || echo "Nginx nije dostupan"
+curl -s -o /dev/null -w "%{http_code}" http://localhost:8090/ || echo "Nginx nije dostupan"
 
 echo ""
 echo ""
 echo "=================================================="
 echo "DOSTUPNI SERVISI"
 echo "=================================================="
-echo "Frontend (NGINX): http://localhost:8083"
-echo "Backend API:      http://localhost:8000"
-echo "API Docs:         http://localhost:8000/docs"
-echo "MinIO:            http://localhost:9001"
+echo "Frontend (NGINX): http://localhost:8090"
+echo "Backend API:      http://localhost:8010"
+echo "API Docs:         http://localhost:8010/docs"
+echo "MinIO API:        http://localhost:9002"
+echo "MinIO Console:    http://localhost:9003"
 echo "Grafana:          http://localhost:3000"
 echo "Prometheus:       http://localhost:9090"
 echo "Ollama API:       http://localhost:11434"

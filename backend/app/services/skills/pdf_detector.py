@@ -40,8 +40,11 @@ class PDFSkillDetector:
         try:
             from app.services.pdf import PDFService
 
+            with open(pdf_path, "rb") as f:
+                pdf_bytes = f.read()
+
             pdf_service = PDFService()
-            result = pdf_service.process_pdf(pdf_path)
+            result = pdf_service.process_pdf(pdf_bytes)
             if result.success:
                 return [chunk.content for chunk in result.chunks]
             else:

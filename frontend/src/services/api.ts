@@ -10,18 +10,8 @@ const api = axios.create({
     'Content-Type': 'application/json',
   },
   timeout: 30000,
+  maxRedirects: 5,
 })
-
-// Helper function for form data requests
-const postForm = async (url: string, data: Record<string, string>) => {
-  const formData = new URLSearchParams()
-  Object.entries(data).forEach(([key, value]) => {
-    formData.append(key, value)
-  })
-  return axios.post(`${API_BASE_URL}${url}`, formData, {
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-  })
-}
 
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
@@ -78,21 +68,21 @@ api.interceptors.response.use(
 )
 
 export const authApi = {
-  login: (username: string, password: string) =>
-    postForm('/auth/login', { username, password }),
+  login: (email: string, password: string) =>
+    api.post('/auth/login/json', { email, password }),
   
   loginJson: (email: string, password: string) =>
     api.post('/auth/login/json', { email, password }),
   
   register: (data: { email: string; password: string; full_name?: string }) =>
     api.post('/auth/register', data),
-  
+
   logout: () =>
     api.post('/auth/logout'),
-  
+
   getMe: () =>
     api.get('/auth/me'),
-  
+
   refreshToken: (refreshToken: string) =>
     api.post('/auth/refresh', { refresh_token: refreshToken }),
 }
@@ -182,18 +172,18 @@ export const documentsApi = {
   list: (skip = 0, limit = 20, status?: string) => {
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) })
     if (status) params.append('status_filter', status)
-    return api.get(`/documents?${params}`)
+    return api.get(`/documents/?${params}`)
   },
-  
+
   get: (id: string) =>
     api.get(`/documents/${id}`),
-  
+
   create: (fileId: string, title?: string, sourceLanguage?: string, targetLanguage?: string) =>
-    api.post('/documents', { file_id: fileId, title, source_language: sourceLanguage, target_language: targetLanguage }),
-  
+    api.post('/documents/', { file_id: fileId, title, source_language: sourceLanguage, target_language: targetLanguage }),
+
   delete: (id: string) =>
     api.delete(`/documents/${id}`),
-  
+
   process: (id: string) =>
     api.post(`/documents/${id}/process`),
   

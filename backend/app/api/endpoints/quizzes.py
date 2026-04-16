@@ -34,6 +34,7 @@ from app.schemas.quiz import (
 )
 from app.services.auth import get_current_user
 from app.workers.tasks import generate_quiz_task
+from app.core.posthog import posthog_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -45,15 +46,32 @@ logger = logging.getLogger(__name__)
 
 
 def get_quiz_progress(quiz_id: str) -> tuple:
-    """Get quiz progress from Redis. Returns (current, total)."""
+    """Get quiz progress from Redis. Returns (current, total).
+
+    Koristi JSON format kompatibilan sa update_quiz_progress.
+    """
     try:
+        import json
         import redis as redis_client
         from app.core.config import settings
 
         r = redis_client.from_url(settings.REDIS_CONNECTION_URL, decode_responses=True)
-        data = r.hgetall(f"quiz_progress:{quiz_id}")
+        data = r.get(f"quiz_progress:{quiz_id}")
         if data:
-            return int(data.get("current", 0)), int(data.get("total", 0))
+            progress_data = json.loads(data)
+            # progress je 0-100 procenat, konvertujemo u pitanja
+            progress = progress_data.get("progress", 0)
+            message = progress_data.get("message", "")
+
+            # Ako poruka sadrzi "X / Y" format, parsiraj to
+            import re
+
+            match = re.search(r"(\d+)\s*/\s*(\d+)", message)
+            if match:
+                return int(match.group(1)), int(match.group(2))
+
+            # Inače vrati progress procenat kao placeholder
+            return progress, 100
     except Exception:
         pass
     return 0, 0
@@ -206,16 +224,18 @@ async def create_quiz(
     if not document:
         raise HTTPException(status_code=404, detail="Dokument nije pronađen")
 
-    # Allow quiz creation for completed documents OR error documents with images
+    # Allow quiz creation for completed documents, error documents with images,
+    # or documents that have chunks (even if status is error)
     from app.db.models.quiz import QuizImage
 
     has_images = (
         db.query(QuizImage).filter(QuizImage.document_id == document.id).count() > 0
     )
 
-    if document.status != "completed" and not (
-        document.status == "error" and has_images
-    ):
+    # Check if document has chunks with content (can be used for quiz)
+    has_chunks = document.total_chunks and document.total_chunks > 0
+
+    if document.status != "completed" and not has_images and not has_chunks:
         raise HTTPException(
             status_code=400,
             detail="Dokument mora biti kompletno obrađen pre generisanja kviza",
@@ -256,6 +276,17 @@ async def create_quiz(
     )
 
     logger.info(f"Kviz {quiz.id} kreiran, generisanje pokrenuto")
+
+    posthog_client.capture(
+        "quiz created",
+        distinct_id=str(current_user.id),
+        properties={
+            "num_questions": data.num_questions,
+            "ai_provider": user_provider or "auto",
+            "shuffle_questions": data.shuffle_questions,
+        },
+    )
+
     return quiz_to_response(quiz)
 
 
@@ -395,6 +426,13 @@ async def start_attempt(
     db.add(attempt)
     db.commit()
     db.refresh(attempt)
+
+    posthog_client.capture(
+        "quiz attempt started",
+        distinct_id=str(current_user.id),
+        properties={"quiz_id": quiz_id},
+    )
+
     return attempt_to_response(attempt)
 
 
@@ -423,41 +461,88 @@ async def submit_attempt(
     if attempt.completed_at:
         raise HTTPException(status_code=400, detail="Pokušaj je već završen")
 
-    from app.services.quiz import quiz_service
+    quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
+    if not quiz:
+        raise HTTPException(status_code=404, detail="Kviz nije pronađen")
 
-    completed = quiz_service.submit_attempt(
-        db=db,
-        quiz_id=quiz_id,
-        user_id=str(current_user.id),
-        attempt_id=attempt_id,
-        answers=[
-            {"question_id": a.question_id, "user_answer": a.user_answer}
-            for a in data.answers
-        ],
+    questions = db.query(Question).filter(Question.quiz_id == quiz_id).all()
+    questions_map = {str(q.id): q for q in questions}
+
+    total_score = 0
+    total_points = 0
+    answer_results = []
+
+    for submitted_answer in data.answers:
+        q = questions_map.get(submitted_answer.question_id)
+        if not q:
+            continue
+
+        user_answer = submitted_answer.user_answer.strip()
+        correct_answer = q.correct_answer.strip() if q.correct_answer else ""
+
+        is_correct = False
+        if q.question_type in ("multiple_choice", "calculation", "true_false"):
+            is_correct = user_answer.lower() == correct_answer.lower()
+        elif q.question_type == "checkbox":
+            correct_parts = set(
+                p.strip().lower() for p in correct_answer.split(",") if p.strip()
+            )
+            selected_parts = set(
+                p.strip().lower() for p in user_answer.split(",") if p.strip()
+            )
+            is_correct = correct_parts == selected_parts
+
+        points = q.points if is_correct else 0
+        total_score += points
+        total_points += q.points
+
+        answer_results.append(
+            AnswerResult(
+                question_id=str(q.id),
+                user_answer=user_answer,
+                correct_answer=correct_answer,
+                is_correct=is_correct,
+                points_earned=points,
+                explanation=q.explanation or "",
+            )
+        )
+
+    attempt.score = total_score
+    attempt.total_points = total_points
+    attempt.percentage = round(
+        (total_score / total_points * 100) if total_points > 0 else 0, 1
+    )
+    attempt.passed = attempt.percentage >= (quiz.passing_score or 60)
+    from datetime import datetime
+
+    attempt.completed_at = datetime.utcnow()
+
+    db.commit()
+    db.refresh(attempt)
+
+    posthog_client.capture(
+        "quiz attempt completed",
+        distinct_id=str(current_user.id),
+        properties={
+            "quiz_id": quiz_id,
+            "score": attempt.score,
+            "total_points": attempt.total_points,
+            "percentage": attempt.percentage,
+            "passed": attempt.passed,
+            "num_answers": len(answer_results),
+        },
     )
 
-    # Gradimo detaljan rezultat
-    questions_map = {
-        str(q.id): q
-        for q in db.query(Question).filter(Question.quiz_id == quiz_id).all()
-    }
-    answer_results = []
-    for ans in completed.answers:
-        q = questions_map.get(str(ans.question_id))
-        if q:
-            answer_results.append(
-                AnswerResult(
-                    question_id=str(ans.question_id),
-                    user_answer=ans.user_answer,
-                    correct_answer=q.correct_answer,
-                    is_correct=ans.is_correct,
-                    points_earned=ans.points_earned,
-                    explanation=q.explanation,
-                )
-            )
-
     return AttemptResult(
-        **attempt_to_response(completed).model_dump(),
+        id=str(attempt.id),
+        quiz_id=str(attempt.quiz_id),
+        user_id=str(attempt.user_id),
+        score=attempt.score,
+        total_points=attempt.total_points,
+        percentage=attempt.percentage,
+        passed=attempt.passed,
+        started_at=attempt.started_at,
+        completed_at=attempt.completed_at,
         answers=answer_results,
     )
 

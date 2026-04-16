@@ -9,69 +9,26 @@ Verzija: 1.0.0
 ================================================================================
 """
 
-from fastapi import (
-    APIRouter,
-    Depends,
-    HTTPException,
-    status,
-    BackgroundTasks,
-    Request,
-    Query,
-)
+from fastapi import APIRouter, Depends, HTTPException, status, Request
 from fastapi.security import OAuth2PasswordRequestForm
 from sqlalchemy.orm import Session
-from pydantic import BaseModel, EmailStr
 from typing import Optional
 import logging
-import secrets
-import hashlib
-from datetime import datetime, timedelta
-
-from slowapi import Limiter
-from slowapi.util import get_remote_address
 
 from app.db.session import get_db
 from app.schemas.auth import Token, UserLogin, UserRegister, UserResponse
 from app.db.models.user import User
-from app.services.auth import AuthService, get_current_user
-from app.services.email_service import email_service
+from app.services.auth import AuthService, get_current_user, get_current_active_user
 from app.core.config import settings
-
-limiter = Limiter(key_func=get_remote_address)
-
-# ────────────────────────────────────────────────────────────────────────────────
-# In-memory token store (production: migrate to Redis)
-# ────────────────────────────────────────────────────────────────────────────────
-_reset_tokens: dict[str, dict] = {}  # token_hash → {user_id, expires_at}
-
-
-class ForgotPasswordRequest(BaseModel):
-    email: EmailStr
-
-
-class ResetPasswordRequest(BaseModel):
-    token: str
-    new_password: str
-
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-class RefreshTokenRequest(BaseModel):
-    refresh_token: str
-
-
 @router.post(
     "/register", response_model=UserResponse, status_code=status.HTTP_201_CREATED
 )
-@limiter.limit("5/minute")
-async def register(
-    request: Request,
-    user_data: UserRegister,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
+async def register(user_data: UserRegister, db: Session = Depends(get_db)):
     """
     ================================================================================
     REGISTRACIJA KORISNIKA
@@ -100,9 +57,6 @@ async def register(
 
     logger.info(f"User registered successfully: {user.email}")
 
-    # Šalji welcome email u pozadini (ne blokira response)
-    background_tasks.add_task(email_service.send_welcome, user.email, user.full_name)
-
     return UserResponse(
         id=str(user.id),
         email=user.email,
@@ -114,12 +68,7 @@ async def register(
 
 
 @router.post("/login", response_model=Token)
-@limiter.limit("10/minute")
-async def login(
-    request: Request,
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: Session = Depends(get_db),
-):
+async def login(user_data: UserLogin, db: Session = Depends(get_db)):
     """
     ================================================================================
     LOGIN KORISNIKA
@@ -127,7 +76,7 @@ async def login(
     Autentikuje korisnika i vraća JWT token.
 
     Args:
-        form_data: OAuth2 form data (username, password)
+        user_data: UserLogin sa email i password
         db: Database session
 
     Returns:
@@ -137,10 +86,10 @@ async def login(
         HTTPException 401: Ako su kredencijali netačni
     ================================================================================
     """
-    logger.info(f"Login attempt for user: {form_data.username}")
+    logger.info(f"Login attempt for user: {user_data.email}")
 
     user = AuthService.authenticate_user(
-        db=db, email=form_data.username, password=form_data.password
+        db=db, email=user_data.email, password=user_data.password
     )
 
     if not user:
@@ -209,29 +158,30 @@ async def login_json(user_data: UserLogin, db: Session = Depends(get_db)):
 
 
 @router.post("/logout")
-async def logout(request: Request, current_user: User = Depends(get_current_user)):
+async def logout(current_user: User = Depends(get_current_user)):
     """
     ================================================================================
     LOGOUT KORISNIKA
     ================================================================================
-    Invalidira trenutni JWT token dodavanjem u Redis blacklist.
+    Invalidira trenutni JWT token.
+
+    Note: Za potpuni logout, token treba dodati u blacklist (Redis).
+    Trenutno samo vraća uspešnu poruku.
     ================================================================================
     """
     logger.info(f"Logout for user: {current_user.email}")
 
-    # Dodaj token u blacklist
-    auth_header = request.headers.get("Authorization", "")
-    if auth_header.startswith("Bearer "):
-        token = auth_header[7:]
-        AuthService.blacklist_token(token)
+    # TODO: Implementirati token blacklist u Redis
+    # Trenutno samo vraćamo uspešnu poruku
+    # Token će isteći prirodno nakon expires_in vremena
 
     return {"message": "Successfully logged out"}
 
 
 @router.post("/refresh", response_model=Token)
 async def refresh_token(
-    refresh_data: Optional[RefreshTokenRequest] = None,
-    refresh_token_query: Optional[str] = Query(None, alias="refresh_token"),
+    request: Request,
+    refresh_token: Optional[str] = None,
     db: Session = Depends(get_db),
 ):
     """
@@ -241,17 +191,24 @@ async def refresh_token(
     Generiše novi access token koristeći refresh token.
 
     Args:
-        refresh_token: Validan refresh token (can be sent as JSON body or query param)
+        refresh_token: Validan refresh token (query parameter ili JSON body)
 
     Returns:
         Novi Token
 
     Raises:
         HTTPException 401: Ako je refresh token invalid
+    ================================================================================
     """
-    token = refresh_data.refresh_token if refresh_data else refresh_token_query
+    # Support both query parameter and JSON body
+    if refresh_token is None:
+        try:
+            body = await request.json()
+            refresh_token = body.get("refresh_token")
+        except:
+            pass
 
-    if not token:
+    if not refresh_token:
         raise HTTPException(
             status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
             detail="refresh_token is required",
@@ -260,7 +217,7 @@ async def refresh_token(
     logger.info("Token refresh attempt")
 
     # Dekodiranje refresh token-a
-    payload = AuthService.decode_token(token)
+    payload = AuthService.decode_token(refresh_token)
 
     if payload is None:
         raise HTTPException(
@@ -344,84 +301,3 @@ async def verify_email(token: str, db: Session = Depends(get_db)):
     # Trenutno placeholder
 
     return {"message": "Email verification not yet implemented"}
-
-
-@router.post("/forgot-password")
-@limiter.limit("3/minute")
-async def forgot_password(
-    http_request: Request,
-    request: ForgotPasswordRequest,
-    background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
-):
-    """
-    ================================================================================
-    FORGOT PASSWORD
-    ================================================================================
-    Šalje email sa linkom za reset lozinke.
-    Token važi 1 sat. Uvek vraća 200 (sigurnosna praksa).
-    ================================================================================
-    """
-    user = db.query(User).filter(User.email == request.email).first()
-
-    if user and user.is_active:
-        # Generiši token i sačuvaj hash
-        raw_token = secrets.token_urlsafe(32)
-        token_hash = hashlib.sha256(raw_token.encode()).hexdigest()
-        _reset_tokens[token_hash] = {
-            "user_id": str(user.id),
-            "expires_at": datetime.utcnow() + timedelta(hours=1),
-        }
-        logger.info(f"Password reset token generated for: {user.email}")
-
-        # Pošalji email u pozadini
-        reset_link = f"{settings.FRONTEND_URL}/reset-password?token={raw_token}"
-        background_tasks.add_task(
-            email_service.send_password_reset, user.email, user.full_name, reset_link
-        )
-
-    # Uvek isti response (ne otkrivamo da li email postoji)
-    return {"message": "Ako email postoji, poslali smo link za reset lozinke."}
-
-
-@router.post("/reset-password")
-async def reset_password(request: ResetPasswordRequest, db: Session = Depends(get_db)):
-    """
-    ================================================================================
-    RESET PASSWORD
-    ================================================================================
-    Prima token iz emaila i postavlja novu lozinku.
-    Token se briše nakon upotrebe (single-use).
-    ================================================================================
-    """
-    token_hash = hashlib.sha256(request.token.encode()).hexdigest()
-    token_data = _reset_tokens.get(token_hash)
-
-    if not token_data:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Nevažeći ili istekli token za reset lozinke.",
-        )
-
-    if datetime.utcnow() > token_data["expires_at"]:
-        _reset_tokens.pop(token_hash, None)
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Token za reset lozinke je istekao. Zatražite novi.",
-        )
-
-    user = db.query(User).filter(User.id == token_data["user_id"]).first()
-    if not user or not user.is_active:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail="Korisnik nije pronađen.",
-        )
-
-    # Postavi novu lozinku i obriši token
-    user.hashed_password = AuthService.get_password_hash(request.new_password)
-    user.updated_at = datetime.utcnow()
-    db.commit()
-    _reset_tokens.pop(token_hash, None)
-
-    logger.info(f"Password reset successful for: {user.email}")
-    return {"message": "Lozinka uspešno promenjena. Možete se prijaviti."}

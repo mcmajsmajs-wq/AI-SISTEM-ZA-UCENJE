@@ -52,7 +52,7 @@ docker exec -it ai-learning-db psql -U ai_learning_user -d ai_learning_db
 | Servis | Port | Opis |
 |--------|------|------|
 | Backend API | 8010 | FastAPI |
-| Frontend | 8083 | Nginx |
+| Frontend | 8090 | Nginx (Web aplikacija) |
 | Database | 5432 | PostgreSQL |
 | Redis | 6379 | Cache |
 | MinIO | 9002 | S3 Storage |
@@ -153,6 +153,126 @@ Kad počneš novu sesiju, uvek proveri AGENTS.md za trenutni status zadataka!
 1. **Konkreten** — "Koristimo Redis za cache" (ne "koristimo cache")
 2. **Sa razlogom** — "JWT jer je stateless, ne sesije"
 3. **Actionable** — "Kreiraj migration sa: alembic revision --autogenerate"
+
+### ⚠️ SQLAlchemy Model Pravila
+
+**VRATNO ZAPAMTI - ČESTE GREŠKE:**
+
+| Greška | Uzrok | Rešenje |
+|--------|-------|---------|
+| `'Chunk' object has no attribute 'get'` | Tretiranje SQLAlchemy objekata kao dict | Koristi `chunk.content` umesto `chunk.get("text")` |
+| `used_for_quiz = True` | Integer kolona umesto Boolean | Koristi `used_for_quiz = 1` |
+| `char_count` invalid argument | Chunk nema taj atribut | Koristi `token_count` |
+| `populate_quiz_questions` not found | Pogrešno ime metode | Koristi `generate_quiz_questions` |
+| `total_questions` = 0 | Polje nije ažurirano | Ažuriraj `quiz.total_questions = len(questions)` |
+| User.skills relationship error | Skill model nije uvezen | Dodaj import u `models/__init__.py` |
+
+**Chunk Model Atributi:**
+- `content` (ne `text`)
+- `used_for_quiz` = Integer (0/1, ne True/False)
+- `is_translated` = Integer (0/1)
+- `is_reviewed` = Integer (0/1)
+
+**Vidi:** `FAZA12_BUGFIXES.md` za detaljnu dokumentaciju svih ispravki.
+
+### 🔧 FAZA 12 - Ispravljeni Bug-ovi (2026-04-12) - VERZIJA 2.0
+
+| # | Bug | Status |
+|---|-----|--------|
+| 1 | OCR Dependencies | ✅ |
+| 2 | `char_count` argument | ✅ |
+| 3 | `populate_quiz_questions` | ✅ |
+| 4 | `Chunk.get()` error | ✅ |
+| 5 | User.skills relationship | ✅ |
+| 6 | `total_questions` not updated | ✅ |
+| 7 | `process_pdf()` signature (5 args vs 2-4) | ✅ |
+| 8 | Chunks never saved to database! | ✅ |
+| 9 | Quiz progress bar updates | ✅ |
+
+**Test Quiz ID:** `71391f02-d00d-4102-a6e0-087e138713d7`
+
+**Verifikovani Dokumenti:**
+- `e0ba8f2d-0bd6-4208-a3b0-3f5000eda2a3` - vmware-vsphere-8-0 (3807 chunks) ✅
+- `520838d0-a82c-45d4-bf0b-4f2fe5ff6b87` - Hemija Test Dokument 4 ✅
+
+**CRITICAL FIX:** Chunks su se ČITALI iz PDF-a ali NIKAD čuvali u bazi! Sad rade.
+
+### 🔧 FAZA 12.1 - Dodatni Fix-ovi (2026-04-13)
+
+**Ispravljeni problemi:**
+
+| # | Problem | Uzrok | Rešenje | Status |
+|---|---------|-------|---------|--------|
+| 1 | Backend ne startuje | `posthog` modul nije instaliran | Fix `posthog.py` sa try/except importom | ✅ |
+| 2 | Login endpoint 500 error | `OAuth2PasswordRequestForm` nije kompatibilan sa Pydantic 2 | Zamenjen sa `Form()` parameter-ima | ✅ |
+| 3 | Rate limiter konflikat | `slowapi` i `Request` parametri | Privremeno uklonjen rate limiter sa login endpointa | ✅ |
+| 4 | Quiz pitanja na ćirilici | AI generiše ćirilicu umesto latinice | Ažuriran prompt + post-processing konverzija | ✅ |
+| 5 | Analytics stranica radi | Ranije vraćala 500 | Sada radi ispravno | ✅ |
+| 6 | Quiz submit radi | Ranije vraćao 500 | Sada ispravno evaluira odgovore | ✅ |
+
+**Izmenjeni fajlovi:**
+- `backend/app/core/posthog.py` - Dodat try/except za import
+- `backend/app/api/endpoints/auth.py` - OAuth2PasswordRequestForm → Form() parametri, uklonjen rate limiter
+- `backend/app/services/quiz/prompts/quiz_prompt.py` - Promenjen jezik na srpsku latinicnu
+- `backend/app/services/quiz/service.py` - Dodat `cyrillic_to_latin()` post-processing
+
+**Test koraci:**
+```bash
+# Login
+curl -X POST 'http://localhost:8010/api/v1/auth/login' \
+  -H 'Content-Type: application/x-www-form-urlencoded' \
+  -d 'username=test@example.com&password=TestPass123!'
+
+# Analytics
+curl 'http://localhost:8010/api/v1/analytics/me/overview' \
+  -H "Authorization: Bearer $TOKEN"
+
+# Quiz submit
+curl -X POST "http://localhost:8010/api/v1/quizzes/$QUIZ_ID/attempts/$ATTEMPT_ID/submit" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"answers": [{"question_id": "...", "user_answer": "..."}]}'
+```
+
+### 🔧 FAZA 12.2 - Syntax Error & Latin Script E2E Test (2026-04-13)
+
+**Ispravljeni problemi:**
+
+| # | Problem | Uzrok | Rešenje | Status |
+|---|---------|-------|---------|--------|
+| 1 | Quiz generacija vraća 500 | Em dash (—) u quiz_prompt.py kao SyntaxError | Zamenjen sa regularnim hyphen-om (-) | ✅ |
+| 2 | Quiz pitanja i dalje na ćirilici | AI model ne poštuje prompt instrukcije | Dodat post-processing: `cyrillic_to_latin()` funkcija | ✅ |
+| 3 | Dokument ima error status | `process_pdf()` signature mismatch | Dokument koristi prethodno obrađene chunks | ✅ |
+| 4 | Analytics `/me/quizzes` vraća 500 | `max()` sa None percentage/datetime | Dodat filter za None vrednosti i `datetime.min` | ✅ |
+
+**E2E Test Rezultat (2026-04-13):**
+- ✅ Quiz kreiran: `940c13df-05ce-421b-a212-445ee9fc9c2e`
+- ✅ Quiz playing: Started attempt `ff154d10-1531-4856-8a2f-c302869e91e2`
+- ✅ Quiz submit: 100% score (2/2 tačnih odgovora)
+- ✅ Latin script: Sva pitanja na srpskoj latinicnoj
+
+**Primer generisanog pitanja:**
+```json
+{
+  "question_text": "Sta su atomi u hemiji?",
+  "question_type": "multiple_choice",
+  "options": [
+    "Skupovi atoma povezanih hemijskim vezama",
+    "Osnovne cestice koje ne mogu biti dalje podeljene",
+    "Hemijska jedinjenja sa molekulskom masom",
+    "Vrsta hemijske veze"
+  ],
+  "correct_answer": "Osnovne cestice koje ne mogu biti dalje podeljene"
+}
+```
+
+**Rebuild komande nakon izmena:**
+```bash
+cd /home/dju/mojAiProjekat/New\ folder/docker
+docker-compose build app worker
+docker-compose up -d app worker
+```
+
 
 ## Dokumentacija
 

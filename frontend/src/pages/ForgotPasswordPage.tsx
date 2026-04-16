@@ -32,7 +32,7 @@ export default function ForgotPasswordPage() {
 
     setIsLoading(true)
     try {
-      await axios.post('/api/v1/auth/forgot-password', { email })
+      await axios.post('/auth/forgot-password', { email })
       setSent(true)
     } catch {
       // Uvek prikazujemo isti message (ne otkrivamo da li email postoji)

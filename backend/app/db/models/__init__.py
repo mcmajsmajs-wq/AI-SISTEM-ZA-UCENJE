@@ -5,3 +5,9 @@ from app.db.models.quiz import Quiz, Question, QuizAttempt, QuizAnswer, QuizImag
 from app.db.models.file import File  # noqa: F401
 from app.db.models.conversation import Conversation, Message  # noqa: F401
 from app.db.models.study_plan import StudyPlan, StudyPlanItem  # noqa: F401
+
+# Import Skill model to ensure it's registered before User relationship is established
+try:
+    from app.services.skills.models import Skill, SkillTemplate, DocumentType  # noqa: F401
+except ImportError:
+    pass  # Skills module not available

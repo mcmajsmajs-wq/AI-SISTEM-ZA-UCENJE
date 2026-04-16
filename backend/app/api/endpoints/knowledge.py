@@ -14,6 +14,7 @@ import logging
 from app.db.session import get_db
 from app.db.models.user import User
 from app.services.auth import get_current_user
+from app.core.posthog import posthog_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -82,6 +83,18 @@ async def query_knowledge(
         top_k=body.top_k,
         provider_override=body.provider,
     )
+
+    posthog_client.capture(
+        "knowledge queried",
+        distinct_id=str(current_user.id),
+        properties={
+            "chunks_used": result.get("chunks_used", 0),
+            "top_k": body.top_k,
+            "source_type_filter": body.source_type,
+            "query_length": len(body.query),
+        },
+    )
+
     return QueryResponse(**result)
 
 

@@ -40,6 +40,7 @@ from app.utils.database_migration import (
 )
 
 import logging
+from app.core.posthog import posthog_client  # noqa: imported here for flush on shutdown
 
 # Setup logging na početku
 setup_logging()
@@ -99,6 +100,7 @@ async def lifespan(app: FastAPI):
     logger.info("AI LEARNING SYSTEM - SHUTTING DOWN")
     logger.info("=" * 80)
     logger.info("Closing database connections...")
+    posthog_client.flush()
     logger.info("Application shutdown complete")
 
 

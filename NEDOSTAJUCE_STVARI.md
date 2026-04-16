@@ -5,8 +5,8 @@ Ovaj dokument sadrži listu funkcionalnosti koje nisu implementirane u ovoj fazi
 ali su planirane za buduće implementacije.
 
 Datum kreiranja: 2024-01-15
-Datum ažuriranja: 2026-04-10
-Verzija: 1.5.0
+Datum ažuriranja: 2026-04-11
+Verzija: 1.6.0
 ================================================================================
 
 ================================================================================
@@ -837,5 +837,173 @@ PORT KONFIGURACIJA (ažurirano):
 ✅ Redis: localhost:6379
 
 UKUPAN PROGRES: ~99% (FAZA 1-11 kompletno)
+
+===============================================================================
+# NOTEVA FAZA 12: SMART AI CHAT SYSTEM - Auto fallback i validacija modela
+===============================================================================
+
+## Problem:
+- Sistom nedostaje automatski fallback kad provider fails (429, 401, 402, deprecated model)
+- Groq i Mistral provideri nisu implementirani
+- Nema automatske validacije modela - deprecated modeli ne rade
+- Fallback logika nije pouzdana
+
+## Cilj:
+- Chat radi MAKAR JEDAN provider radi - automatski prolazi kroz sve
+- Validni modeli se automatski biraju (deprecated model zamenjen)
+- Korisnik dobija odgovor, ne grešku
+
+## FAZA 12.1: Čišćenje i standardizacija
+=================================================================================
+
+| # | Zadatak | Status | Verzija |
+|---|---------|--------|--------|
+| 12.1.1 | Definisanje VALID_MODELS mape | ☐ |
+| 12.1.2 | Dodavanje GROQ, MISTRAL u AIProvider enum | ☐ |
+| 12.1.3 | get_valid_model() funkcija | ☐ |
+| 12.1.4 | Dodavanje Groq i Mistral klijenata u AIChatService | ☐ |
+
+### VALID_MODELS (planirano):
+```python
+VALID_MODELS = {
+    "openai": "gpt-4o",           # OpenAI
+    "groq": "llama-3.3-70b-versatile",  # Groq (NOVO)
+    "mistral": "mistral-small-latest",  # Mistral (NOVO)
+    "deepseek": "deepseek-chat",    # DeepSeek
+    "gemini": "gemini-2.0-flash", # Google Gemini
+    "ollama": "llama3.1",         # Lokalni Ollama
+}
+```
+
+## FAZA 12.2: Robusna error handling logika
+=================================================================================
+
+| # | Zadatak | Status | Verzija |
+|---|---------|--------|--------|
+| 12.2.1 | definisanje RECOVERABLE_ERRORS | ☐ |
+| 12.2.2 | Svi client.chat() bacaju exception za recoverable | ☐ |
+| 12.2.3 | AIChatService.chat() pravilna fallback petlja | ☐ |
+
+### RECOVERABLE_ERRORS (planirano):
+```python
+RECOVERABLE_ERRORS = [
+    "429",              # Rate limit
+    "rate_limit",       # Rate limit
+    "402",              # Payment Required
+    "401",              # Unauthorized
+    "invalid_api_key",  # Invalid key
+    "decommissioned",   # Model deprecated
+    "model no longer", # Model deprecated
+    "insufficient",    # Insufficient credits
+    "quota",            # Quota exceeded
+]
+```
+
+## FAZA 12.3: Frontend integracija
+=================================================================================
+
+| # | Zadatak | Status | Verzija |
+|---|---------|--------|--------|
+| 12.3.1 | SettingsPage koristi VALID_MODELS | ☐ |
+| 12.3.2 | Prikaz greške "Svi provideri neuspeli" | ☐ |
+
+## FAZA 12.4: Testiranje
+=================================================================================
+
+| # | Zadatak | Status | Verzija |
+|---|---------|--------|--------|
+| 12.4.1 | Test svaki provider sa validnim ključem | ☐ |
+| 12.4.2 | Test fallback chain | ☐ |
+| 12.4.3 | Test deprecated model auto-migracija | ☐ |
+
+## FAZA 12.5: Dokumentacija
+=================================================================================
+
+| # | Zadatak | Status | Verzija |
+|---|---------|--------|--------|
+| 12.5.1 | Kako dodati novi provider | ☐ |
+| 12.5.2 | Kako promeniti VALID_MODELS | ☐ |
+| 12.5.3 | Troubleshooting guide | ☐ |
+
+## IMPLEMENTIRANE POPRAVKE (2026-04-12):
+================================================================================
+
+### FAZA 12.1 - POPRAVLJENO:
+| # | Zadatak | Status | Napomena |
+|---|---------|--------|----------|
+| 12.1.1 | VALID_MODELS definisan | ✅ GOTOVO | Svi provideri sa modelima |
+| 12.1.2 | GROQ, MISTRAL u AIProvider enum | ✅ GOTOVO | Dodati u ai_chat.py |
+| 12.1.3 | get_valid_model() funkcija | ✅ GOTOVO | |
+| 12.1.4 | Groq i Mistral klijenti | ✅ GOTOVO | OpenAIChatClient sa custom base_url |
+
+### FAZA 12.2 - POPRAVLJENO:
+| # | Zadatak | Status | Napomena |
+|---|---------|--------|----------|
+| 12.2.1 | RECOVERABLE_ERRORS definisan | ✅ GOTOVO | + "too many requests" |
+| 12.2.2 | Svi client.chat() bacaju exception | ✅ GOTOVO | httpx.HTTPStatusError handling |
+| 12.2.3 | is_recoverable_error() sa status_code | ✅ GOTOVO | Za 401, 402, 429 |
+
+### POPRAVLJENI BUG-OVI:
+| # | Bug | Status | Fajl |
+|---|-----|--------|------|
+| 1 | Analytics 500 error | ✅ POPRAVLJENO | analytics.py:320 - _calc_streak() |
+| 2 | ReviewPage pagination bug | ✅ POPRAVLJENO | ReviewPage.tsx:61 |
+| 3 | Language detection | ✅ POPRAVLJENO | documents.py:970-973 |
+
+### TEKUĆI BUG-OVI (za popravku):
+| # | Bug | Status | Napomena |
+|---|-----|--------|----------|
+| 1 | OCR za skenirane PDF | 🔶 DELIMIČNO | Tesseract instaliran, treba testirati |
+| 2 | Quiz progress bar | 🔶 TREBA TESTIRATI | Status endpoint postoji |
+| 3 | Progress bar-ovi generalno | 🔶 TREBA TESTIRATI | |
+
+## Tehnička dokumentacija (za developere):
+=================================================================================
+
+### Struktura fajlova:
+```
+backend/app/services/ai_chat.py      # Glavni AI chat service
+backend/app/api/endpoints/chat.py   # Chat API endpoint
+frontend/src/pages/SettingsPage.tsx # Settings UI
+```
+
+### Ključne klase:
+- `AIProvider` (enum) - svi provideri
+- `VALID_MODELS` (dict) - validni modeli po provideru
+- `BaseAIChatClient` - osnova za sve klijente
+- `AIChatService` - glavni service sa fallback logikom
+
+### Error handling flow:
+```
+1. Korisnik šalje poruku
+2. AIChatService.chat() dobija poruku
+3. Za svaki provider u PROVIDER_FALLBACK_ORDER:
+   a. Pozovi client.chat()
+   b. Ako uspe → vrati odgovor
+   c. Ako RECOVERABLE_ERROR → continue (sledeći provider)
+   d. Ako drugačija greška → vrati grešku
+4. Ako svi padnu → "Svi provideri neuspeli"
+```
+
+### Kako testirati:
+```bash
+# Test pojedinačni provider
+curl -X POST http://localhost:8090/api/v1/chat/chat \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{"message":"test","provider":"groq"}'
+
+# Test auto fallback
+curl -X POST http://localhost:8090/api/v1/chat/chat \
+  -H "Authorization: Bearer TOKEN" \
+  -d '{"message":"test","provider":"auto"}'
+```
+
+## Priority:
+- PRVO: AIProvider enum + VALID_MODELS + Groq/Mistral klijenti
+- DRUGO: RECOVERABLE_ERRORS u svim client.chat()
+- TREĆE: Fallback loop ispravno radi
+- ČETVRTO: Test i dokumentacija
+
+UKUPAN PROGRES FAZA 12: 0% (planirano)
 
 ================================================================================

@@ -57,6 +57,367 @@ function clearProgress(quizId: string) {
   localStorage.removeItem(STORAGE_KEY(quizId))
 }
 
+// ============================================================================
+// DRAG & DROP - Sequencing Component
+// ============================================================================
+function SequencingQuestion({
+  options,
+  selectedAnswer,
+  onChange,
+  disabled,
+  correctAnswer
+}: {
+  options: string[]
+  selectedAnswer: string
+  onChange: (value: string) => void
+  disabled: boolean
+  correctAnswer: string
+}) {
+  const [items, setItems] = useState<string[]>(options)
+  const [draggedItem, setDraggedItem] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (selectedAnswer) {
+      try {
+        const order = JSON.parse(selectedAnswer)
+        if (Array.isArray(order) && order.length === options.length) {
+          setItems(order)
+        }
+      } catch {
+        setItems(options)
+      }
+    } else {
+      setItems(options)
+    }
+  }, [selectedAnswer, options])
+
+  const handleDragStart = (e: React.DragEvent, item: string) => {
+    if (disabled) return
+    setDraggedItem(item)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+  }
+
+  const handleDrop = (e: React.DragEvent, targetItem: string) => {
+    e.preventDefault()
+    if (!draggedItem || disabled) return
+
+    const newItems = [...items]
+    const draggedIdx = newItems.indexOf(draggedItem)
+    const targetIdx = newItems.indexOf(targetItem)
+
+    if (draggedIdx !== -1 && targetIdx !== -1) {
+      newItems.splice(draggedIdx, 1)
+      newItems.splice(targetIdx, 0, draggedItem)
+      setItems(newItems)
+      onChange(JSON.stringify(newItems))
+    }
+    setDraggedItem(null)
+  }
+
+  const getCorrectOrder = () => {
+    try {
+      return JSON.parse(correctAnswer)
+    } catch {
+      return []
+    }
+  }
+
+  const correctOrder = getCorrectOrder()
+  const isCorrect = JSON.stringify(items) === JSON.stringify(correctOrder)
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600">Prevuci elemente da ih poređaš po ispravnom redosledu:</p>
+      <div className="space-y-2">
+        {items.map((item, idx) => (
+          <div
+            key={`${item}-${idx}`}
+            draggable={!disabled}
+            onDragStart={(e) => handleDragStart(e, item)}
+            onDragOver={handleDragOver}
+            onDrop={(e) => handleDrop(e, item)}
+            className={clsx(
+              "flex items-center gap-3 p-3 rounded-xl border transition-all cursor-move",
+              disabled ? "cursor-default opacity-60" : "hover:border-indigo-300 hover:bg-gray-50",
+              draggedItem === item ? "opacity-50" : "",
+              disabled && isCorrect ? "border-green-400 bg-green-50" : 
+              disabled && !isCorrect ? "border-red-400 bg-red-50" :
+              "border-gray-200"
+            )}
+          >
+            <span className="w-8 h-8 flex items-center justify-center bg-indigo-100 text-indigo-700 rounded-lg font-medium">
+              {idx + 1}
+            </span>
+            <span className="text-gray-800">{item}</span>
+          </div>
+        ))}
+      </div>
+      {!disabled && (
+        <p className="text-xs text-gray-400">Brojevi označavaju redosled (1 = prvo, 2 = drugo, ...)</p>
+      )}
+    </div>
+  )
+}
+
+// ============================================================================
+// DRAG & DROP - Matching Component  
+// ============================================================================
+function MatchingQuestion({
+  options,
+  selectedAnswer,
+  onChange,
+  disabled
+}: {
+  options: string[]
+  selectedAnswer: string
+  onChange: (value: string) => void
+  disabled: boolean
+}) {
+  // options format: ["A1", "B2", "C3", ...] gde je A, B, C = left kolona, 1, 2, 3 = right kolona
+  const [matches, setMatches] = useState<Record<string, string>>({})
+  const [draggedItem, setDraggedItem] = useState<string | null>(null)
+  const [dragSource, setDragSource] = useState<'left' | 'right' | null>(null)
+
+  // Parsiraj opcije na dve grupe
+  const leftItems: string[] = []
+  const rightItems: string[] = []
+  options.forEach(opt => {
+    const match = opt.match(/^([A-Za-zČčĆć Đdž])(.+)$/)
+    if (match) {
+      const key = match[1].toUpperCase()
+      if (!leftItems.includes(key)) leftItems.push(key)
+      rightItems.push(opt)
+    }
+  })
+
+  useEffect(() => {
+    if (selectedAnswer) {
+      try {
+        const parsed = JSON.parse(selectedAnswer)
+        setMatches(parsed)
+      } catch {
+        setMatches({})
+      }
+    }
+  }, [selectedAnswer])
+
+  const handleDragStart = (e: React.DragEvent, item: string, source: 'left' | 'right') => {
+    if (disabled) return
+    setDraggedItem(item)
+    setDragSource(source)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDrop = (e: React.DragEvent, targetItem: string, targetSource: 'left' | 'right') => {
+    e.preventDefault()
+    if (!draggedItem || !dragSource || disabled) return
+    if (dragSource === targetSource) return // Isti stub
+
+    const newMatches = { ...matches }
+    if (dragSource === 'left' && targetSource === 'right') {
+      newMatches[draggedItem] = targetItem
+    } else if (dragSource === 'right' && targetSource === 'left') {
+      // Obrnuto povezivanje
+      const leftKey = draggedItem
+      const rightKey = targetItem
+      // Pronađi odgovarajući ključ
+      const existingLeft = Object.keys(newMatches).find(k => newMatches[k] === rightKey)
+      if (existingLeft) delete newMatches[existingLeft]
+      newMatches[leftKey] = rightKey
+    }
+    setMatches(newMatches)
+    onChange(JSON.stringify(newMatches))
+    setDraggedItem(null)
+    setDragSource(null)
+  }
+
+  const leftOptions = leftItems
+  const rightOptions = rightItems
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600">Prevuci da povežeš elemente iz leve u desnu kolonu:</p>
+      
+      <div className="grid grid-cols-2 gap-4">
+        {/* Leva kolona */}
+        <div className="space-y-2">
+          {leftOptions.map((item) => (
+            <div
+              key={item}
+              draggable={!disabled}
+              onDragStart={(e) => handleDragStart(e, item, 'left')}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleDrop(e, item, 'left')}
+              className={clsx(
+                "p-3 rounded-xl border transition-all cursor-move text-center",
+                disabled ? "cursor-default opacity-60" : "hover:border-indigo-300",
+                matches[item] ? "border-indigo-400 bg-indigo-50" : "border-gray-200"
+              )}
+            >
+              <span className="font-medium">{item}</span>
+              {matches[item] && (
+                <span className="block text-xs text-indigo-600 mt-1">→ {matches[item]}</span>
+              )}
+            </div>
+          ))}
+        </div>
+
+        {/* Desna kolona */}
+        <div className="space-y-2">
+          {rightOptions.map((item) => (
+            <div
+              key={item}
+              draggable={!disabled}
+              onDragStart={(e) => handleDragStart(e, item, 'right')}
+              onDragOver={(e) => e.preventDefault()}
+              onDrop={(e) => handleDrop(e, item, 'right')}
+              className={clsx(
+                "p-3 rounded-xl border transition-all cursor-move text-center",
+                disabled ? "cursor-default opacity-60" : "hover:border-indigo-300",
+                Object.values(matches).includes(item) ? "border-indigo-400 bg-indigo-50" : "border-gray-200"
+              )}
+            >
+              <span className="text-sm">{item}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
+// ============================================================================
+// DRAG & DROP - Categorization Component
+// ============================================================================
+function CategorizationQuestion({
+  options,
+  selectedAnswer,
+  onChange,
+  disabled,
+  extraData
+}: {
+  options: string[]
+  selectedAnswer: string
+  onChange: (value: string) => void
+  disabled: boolean
+  extraData?: Record<string, unknown>
+}) {
+  // extraData sadrži categories: ["Kat1", "Kat2", ...]
+  const categories = (extraData as Record<string, string[]>)?.categories || ['A', 'B', 'C']
+  const [items, setItems] = useState<Record<string, string>>({})
+  const [draggedItem, setDraggedItem] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (selectedAnswer) {
+      try {
+        const parsed = JSON.parse(selectedAnswer)
+        setItems(parsed)
+      } catch {
+        setItems({})
+      }
+    }
+  }, [selectedAnswer])
+
+  // Svi elementi koji nisu dodeljeni kategoriji
+  const unassigned = options.filter(opt => !Object.values(items).includes(opt))
+
+  const handleDragStart = (e: React.DragEvent, item: string) => {
+    if (disabled) return
+    setDraggedItem(item)
+    e.dataTransfer.effectAllowed = 'move'
+  }
+
+  const handleDrop = (e: React.DragEvent, category: string) => {
+    e.preventDefault()
+    if (!draggedItem || disabled) return
+
+    const newItems = { ...items }
+    // Ukloni iz stare kategorije ako je bio
+    Object.keys(newItems).forEach(k => {
+      if (newItems[k] === draggedItem) delete newItems[k]
+    })
+    // Dodeli novoj
+    newItems[draggedItem] = category
+    setItems(newItems)
+    onChange(JSON.stringify(newItems))
+    setDraggedItem(null)
+  }
+
+  const handleUnassignedDrop = (e: React.DragEvent) => {
+    e.preventDefault()
+    if (!draggedItem || disabled) return
+    
+    const newItems = { ...items }
+    delete newItems[draggedItem]
+    setItems(newItems)
+    onChange(JSON.stringify(newItems))
+    setDraggedItem(null)
+  }
+
+  return (
+    <div className="space-y-3">
+      <p className="text-sm text-gray-600">Prevuci svaki element u odgovarajuću kategoriju:</p>
+
+      {/* Nekategorisani elementi */}
+      <div 
+        onDragOver={(e) => e.preventDefault()}
+        onDrop={handleUnassignedDrop}
+        className="flex flex-wrap gap-2 p-3 bg-gray-50 rounded-xl min-h-[60px]"
+      >
+        {unassigned.map((item) => (
+          <div
+            key={item}
+            draggable={!disabled}
+            onDragStart={(e) => handleDragStart(e, item)}
+            className={clsx(
+              "px-3 py-2 rounded-lg border cursor-move transition-all",
+              disabled ? "cursor-default opacity-60" : "hover:border-indigo-300 bg-white"
+            )}
+          >
+            {item}
+          </div>
+        ))}
+        {unassigned.length === 0 && (
+          <span className="text-sm text-gray-400">Svi elementi su kategorisani</span>
+        )}
+      </div>
+
+      {/* Kategorije */}
+      <div className="grid grid-cols-3 gap-3">
+        {categories.map((cat) => (
+          <div
+            key={cat}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={(e) => handleDrop(e, cat)}
+            className="p-3 rounded-xl border border-gray-200 min-h-[100px]"
+          >
+            <h4 className="font-medium text-center text-gray-700 mb-2">{cat}</h4>
+            <div className="space-y-1">
+              {Object.entries(items)
+                .filter(([, catVal]) => catVal === cat)
+                .map(([item]) => (
+                  <div
+                    key={item}
+                    draggable={!disabled}
+                    onDragStart={(e) => handleDragStart(e, item)}
+                    className="px-2 py-1 bg-indigo-50 rounded text-sm text-center"
+                  >
+                    {item}
+                  </div>
+                ))}
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function QuizPlayPage() {
   const { quizId } = useParams<{ quizId: string }>()
   const navigate = useNavigate()
@@ -218,6 +579,55 @@ export default function QuizPlayPage() {
       const correctSet = new Set(correct.split(',').map(s => s.trim().toLowerCase()))
       const userSet = new Set(user.split(',').map(s => s.trim().toLowerCase()))
       return correctSet.size === userSet.size && [...correctSet].every(v => userSet.has(v))
+    }
+
+    if (q.question_type === 'text_input') {
+      // Text input sa transliteracijom
+      const normalize = (s: string) => {
+        // Ćirilica -> Latinica
+        const cyrillic = 'абвгдеёжзийклмнопрстуфхцчшщъыьэюяАБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ'
+        const latin = 'abvgdeёžziyklmnoprstufhцчшщъyьэюяABVGDEŽZIYKLMNOPRSTUFHČŠŠĐYĆEЮЯ'
+        let result = ''
+        for (const char of s) {
+          const idx = cyrillic.indexOf(char)
+          result += idx >= 0 ? latin[idx] : char
+        }
+        return result.toLowerCase()
+      }
+      return normalize(correct) === normalize(user)
+    }
+
+    if (q.question_type === 'sequencing') {
+      // Sequencing - JSON niz indeksa
+      try {
+        const correctOrder = JSON.parse(correct)
+        const userOrder = JSON.parse(user)
+        return JSON.stringify(correctOrder) === JSON.stringify(userOrder)
+      } catch {
+        return false
+      }
+    }
+
+    if (q.question_type === 'matching') {
+      // Matching - JSON objekat parova
+      try {
+        const correctPairs = JSON.parse(correct)
+        const userPairs = JSON.parse(user)
+        return JSON.stringify(correctPairs) === JSON.stringify(userPairs)
+      } catch {
+        return false
+      }
+    }
+
+    if (q.question_type === 'categorization') {
+      // Categorization - JSON objekat mappinga
+      try {
+        const correctCat = JSON.parse(correct)
+        const userCat = JSON.parse(user)
+        return JSON.stringify(correctCat) === JSON.stringify(userCat)
+      } catch {
+        return false
+      }
     }
     
     return correct.toLowerCase() === user.toLowerCase()
@@ -512,7 +922,11 @@ export default function QuizPlayPage() {
              currentQ.question_type === 'calculation' ? 'Računski zadatak' :
              currentQ.question_type === 'fill_blank' ? 'Popuni prazninu' :
              currentQ.question_type === 'step_by_step' ? 'Korak po korak' :
-             currentQ.question_type === 'chemical_equation' ? 'Hemijska jednačina' : 'Pitanje'}
+             currentQ.question_type === 'chemical_equation' ? 'Hemijska jednačina' :
+             currentQ.question_type === 'text_input' ? 'Unesi tekstualni odgovor' :
+             currentQ.question_type === 'sequencing' ? 'Poređaj po redu' :
+             currentQ.question_type === 'matching' ? 'Poveži parove' :
+             currentQ.question_type === 'categorization' ? 'Razvrsti u kategorije' : 'Pitanje'}
           </span>
           <p className="text-lg font-semibold text-gray-900 mt-2 leading-snug">{currentQ.question_text}</p>
         </div>
@@ -593,6 +1007,40 @@ export default function QuizPlayPage() {
               <p className="text-xs text-gray-400">
                 Koristi standardnu hemijsku notaciju (npr: -&gt; za strelicu)
               </p>
+            </div>
+          ) : currentQ.question_type === 'sequencing' ? (
+            <SequencingQuestion
+              options={currentQ.options || []}
+              selectedAnswer={selectedAnswer}
+              onChange={(val) => handleAnswer(currentQ.id, val, currentQ.question_type)}
+              disabled={isConfirmed}
+              correctAnswer={currentQ.correct_answer}
+            />
+          ) : currentQ.question_type === 'matching' ? (
+            <MatchingQuestion
+              options={currentQ.options || []}
+              selectedAnswer={selectedAnswer}
+              onChange={(val) => handleAnswer(currentQ.id, val, currentQ.question_type)}
+              disabled={isConfirmed}
+            />
+          ) : currentQ.question_type === 'categorization' ? (
+            <CategorizationQuestion
+              options={currentQ.options || []}
+              selectedAnswer={selectedAnswer}
+              onChange={(val) => handleAnswer(currentQ.id, val, currentQ.question_type)}
+              disabled={isConfirmed}
+              extraData={currentQ.extra_data}
+            />
+          ) : currentQ.question_type === 'text_input' ? (
+            <div className="space-y-3">
+              <input
+                type="text"
+                value={selectedAnswer}
+                onChange={(e) => handleAnswer(currentQ.id, e.target.value, currentQ.question_type)}
+                disabled={isConfirmed}
+                placeholder="Unesi odgovor..."
+                className="w-full px-4 py-3 rounded-xl border text-lg"
+              />
             </div>
           ) : (
             currentQ.options.map((option) => {

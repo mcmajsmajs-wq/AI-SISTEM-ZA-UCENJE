@@ -250,20 +250,20 @@ def select_chunks_for_quiz(chunks: list, max_chars: int = 10000) -> list:
     Bira ravnomerno raspoređene chunk-ove iz dokumenta.
 
     Args:
-        chunks: Lista chunk-ova
+        chunks: Lista Chunk SQLAlchemy objekata (NE dictionary!)
         max_chars: Maksimalan broj karaktera
 
     Returns:
-        List[dict]: Lista odabranih chunk-ova
+        List: Lista odabranih chunk-ova (Chunk objekata)
     """
     if not chunks:
         return []
 
-    quality_chunks = [c for c in chunks if is_chunk_quality(c.get("text", ""))]
+    quality_chunks = [c for c in chunks if is_chunk_quality(c.content)]
     if not quality_chunks:
         quality_chunks = chunks
 
-    total_chars = sum(len(c.get("text", "")) for c in quality_chunks)
+    total_chars = sum(len(c.content) for c in quality_chunks)
     if total_chars <= max_chars:
         return quality_chunks
 
@@ -277,11 +277,11 @@ def select_chunks_for_quiz(chunks: list, max_chars: int = 10000) -> list:
 
     for idx in indices:
         chunk = quality_chunks[idx]
-        text = chunk.get("text", "")
+        text = chunk.content or ""
         if current_chars + len(text) > max_chars:
             remaining = max_chars - current_chars
             if remaining > 200:
-                result.append({**chunk, "text": text[:remaining]})
+                chunk.content = text[:remaining]
             break
         result.append(chunk)
         current_chars += len(text)
@@ -294,8 +294,8 @@ def get_images_for_chunks(chunks: list, quiz_images: list) -> dict:
     Mapira slike na chunk-ove.
 
     Args:
-        chunks: Lista chunk-ova
-        quiz_images: Lista slika za quiz
+        chunks: Lista Chunk SQLAlchemy objekata
+        quiz_images: Lista slika za quiz (dictionaries sa chunk_id)
 
     Returns:
         dict: Mapping slika na chunk-ove
@@ -303,7 +303,7 @@ def get_images_for_chunks(chunks: list, quiz_images: list) -> dict:
     chunk_images = {}
 
     for chunk in chunks:
-        chunk_id = chunk.get("id")
+        chunk_id = chunk.id
         if not chunk_id:
             continue
 
@@ -320,13 +320,13 @@ def get_quiz_usage_stats(chunks: list) -> dict:
     Vraća statistiku korišćenja chunk-ova za quiz.
 
     Args:
-        chunks: Lista chunk-ova
+        chunks: Lista Chunk SQLAlchemy objekata
 
     Returns:
         dict: Statistika
     """
     total = len(chunks)
-    used = sum(1 for c in chunks if c.get("used_in_quiz", False))
+    used = sum(1 for c in chunks if c.used_for_quiz)
     unused = total - used
 
     return {
@@ -351,7 +351,7 @@ def mark_chunks_as_used(chunk_ids: list, db):
         return
 
     db.query(Chunk).filter(Chunk.id.in_(chunk_ids)).update(
-        {"used_in_quiz": True},
+        {"used_for_quiz": 1},  # 1 = True, 0 = False
         synchronize_session=False,
     )
     db.commit()

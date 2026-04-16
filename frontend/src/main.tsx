@@ -3,9 +3,22 @@ import ReactDOM from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { Toaster } from 'react-hot-toast'
+import posthog from 'posthog-js'
 import App from './App'
 import './index.css'
 
+const isProduction = import.meta.env.PROD === true || import.meta.env.VITE_API_URL?.includes('localhost') === false
+
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+const POSTHOG_DISABLED = true  // Disable for now
+
+if (isProduction && !POSTHOG_DISABLED) {
+  posthog.init('phc_AHoXWRrVeZyw3oiik6dKrQ6oYF9xbn4bRpKWBJDZP3cp', {
+    api_host: '/ingest',
+    person_profiles: 'identified_only',
+    capture_pageview: true 
+  })
+}
 const queryClient = new QueryClient({
   defaultOptions: {
     queries: {

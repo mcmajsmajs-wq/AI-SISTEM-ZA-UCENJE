@@ -9,7 +9,7 @@ from typing import Any, Dict, Optional
 import httpx
 
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8010")
 
 
 async def handle_document_process(

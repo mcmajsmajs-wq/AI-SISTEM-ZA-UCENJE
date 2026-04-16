@@ -73,12 +73,10 @@ def generate_quiz_task(
     try:
         from app.services.quiz import quiz_service
 
-        success, used_provider = quiz_service.populate_quiz_questions(
+        success, used_provider = quiz_service.generate_quiz_questions(
             db=db,
             quiz_id=quiz_id,
-            document_id=document_id,
             num_questions=num_questions,
-            provider=provider,
             user_openai_key=user_openai_key,
             user_claude_key=user_claude_key,
             user_gemini_key=user_gemini_key,
@@ -209,12 +207,12 @@ def auto_pipeline_task(
         if file_ext in ["pdf", "PDF"]:
             result = pdf_service.process_pdf(
                 file_bytes,
-                file.original_filename or "document.pdf",
-                document_id,
-                db,
+                title=file.original_filename or "document.pdf",
             )
+            if not result.success:
+                raise ValueError(f"PDF processing failed: {result.error}")
             document.status = "completed"
-            document.total_chunks = result.get("total_chunks", 0)
+            document.total_chunks = len(result.chunks)
         else:
             raise ValueError(f"Unsupported file type: {file_ext}")
 

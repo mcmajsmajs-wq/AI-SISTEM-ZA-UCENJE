@@ -23,6 +23,7 @@ from app.db.models.file import File as FileModel
 from app.schemas.file import FileResponse, FileUploadResponse, FileListResponse
 from app.services.auth import get_current_user
 from app.services.storage import storage_service
+from app.core.posthog import posthog_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -125,6 +126,16 @@ async def upload_file(
     db.refresh(db_file)
 
     logger.info(f"File uploaded successfully: {db_file.id}")
+
+    posthog_client.capture(
+        "file uploaded",
+        distinct_id=str(current_user.id),
+        properties={
+            "file_type": file_ext,
+            "file_size_kb": round(file_size / 1024, 1),
+            "mime_type": file.content_type or "application/pdf",
+        },
+    )
 
     return FileUploadResponse(
         id=str(db_file.id),
@@ -333,6 +344,12 @@ async def delete_file(
     db.commit()
 
     logger.info(f"File soft deleted: {file_id}")
+
+    posthog_client.capture(
+        "file deleted",
+        distinct_id=str(current_user.id),
+        properties={"file_id": file_id},
+    )
 
     return None
 

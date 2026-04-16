@@ -49,7 +49,7 @@ export default function ResetPasswordPage() {
 
     setIsLoading(true)
     try {
-      await axios.post('/api/v1/auth/reset-password', {
+      await axios.post('/auth/reset-password', {
         token,
         new_password: password,
       })

@@ -405,11 +405,13 @@ export default function DocumentDetailPage() {
               Greška pri obradi dokumenta
             </div>
             <p className="text-red-600 text-sm mb-3">
-              {doc.description || 'Nije moguće izvući tekst iz dokumenta. Dokument je možda skeniran (samo slike) ili zaštićen.'}
+              {doc.metadata?.processing_error || doc.metadata?.translation?.errors?.[0] || doc.description || 'Nepoznata greška'}
             </p>
-            <p className="text-gray-600 text-xs">
-              Morate obrisati dokument i ponovo ga uploudovati kao novi dokument.
-            </p>
+            {(doc.metadata?.processing_error || doc.metadata?.translation?.errors?.[0]) && (
+              <p className="text-gray-600 text-xs">
+                Tehnički detalji: {doc.metadata.processing_error || doc.metadata.translation?.errors?.[0]}
+              </p>
+            )}
           </div>
         )}
         {doc.status === 'error' && (

@@ -28,12 +28,34 @@ from ai_learning_mcp.tools import (
 )
 
 APP_NAME = "ai-learning-mcp"
-PROJECT_ROOT = Path("/home/dju/Projekti/AI SISTEM ZA UCENJE/ai-learning-system")
+
+
+# Dinamičko određivanje project root - prvo iz env, pa auto-detekcija
+def _find_project_root() -> Path:
+    """Automatski pronađi project root tražeći docker-compose.yml."""
+    # Proveri environment variable
+    env_path = os.environ.get("PROJECT_ROOT")
+    if env_path and Path(env_path).exists():
+        return Path(env_path)
+
+    # Auto-detekcija: idi gore od trenutne lokacije
+    current = Path(__file__).parent
+    for _ in range(10):  # Max 10 nivoa gore
+        if (current / "docker-compose.yml").exists():
+            return current
+        current = current.parent
+
+    # Fallback na trenutni direktorijum
+    return Path.cwd()
+
+
+PROJECT_ROOT = _find_project_root()
 DOCKER_DIR = PROJECT_ROOT / "docker"
 
 server = Server(APP_NAME)
 
-API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8000")
+# API_BASE_URL - može se overridovati preko PROJECT_ROOT ili API_BASE_URL env var
+API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8010")
 DOCKER_COMPOSE_FILE = str(DOCKER_DIR / "docker-compose.yml")
 
 
@@ -428,7 +450,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         services = [
             ("API", f"{API_BASE_URL}/health"),
             ("Database", f"{API_BASE_URL}/ready"),
-            ("MinIO", "http://localhost:9000/minio/health/live"),
+            ("MinIO", "http://localhost:9002/minio/health/live"),
             ("Ollama", "http://localhost:11434/api/tags"),
             ("Redis", None),
         ]
@@ -858,7 +880,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
         # Health check via HTTP
         try:
             async with httpx.AsyncClient(timeout=5.0) as client:
-                resp = await client.get("http://localhost:9000/minio/health/live")
+                resp = await client.get("http://localhost:9002/minio/health/live")
                 parts.append(
                     f"MinIO health: {'✅ OK' if resp.status_code == 200 else f'❌ HTTP {resp.status_code}'}"
                 )
@@ -895,7 +917,7 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
             "app": f"{API_BASE_URL}/health",
             "db": None,
             "redis": None,
-            "minio": "http://localhost:9000/minio/health/live",
+            "minio": "http://localhost:9002/minio/health/live",
         }
         if service in health_url_map and health_url_map[service]:
             ok, data = await http_get(health_url_map[service])

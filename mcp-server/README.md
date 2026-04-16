@@ -32,14 +32,14 @@ MCP (Model Context Protocol) server za monitoring i upravljanje AI Learning Syst
 ### Opcija 1: pip
 
 ```bash
-cd "/home/dju/Projekti/AI SISTEM ZA UCENJE/ai-learning-system/mcp-server"
+cd /path/to/your/project/mcp-server
 pip install -e .
 ```
 
 ### Opcija 2: UV (preporučeno)
 
 ```bash
-cd "/home/dju/Projekti/AI SISTEM ZA UCENJE/ai-learning-system/mcp-server"
+cd /path/to/your/project/mcp-server
 uv pip install -e .
 ```
 
@@ -53,9 +53,9 @@ Dodajte u vaš MCP klijent konfiguraciju (npr. Claude Desktop, Cursor, itd.):
     "ai-learning": {
       "command": "python",
       "args": ["-m", "ai_learning_mcp"],
-      "cwd": "/home/dju/Projekti/AI SISTEM ZA UCENJE/ai-learning-system/mcp-server",
       "env": {
-        "API_BASE_URL": "http://localhost:8000"
+        "PROJECT_ROOT": "/path/to/your/project",
+        "API_BASE_URL": "http://localhost:8010"
       }
     }
   }
@@ -69,9 +69,10 @@ Ili koristeći UVX:
   "mcpServers": {
     "ai-learning": {
       "command": "uvx",
-      "args": ["--directory", "/home/dju/Projekti/AI SISTEM ZA UCENJE/ai-learning-system/mcp-server", "ai-learning-mcp"],
+      "args": ["--directory", "/path/to/your/project/mcp-server", "ai-learning-mcp"],
       "env": {
-        "API_BASE_URL": "http://localhost:8000"
+        "PROJECT_ROOT": "/path/to/your/project",
+        "API_BASE_URL": "http://localhost:8010"
       }
     }
   }
@@ -82,7 +83,8 @@ Ili koristeći UVX:
 
 | Variable | Default | Opis |
 |----------|---------|------|
-| `API_BASE_URL` | `http://localhost:8000` | URL FastAPI aplikacije |
+| `API_BASE_URL` | `http://localhost:8010` | URL FastAPI aplikacije |
+| `PROJECT_ROOT` | (auto-detect) | Putanja do projekta (gde je docker-compose.yml) |
 
 ## Primeri korišćenja
 

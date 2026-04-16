@@ -57,13 +57,13 @@ Sistem koristi **microservices** arhitekturu orchestriranu kroz Docker Compose:
 | Servis | Kontejner | Port | URL | Opis |
 |--------|-----------|------|-----|------|
 | Frontend (Nginx) | ai-learning-nginx | 80, 443 | http://localhost | Reverse proxy + staticke fajlove |
-| Backend API (FastAPI) | ai-learning-app | 8000 | http://localhost:8000 | REST API |
-| Swagger UI | — | — | http://localhost:8000/docs | Interaktivna API dokumentacija |
-| ReDoc | — | — | http://localhost:8000/redoc | Alternativna API dokumentacija |
+| Backend API (FastAPI) | ai-learning-app | 8000 | http://localhost:8010 | REST API |
+| Swagger UI | — | — | http://localhost:8010/docs | Interaktivna API dokumentacija |
+| ReDoc | — | — | http://localhost:8010/redoc | Alternativna API dokumentacija |
 | PostgreSQL | ai-learning-db | 5432 | localhost:5432 | Relaciona baza podataka |
 | Redis | ai-learning-redis | 6379 | localhost:6379 | Keš i Celery broker |
-| MinIO API | ai-learning-minio | 9000 | http://localhost:9000 | S3 object storage API |
-| MinIO Console | ai-learning-minio | 9001 | http://localhost:9001 | MinIO web upravljačka konzola |
+| MinIO API | ai-learning-minio | 9000 | http://localhost:9002 | S3 object storage API |
+| MinIO Console | ai-learning-minio | 9001 | http://localhost:9003 | MinIO web upravljačka konzola |
 | Grafana | ai-learning-grafana | 3000 | http://localhost:3000 | Monitoring dashboards |
 | Prometheus | ai-learning-prometheus | 9090 | http://localhost:9090 | Metrics scraping |
 | Ollama | ai-learning-ollama | 11434 | http://localhost:11434 | Lokalni LLM inference |
@@ -81,7 +81,7 @@ Sve vrednosti se podešavaju u fajlu `docker/.env` (kopiran iz `docker/.env.exam
 | Servis | URL | Korisničko ime | Lozinka | .env varijabla |
 |--------|-----|----------------|---------|----------------|
 | **Grafana** | http://localhost:3000 | admin | admin | `GRAFANA_ADMIN_USER` / `GRAFANA_ADMIN_PASSWORD` |
-| **MinIO Console** | http://localhost:9001 | minioadmin | minioadmin | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
+| **MinIO Console** | http://localhost:9003 | minioadmin | minioadmin | `MINIO_ROOT_USER` / `MINIO_ROOT_PASSWORD` |
 | **PostgreSQL** | localhost:5432 | ai_learning_user | OlPJqv9Ho4Ls1cFSKKulUiZBDtY | `POSTGRES_USER` / `POSTGRES_PASSWORD` |
 | **Redis** | localhost:6379 | — | *(bez lozinke)* | — |
 | **API korisnici** | http://localhost/register | *registracija* | *korisnik bira* | — |
@@ -93,7 +93,7 @@ Sve vrednosti se podešavaju u fajlu `docker/.env` (kopiran iz `docker/.env.exam
 
 ## 4. API Endpointi (kompletna lista)
 
-Baza URL-a: `http://localhost:8000` (direktno) ili `http://localhost/api` (kroz Nginx)
+Baza URL-a: `http://localhost:8010` (direktno) ili `http://localhost:8090/api` (kroz Nginx)
 
 ### Autentikacija (`/api/auth`)
 
@@ -350,7 +350,8 @@ Fajl: `mcp-server/mcp_config.json`
       "command": "python",
       "args": ["-m", "ai_learning_mcp"],
       "env": {
-        "API_BASE_URL": "http://localhost:8000"
+        "PROJECT_ROOT": "/path/to/your/project",
+        "API_BASE_URL": "http://localhost:8010"
       }
     }
   }
@@ -404,7 +405,7 @@ Fajl: `mcp-server/mcp_config.json`
 
 - **URL**: http://localhost:9090
 - **Konfiguracija**: `docker/prometheus/prometheus.yml`
-- **Metrike**: dostupne na `http://localhost:8000/metrics`
+- **Metrike**: dostupne na `http://localhost:8010/metrics`
 - **Retention**: 200 sati
 
 ### Logovi aplikacije
@@ -434,7 +435,7 @@ docker compose up -d
 docker compose logs -f app
 
 # Pristup API-ju
-http://localhost:8000/docs
+http://localhost:8010/docs
 ```
 
 ### Build frontend-a
@@ -615,7 +616,7 @@ cp docker/.env backups/.env.backup_$(date +%Y%m%d)
 ### CORS
 
 - Dozvoljeni origini konfigurisani u `docker/.env` (`ALLOWED_ORIGINS`)
-- U development modu: `http://localhost`, `http://localhost:3000`, `http://localhost:8000`
+- U development modu: `http://localhost:8090`, `http://localhost:3000`, `http://localhost:8010`
 
 ### Network isolation
 

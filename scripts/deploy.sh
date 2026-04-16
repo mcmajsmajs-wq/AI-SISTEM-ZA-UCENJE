@@ -220,7 +220,7 @@ health_check_local() {
   log_step "Health check (local)"
   local max_retries=10
   local retry_interval=5
-  local url="http://localhost:8000/health"
+  local url="http://localhost:8010/health"
 
   log_info "Čekanje na pokretanje servisa..."
   sleep 10
@@ -342,9 +342,9 @@ deploy_local() {
   fi
 
   log_success "Lokalni deploy završen! ✅"
-  log_info "Backend:  http://localhost:8000"
-  log_info "Frontend: http://localhost:80"
-  log_info "API Docs: http://localhost:8000/docs"
+  log_info "Backend:  http://localhost:8010"
+  log_info "Frontend: http://localhost:8090"
+  log_info "API Docs: http://localhost:8010/docs"
   log_info ""
   log_info "Pokreni verifikaciju: make verify"
   log_info "  ili ručno:"

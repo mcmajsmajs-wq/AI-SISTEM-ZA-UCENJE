@@ -83,20 +83,38 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
             logger.info(f"Processing PDF file: {file.original_filename}")
             result = pdf_service.process_pdf(
                 file_bytes,
-                file.original_filename or "document.pdf",
-                document_id,
-                db,
+                title=file.original_filename or "document.pdf",
             )
 
+            if not result.success:
+                raise ValueError(f"PDF processing failed: {result.error}")
+
+            for chunk_data in result.chunks:
+                chunk = Chunk(
+                    id=uuid.uuid4(),
+                    document_id=document.id,
+                    content=chunk_data.content,
+                    sequence_number=chunk_data.sequence_number,
+                    token_count=chunk_data.token_count,
+                    page_number=chunk_data.page_number,
+                )
+                db.add(chunk)
+
+            document.total_pages = result.metadata.total_pages
             document.status = "completed"
-            document.total_chunks = result.get("total_chunks", 0)
+            document.total_chunks = len(result.chunks)
             document.file_metadata = document.file_metadata or {}
-            document.file_metadata["pdf_processing"] = result
+            document.file_metadata["pdf_processing"] = {
+                "success": result.success,
+                "total_chunks": len(result.chunks),
+                "total_pages": result.metadata.total_pages,
+                "pages_text": [
+                    p[:200] + "..." if len(p) > 200 else p for p in result.pages_text
+                ],
+            }
 
             file.status = "completed"
-            logger.info(
-                f"PDF processing completed: {result.get('total_chunks', 0)} chunks"
-            )
+            logger.info(f"PDF processing completed: {len(result.chunks)} chunks")
 
         elif file_ext in [".txt", ".TXT"]:
             logger.info(f"Processing text file: {file.original_filename}")
@@ -110,7 +128,6 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
                 document_id=document.id,
                 content=text_content,
                 sequence_number=1,
-                char_count=len(text_content),
                 token_count=len(text_content) // 4,
             )
             db.add(chunk)

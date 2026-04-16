@@ -40,9 +40,65 @@ logger = logging.getLogger(__name__)
 # ============================================================
 
 
+# ============================================================
+# VALID MODELS - Auto-provera aktuelnih modela
+# ============================================================
+
+VALID_MODELS = {
+    "openai": "gpt-4o",
+    "groq": "llama-3.3-70b-versatile",
+    "mistral": "mistral-small-latest",
+    "deepseek": "deepseek-chat",
+    "gemini": "gemini-2.0-flash",
+    "ollama": "llama3.1",
+}
+
+
+def get_valid_model(provider: str, fallback: str = None) -> str:
+    """Vrati validan model za provider."""
+    return VALID_MODELS.get(provider, fallback or "gpt-4o")
+
+
+# ============================================================
+# RECOVERABLE ERRORS - Automatski fallback
+# ============================================================
+
+RECOVERABLE_ERRORS = [
+    "429",
+    "rate_limit",
+    "rate limit",
+    "402",
+    "401",
+    "unauthorized",
+    "invalid_api_key",
+    "decommissioned",
+    "model no longer",
+    "insufficient",
+    "quota",
+    "too many requests",
+    "rate limit exceeded",
+    "rate limit error",
+]
+
+
+def is_recoverable_error(error: str, status_code: int = None) -> bool:
+    """Proveri da li je greška recoveriable."""
+    if status_code and status_code in [401, 402, 403, 429]:
+        return True
+    error_lower = error.lower()
+    return any(x in error_lower for x in RECOVERABLE_ERRORS)
+
+
+# ============================================================
+# PROVIDER ENUM
+# ============================================================
+
+
 class AIProvider(str, Enum):
     AUTO = "auto"
     OPENAI = "openai"
+    GROQ = "groq"
+    MISTRAL = "mistral"
     CLAUDE = "claude"
     DEEPSEEK = "deepseek"
     GEMINI = "gemini"
@@ -347,7 +403,26 @@ class OpenAIChatClient(BaseAIChatClient):
                         "total_tokens": usage.get("total_tokens", 0),
                     },
                 )
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                error_str = str(e)
+                if is_recoverable_error(error_str, status_code):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable HTTP error {status_code}: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
+                logger.error(f"OpenAI chat HTTP error: {e}")
+                return ChatResponse(
+                    content=f"Greška pri komunikaciji sa OpenAI: {str(e)}",
+                    provider=self.provider_name,
+                )
             except Exception as e:
+                error_str = str(e)
+                if is_recoverable_error(error_str):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable error: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
                 logger.error(f"OpenAI chat error: {e}")
                 return ChatResponse(
                     content=f"Greška pri komunikaciji sa OpenAI: {str(e)}",
@@ -498,7 +573,26 @@ class DeepSeekChatClient(BaseAIChatClient):
                     provider=self.provider_name,
                     usage=data.get("usage", {}),
                 )
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                error_str = str(e)
+                if is_recoverable_error(error_str, status_code):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable HTTP error {status_code}: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
+                logger.error(f"DeepSeek chat HTTP error: {e}")
+                return ChatResponse(
+                    content=f"Greška pri komunikaciji sa DeepSeek: {str(e)}",
+                    provider=self.provider_name,
+                )
             except Exception as e:
+                error_str = str(e)
+                if is_recoverable_error(error_str):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable error: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
                 logger.error(f"DeepSeek chat error: {e}")
                 return ChatResponse(
                     content=f"Greška pri komunikaciji sa DeepSeek: {str(e)}",
@@ -664,7 +758,26 @@ class ClaudeChatClient(BaseAIChatClient):
                         "output_tokens": usage.get("output_tokens", 0),
                     },
                 )
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                error_str = str(e)
+                if is_recoverable_error(error_str, status_code):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable HTTP error {status_code}: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
+                logger.error(f"Claude chat HTTP error: {e}")
+                return ChatResponse(
+                    content=f"Greška pri komunikaciji sa Claude: {str(e)}",
+                    provider=self.provider_name,
+                )
             except Exception as e:
+                error_str = str(e)
+                if is_recoverable_error(error_str):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable error: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
                 logger.error(f"Claude chat error: {e}")
                 return ChatResponse(
                     content=f"Greška pri komunikaciji sa Claude: {str(e)}",
@@ -785,7 +898,26 @@ class GeminiChatClient(BaseAIChatClient):
                     provider=self.provider_name,
                     usage={},
                 )
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                error_str = str(e)
+                if is_recoverable_error(error_str, status_code):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable HTTP error {status_code}: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
+                logger.error(f"Gemini chat HTTP error: {e}")
+                return ChatResponse(
+                    content=f"Greška pri komunikaciji sa Gemini: {str(e)}",
+                    provider=self.provider_name,
+                )
             except Exception as e:
+                error_str = str(e)
+                if is_recoverable_error(error_str):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable error: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
                 logger.error(f"Gemini chat error: {e}")
                 return ChatResponse(
                     content=f"Greška pri komunikaciji sa Gemini: {str(e)}",
@@ -894,7 +1026,26 @@ class OllamaChatClient(BaseAIChatClient):
                     provider=self.provider_name,
                     usage={},
                 )
+            except httpx.HTTPStatusError as e:
+                status_code = e.response.status_code
+                error_str = str(e)
+                if is_recoverable_error(error_str, status_code):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable HTTP error {status_code}: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
+                logger.error(f"Ollama chat HTTP error: {e}")
+                return ChatResponse(
+                    content=f"Greška pri komunikaciji sa Ollama: {str(e)}",
+                    provider=self.provider_name,
+                )
             except Exception as e:
+                error_str = str(e)
+                if is_recoverable_error(error_str):
+                    logger.warning(
+                        f"[{self.provider_name}] Recoverable error: {error_str}"
+                    )
+                    raise Exception(f"Recoverable: {error_str}")
                 logger.error(f"Ollama chat error: {e}")
                 return ChatResponse(
                     content=f"Greška pri komunikaciji sa Ollama: {str(e)}",
@@ -944,6 +1095,8 @@ class AIChatService:
 
     PROVIDER_FALLBACK_ORDER = [
         AIProvider.OPENAI,
+        AIProvider.GROQ,
+        AIProvider.MISTRAL,
         AIProvider.CLAUDE,
         AIProvider.DEEPSEEK,
         AIProvider.GEMINI,
@@ -962,7 +1115,18 @@ class AIChatService:
         # Initialize clients
         self._clients: Dict[str, BaseAIChatClient] = {
             AIProvider.OPENAI.value: OpenAIChatClient(
-                api_key=self.user_api_keys.get(AIProvider.OPENAI.value)
+                api_key=self.user_api_keys.get(AIProvider.OPENAI.value),
+                model=get_valid_model("openai"),
+            ),
+            AIProvider.GROQ.value: OpenAIChatClient(
+                api_key=self.user_api_keys.get(AIProvider.GROQ.value),
+                base_url="https://api.groq.com/openai/v1",
+                model=get_valid_model("groq"),
+            ),
+            AIProvider.MISTRAL.value: OpenAIChatClient(
+                api_key=self.user_api_keys.get(AIProvider.MISTRAL.value),
+                base_url="https://api.mistral.ai/v1",
+                model=get_valid_model("mistral"),
             ),
             AIProvider.CLAUDE.value: ClaudeChatClient(
                 api_key=self.user_api_keys.get(AIProvider.CLAUDE.value)
@@ -980,7 +1144,15 @@ class AIChatService:
         providers = []
 
         provider_configs = [
-            (AIProvider.OPENAI.value, "OpenAI", "gpt-4o", True, True),
+            (AIProvider.OPENAI.value, "OpenAI", get_valid_model("openai"), True, True),
+            (AIProvider.GROQ.value, "Groq", get_valid_model("groq"), False, False),
+            (
+                AIProvider.MISTRAL.value,
+                "Mistral",
+                get_valid_model("mistral"),
+                False,
+                False,
+            ),
             (
                 AIProvider.CLAUDE.value,
                 "Claude",
@@ -988,9 +1160,21 @@ class AIChatService:
                 True,
                 True,
             ),
-            (AIProvider.DEEPSEEK.value, "DeepSeek", "deepseek-chat", True, True),
-            (AIProvider.GEMINI.value, "Gemini", "gemini-2.0-flash", True, True),
-            (AIProvider.OLLAMA.value, "Ollama (Lokalni)", "llama3.1", False, False),
+            (
+                AIProvider.DEEPSEEK.value,
+                "DeepSeek",
+                get_valid_model("deepseek"),
+                True,
+                True,
+            ),
+            (AIProvider.GEMINI.value, "Gemini", get_valid_model("gemini"), True, True),
+            (
+                AIProvider.OLLAMA.value,
+                "Ollama (Lokalni)",
+                get_valid_model("ollama"),
+                False,
+                False,
+            ),
         ]
 
         for pid, name, model, supports_tools, supports_thinking in provider_configs:

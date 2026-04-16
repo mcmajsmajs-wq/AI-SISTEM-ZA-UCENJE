@@ -131,9 +131,9 @@ deploy-local: ## Lokalni deploy — docker compose up -d --build
 	@echo "$(BOLD)Lokalni deploy...$(NC)"
 	cd $(DOCKER_DIR) && docker compose up -d --build
 	@echo "$(GREEN)✅ Pokrenuto lokalno!$(NC)"
-	@echo "  Backend:  http://localhost:8000"
-	@echo "  Frontend: http://localhost:80"
-	@echo "  API Docs: http://localhost:8000/docs"
+	@echo "  Backend:  http://localhost:8010"
+	@echo "  Frontend: http://localhost:8090"
+	@echo "  API Docs: http://localhost:8010/docs"
 	@echo ""
 	@echo "Logovi: make logs"
 
@@ -211,7 +211,7 @@ status: ## Prikaži status svih kontejnera i njihovo zdravlje
 .PHONY: health
 health: ## Provjeri health check endpoint
 	@echo "$(BOLD)Health check...$(NC)"
-	@curl -sf http://localhost:8000/health 2>/dev/null && \
+	@curl -sf http://localhost:8010/health 2>/dev/null && \
 		echo "$(GREEN)✅ Backend je zdrav!$(NC)" || \
 		echo "$(BOLD)❌ Backend nije dostupan$(NC)"
 	@curl -sf http://localhost/health 2>/dev/null && \
@@ -368,7 +368,7 @@ optimize-stats: ## Prikaži statistike optimizacija (cache, rate limit, DB pool)
 	@echo "$(BOLD)Statistike optimizacija:$(NC)"
 	@echo ""
 	@echo "$(CYAN)Rate Limiting:$(NC)"
-	@curl -sf http://localhost:8000/api/monitoring/rate-limit-status 2>/dev/null || \
+	@curl -sf http://localhost:8010/api/monitoring/rate-limit-status 2>/dev/null || \
 		echo "  (nije dostupno)"
 	@echo ""
 	@echo "$(CYAN)Cache statistike:$(NC)"
@@ -376,7 +376,7 @@ optimize-stats: ## Prikaži statistike optimizacija (cache, rate limit, DB pool)
 		grep -E "keyspace_hits|keyspace_misses" || echo "  (nije dostupno)"
 	@echo ""
 	@echo "$(CYAN)DB connection pool:$(NC)"
-	@curl -sf http://localhost:8000/api/monitoring/db-pool-status 2>/dev/null || \
+	@curl -sf http://localhost:8010/api/monitoring/db-pool-status 2>/dev/null || \
 		echo "  (nije dostupno)"
 
 # ── CI/CD ───────────────────────────────────────────────────────────────────────

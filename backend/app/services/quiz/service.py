@@ -36,6 +36,104 @@ from app.services.quiz.clients import _build_clients, _PROVIDER_ORDER
 logger = logging.getLogger(__name__)
 
 
+CYRILLIC_TO_LATIN = {
+    "а": "a",
+    "б": "b",
+    "в": "v",
+    "г": "g",
+    "д": "d",
+    "ѓ": "đ",
+    "е": "e",
+    "ж": "ž",
+    "з": "z",
+    "и": "i",
+    "ј": "j",
+    "к": "k",
+    "л": "l",
+    "љ": "lj",
+    "м": "m",
+    "н": "n",
+    "њ": "nj",
+    "о": "o",
+    "п": "p",
+    "р": "r",
+    "с": "s",
+    "т": "t",
+    "ћ": "ć",
+    "у": "u",
+    "ф": "f",
+    "х": "h",
+    "ц": "c",
+    "ч": "č",
+    "Ѓ": "Đ",
+    "Ѐ": "È",
+    "Ё": "Ë",
+    "Љ": "LJ",
+    "Њ": "NJ",
+    "Ћ": "Ć",
+    "Џ": "DŽ",
+    "ш": "š",
+    "щ": "št",
+    "ъ": "",
+    "ы": "y",
+    "ь": "",
+    "э": "e",
+    "ю": "ju",
+    "я": "ja",
+    "А": "A",
+    "Б": "B",
+    "В": "V",
+    "Г": "G",
+    "Д": "D",
+    "Ѓ": "Đ",
+    "Е": "E",
+    "Ё": "Ë",
+    "Ж": "Ž",
+    "З": "Z",
+    "И": "I",
+    "Й": "J",
+    "К": "K",
+    "Л": "L",
+    "Љ": "LJ",
+    "М": "M",
+    "Н": "N",
+    "Њ": "NJ",
+    "О": "O",
+    "П": "P",
+    "Р": "R",
+    "С": "S",
+    "Т": "T",
+    "Ћ": "Ć",
+    "У": "U",
+    "Ф": "F",
+    "Х": "H",
+    "Ц": "C",
+    "Ч": "Č",
+    "Џ": "DŽ",
+    "Ш": "Š",
+    "Щ": "ŠT",
+    "Ъ": "",
+    "Ы": "Y",
+    "Ь": "",
+    "Э": "E",
+    "Ю": "JU",
+    "Я": "JA",
+}
+
+
+def cyrillic_to_latin(text: str) -> str:
+    """Convert Cyrillic text to Latin script."""
+    if not text:
+        return text
+    result = []
+    for char in text:
+        if "\u0400" <= char <= "\u04ff" or char in "ёЁ":
+            result.append(CYRILLIC_TO_LATIN.get(char, char))
+        else:
+            result.append(char)
+    return "".join(result)
+
+
 def _auto_num_questions(total_chunks: int, requested: int) -> int:
     """
     If requested > 0, use it (capped to a sane max).
@@ -224,9 +322,340 @@ class QuizService:
             # Hotspot: correct_answer je ime regiona/kliknute tačke
             return user_answer == correct_answer
 
+        elif q_type == "text_input":
+            # Text input: provera tekstualnog odgovora sa opcijom za fuzzy matching
+            return self._check_text_input_answer_static(
+                user_answer, correct_answer, extra_data
+            )
+
+        elif q_type == "fill_blank":
+            # Fill in the blank: provera sa alternativnim rečima
+            return self._check_fill_blank_answer_static(
+                user_answer, correct_answer, extra_data
+            )
+
         # Nepoznat tip - vraća False
         logger.warning(f"Nepoznati tip pitanja: {q_type}")
         return False
+
+    @staticmethod
+    def _check_text_input_answer_static(
+        user_answer: str, correct_answer: str, extra_data: dict = None
+    ) -> bool:
+        """
+        Proverava tekstualni odgovor za text_input tip.
+
+        Podržava:
+        - case_insensitive: Ignoriši velika/mala slova
+        - exact_word: Zahtevaj potpuno poklapanje reči
+        - fuzzy: Dozvoli manja odstupanja
+        - transliterate: Dozvoli latinica/ćirilica konverziju
+
+        Args:
+            user_answer: Odgovor korisnika
+            correct_answer: Tačan odgovor
+            extra_data: {'case_insensitive', 'exact_word', 'fuzzy', 'transliterate'}
+
+        Returns:
+            bool: True ako je odgovor tačan
+        """
+        if not user_answer or not correct_answer:
+            return False
+
+        user_answer = user_answer.strip()
+        correct_answer = correct_answer.strip()
+
+        # Default opcije
+        case_insensitive = True
+        exact_word = False
+        fuzzy = False
+        transliterate = True
+
+        if extra_data:
+            case_insensitive = extra_data.get("case_insensitive", True)
+            exact_word = extra_data.get("exact_word", False)
+            fuzzy = extra_data.get("fuzzy", False)
+            transliterate = extra_data.get("transliterate", True)
+
+        # Priprema - transliteracija latinica <-> ćirilica
+        if transliterate:
+            user_answer = _transliterate_text(user_answer)
+            correct_answer = _transliterate_text(correct_answer)
+
+        # Case insensitive
+        if case_insensitive:
+            user_answer = user_answer.lower()
+            correct_answer = correct_answer.lower()
+
+        # Potpuno poklapanje
+        if exact_word:
+            return user_answer == correct_answer
+
+        # Fuzzy matching - svaka reč iz correct_answer mora biti u user_answer
+        if fuzzy:
+            user_words = set(user_answer.split())
+            correct_words = set(correct_answer.split())
+            # Bare minimum 80% reči mora da se poklapa
+            matching = len(user_words & correct_words) / max(len(correct_words), 1)
+            return matching >= 0.8
+
+        # Default: direktno poređenje
+        return user_answer == correct_answer
+
+    @staticmethod
+    def _check_fill_blank_answer_static(
+        user_answer: str, correct_answer: str, extra_data: dict = None
+    ) -> bool:
+        """
+        Proverava fill_blank odgovor sa alternativnim rečima.
+
+        correct_answer može biti "reč1,reč2,reč3" - bilo koja je tačna
+        ILI "reč1|reč2|reč3" - bilo koja je tačna
+
+        Args:
+            user_answer: Odgovor korisnika
+            correct_answer: Tačan odgovor (sa alternativama)
+            extra_data: {'case_insensitive', 'all_words'}
+
+        Returns:
+            bool: True ako je odgovor tačan
+        """
+        if not user_answer or not correct_answer:
+            return False
+
+        user_answer = user_answer.strip()
+
+        # Podržava , ili | kao separator alternativnih odgovora
+        correct_answers = [
+            a.strip() for a in re.split(r"[,|]", correct_answer) if a.strip()
+        ]
+
+        if not correct_answers:
+            return False
+
+        # Default opcije
+        case_insensitive = True
+
+        if extra_data:
+            case_insensitive = extra_data.get("case_insensitive", True)
+
+        # Priprema - transliteracija
+        user_answer = _transliterate_text(user_answer)
+        if case_insensitive:
+            user_answer = user_answer.lower()
+
+        # Proveri svaki mogući tačan odgovor
+        for correct in correct_answers:
+            correct_processed = _transliterate_text(correct)
+            if case_insensitive:
+                correct_processed = correct_processed.lower()
+
+            if user_answer == correct_processed:
+                return True
+
+        return False
+
+
+def _transliterate_text(text: str) -> str:
+    """
+    Konvertuje tekst latinica <-> ćirilica.
+
+    Args:
+        text: Ulazni tekst
+
+    Returns:
+        str: Konvertovani tekst
+    """
+    if not text:
+        return text
+
+    # Ćirilica -> Latinica
+    cyrillic_to_latin = {
+        "а": "a",
+        "б": "b",
+        "в": "v",
+        "г": "g",
+        "д": "đ",
+        "ђ": "đ",
+        "е": "e",
+        "ж": "ž",
+        "з": "z",
+        "и": "i",
+        "ј": "j",
+        "к": "k",
+        "л": "l",
+        "љ": "lj",
+        "м": "m",
+        "н": "n",
+        "њ": "nj",
+        "о": "o",
+        "п": "p",
+        "р": "r",
+        "с": "s",
+        "т": "t",
+        "ћ": "ć",
+        "у": "u",
+        "ф": "f",
+        "х": "h",
+        "ц": "c",
+        "ч": "č",
+        "Ѓ": "Đ",
+        "Џ": "dž",
+        "ш": "š",
+        "А": "A",
+        "Б": "B",
+        "В": "V",
+        "Г": "G",
+        "Д": "D",
+        "Ђ": "Đ",
+        "Е": "E",
+        "Ж": "Ž",
+        "З": "Z",
+        "И": "I",
+        "Ј": "J",
+        "К": "K",
+        "Л": "L",
+        "Љ": "LJ",
+        "М": "M",
+        "Н": "N",
+        "Њ": "NJ",
+        "О": "O",
+        "П": "P",
+        "Р": "R",
+        "С": "S",
+        "Т": "T",
+        "Ћ": "Ć",
+        "У": "U",
+        "Ф": "F",
+        "Х": "H",
+        "Ц": "C",
+        "Ч": "Č",
+        "Џ": "DŽ",
+        "Ш": "Š",
+    }
+
+    # Latinica -> Ćirilica
+    latin_to_cyrillic = {v: k for k, v in cyrillic_to_latin.items()}
+
+    # Detektuj i konvertuj
+    # Ako tekst sadrži ćirilična slova, konvertuj u latinicnu
+    has_cyrillic = any(
+        ord(c) >= 0x0430 and ord(c) <= 0x044F for c in text if c.isalpha()
+    )
+
+    if has_cyrillic:
+        result = []
+        for char in text:
+            result.append(cyrillic_to_latin.get(char, char))
+        return "".join(result)
+
+    # Inače, konvertuj u ćirilicu (za fallback)
+    result = []
+    for char in text:
+        result.append(latin_to_cyrillic.get(char, char))
+    return "".join(result)
+
+
+def _transliterate_text(text: str) -> str:
+    """
+    Konvertuje tekst latinica <-> ćirilica.
+
+    Args:
+        text: Ulazni tekst
+
+    Returns:
+        str: Konvertovani tekst
+    """
+    if not text:
+        return text
+
+    # Ćirilica -> Latinica
+    cyrillic_to_latin = {
+        "а": "a",
+        "б": "b",
+        "в": "v",
+        "г": "g",
+        "д": "đ",
+        "ђ": "đ",
+        "е": "e",
+        "ж": "ž",
+        "з": "z",
+        "и": "i",
+        "ј": "j",
+        "к": "k",
+        "л": "l",
+        "љ": "lj",
+        "м": "m",
+        "н": "n",
+        "њ": "nj",
+        "о": "o",
+        "п": "p",
+        "р": "r",
+        "с": "s",
+        "т": "t",
+        "ћ": "ć",
+        "у": "u",
+        "ф": "f",
+        "х": "h",
+        "ц": "c",
+        "ч": "č",
+        "Ѓ": "Đ",
+        "Џ": "dž",
+        "ш": "š",
+        "А": "A",
+        "Б": "B",
+        "В": "V",
+        "Г": "G",
+        "Д": "D",
+        "Ђ": "Đ",
+        "Е": "E",
+        "Ж": "Ž",
+        "З": "Z",
+        "И": "I",
+        "Ј": "J",
+        "К": "K",
+        "Л": "L",
+        "Љ": "LJ",
+        "М": "M",
+        "Н": "N",
+        "Њ": "NJ",
+        "О": "O",
+        "П": "P",
+        "Р": "R",
+        "С": "S",
+        "Т": "T",
+        "Ћ": "Ć",
+        "У": "U",
+        "Ф": "F",
+        "Х": "H",
+        "Ц": "C",
+        "Ч": "Č",
+        "Џ": "DŽ",
+        "Ш": "Š",
+    }
+
+    # Latinica -> Ćirilica
+    latin_to_cyrillic = {v: k for k, v in cyrillic_to_latin.items()}
+
+    # Detektuj i konvertuj
+    has_cyrillic = any(
+        ord(c) >= 0x0430 and ord(c) <= 0x044F for c in text if c.isalpha()
+    )
+
+    if has_cyrillic:
+        result = []
+        for char in text:
+            result.append(cyrillic_to_latin.get(char, char))
+        return "".join(result)
+
+    result = []
+    for char in text:
+        result.append(latin_to_cyrillic.get(char, char))
+    return "".join(result)
+
+
+class QuizService:
+    """Glavni servis za kviz operacije."""
 
     def get_available_providers(self) -> List[dict]:
         """Vraća listu svih dostupnih provajdera."""
@@ -446,6 +875,15 @@ class QuizService:
 
         num_to_generate = _auto_num_questions(len(selected_chunks), num_questions)
 
+        from app.services.quiz import update_quiz_progress
+
+        update_quiz_progress(
+            quiz_id, "started", 5, f"0 / {num_to_generate} - Priprema..."
+        )
+        update_quiz_progress(
+            quiz_id, "processing", 10, f"Generisanje pitanja: 0 / {num_to_generate}"
+        )
+
         ok, questions, provider = self.generate_questions_with_ai(
             text=text,
             num_questions=num_to_generate,
@@ -462,16 +900,28 @@ class QuizService:
             quiz.status = "failed"
             quiz.error_message = provider
             db.commit()
+            update_quiz_progress(
+                quiz_id, "failed", -1, f"Greška: {provider}", error=provider
+            )
             return False, f"Greška pri generisanju: {provider}"
 
+        update_quiz_progress(
+            quiz_id, "completed", 100, f"{len(questions)} / {num_to_generate}"
+        )
+
         for i, q_data in enumerate(questions):
+            question_text = cyrillic_to_latin(q_data.get("question_text", ""))
+            options = [cyrillic_to_latin(opt) for opt in q_data.get("options", [])]
+            correct_answer = cyrillic_to_latin(q_data.get("correct_answer", ""))
+            explanation = cyrillic_to_latin(q_data.get("explanation", ""))
+
             question = Question(
                 quiz_id=quiz.id,
-                question_text=q_data.get("question_text", ""),
+                question_text=question_text,
                 question_type=q_data.get("question_type", "multiple_choice"),
-                options=q_data.get("options", []),
-                correct_answer=q_data.get("correct_answer", ""),
-                explanation=q_data.get("explanation", ""),
+                options=options,
+                correct_answer=correct_answer,
+                explanation=explanation,
                 points=q_data.get("points", 1),
                 order_index=i,
             )
@@ -481,6 +931,9 @@ class QuizService:
         mark_chunks_as_used(chunk_ids, db)
 
         quiz.status = "ready"
+        quiz.total_questions = len(questions)
+        if quiz.target_questions == 0:
+            quiz.target_questions = num_questions
         db.commit()
 
         return True, f"Generisano {len(questions)} pitanja (provider: {provider})"
@@ -508,6 +961,14 @@ class QuizService:
             correct_parts = set(p.strip().lower() for p in correct.split(","))
             selected_parts = set(p.strip().lower() for p in selected_answer.split(","))
             is_correct = correct_parts == selected_parts
+        elif question.question_type == "text_input":
+            is_correct = self._check_text_input_answer(
+                selected_answer, correct, question.exact_word, question.case_insensitive
+            )
+        elif question.question_type == "fill_blank":
+            is_correct = self._check_fill_blank_answer(
+                selected_answer, correct, question.exact_word, question.case_insensitive
+            )
 
         points = question.points if is_correct else 0
 
@@ -689,4 +1150,52 @@ def _check_answer_static(
     # Prosleđuje QuizService._check_answer_static za logiku
     return QuizService._check_answer_static(
         q_type, user_answer, correct_answer, extra_data
+    )
+
+
+def _check_text_input_answer(
+    user_answer: str, correct_answer: str, exact_word: bool, case_insensitive: bool
+) -> bool:
+    """
+    Proverava tekstualni odgovor za text_input tip pitanja.
+
+    Args:
+        user_answer: Odgovor korisnika
+        correct_answer: Tačan odgovor
+        exact_word: Zahtevaj potpuno poklapanje reči
+        case_insensitive: Ignoriši velika/mala slova
+
+    Returns:
+        bool: True ako je odgovor tačan
+    """
+    from app.services.quiz.service import QuizService
+
+    return QuizService._check_text_input_answer_static(
+        user_answer,
+        correct_answer,
+        {"exact_word": exact_word, "case_insensitive": case_insensitive},
+    )
+
+
+def _check_fill_blank_answer(
+    user_answer: str, correct_answer: str, exact_word: bool, case_insensitive: bool
+) -> bool:
+    """
+    Proverava odgovor za fill_blank tip pitanja sa alternativnim rečima.
+
+    Args:
+        user_answer: Odgovor korisnika
+        correct_answer: Tačan odgovor
+        exact_word: Zahtevaj potpuno poklapanje
+        case_insensitive: Ignoriši velika/mala slova
+
+    Returns:
+        bool: True ako je odgovor tačan
+    """
+    from app.services.quiz.service import QuizService
+
+    return QuizService._check_fill_blank_answer_static(
+        user_answer,
+        correct_answer,
+        {"exact_word": exact_word, "case_insensitive": case_insensitive},
     )

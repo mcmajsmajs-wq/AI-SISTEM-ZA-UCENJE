@@ -12,7 +12,7 @@ Verzija: 1.0.0
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from sqlalchemy import func
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 import logging
 
 from app.db.session import get_db
@@ -44,7 +44,7 @@ async def get_overview(
         db.query(QuizAttempt)
         .filter(
             QuizAttempt.user_id == current_user.id,
-            QuizAttempt.passed is True,
+            QuizAttempt.passed == True,
         )
         .count()
     )
@@ -70,7 +70,7 @@ async def get_overview(
         .join(StudyPlan)
         .filter(
             StudyPlan.user_id == current_user.id,
-            StudyPlanItem.is_completed is True,
+            StudyPlanItem.is_completed == True,
         )
         .count()
     )
@@ -200,6 +200,7 @@ async def get_quiz_performance(
                 QuizAttempt.quiz_id == quiz.id,
                 QuizAttempt.user_id == current_user.id,
                 QuizAttempt.completed_at is not None,
+                QuizAttempt.percentage is not None,
             )
             .all()
         )
@@ -209,7 +210,12 @@ async def get_quiz_performance(
 
         avg_pct = sum(a.percentage for a in attempts) / len(attempts)
         best_pct = max(a.percentage for a in attempts)
-        last_attempt = max(attempts, key=lambda a: a.completed_at)
+        last_attempt = max(
+            attempts,
+            key=lambda a: (
+                a.completed_at.replace(tzinfo=None) if a.completed_at else datetime.min
+            ),
+        )
 
         result.append(
             {
@@ -218,7 +224,9 @@ async def get_quiz_performance(
                 "attempt_count": len(attempts),
                 "avg_score": round(avg_pct, 1),
                 "best_score": round(best_pct, 1),
-                "last_attempt_at": last_attempt.completed_at.isoformat(),
+                "last_attempt_at": last_attempt.completed_at.isoformat()
+                if last_attempt.completed_at
+                else None,
                 "last_passed": last_attempt.passed,
             }
         )
@@ -317,6 +325,7 @@ def _calc_streak(user_id, db: Session) -> int:
         db.query(QuizAttempt)
         .filter(
             QuizAttempt.user_id == user_id,
+            QuizAttempt.completed_at != None,
             func.date(QuizAttempt.completed_at) == today,
         )
         .count()
@@ -329,6 +338,7 @@ def _calc_streak(user_id, db: Session) -> int:
             db.query(QuizAttempt)
             .filter(
                 QuizAttempt.user_id == user_id,
+                QuizAttempt.completed_at != None,
                 func.date(QuizAttempt.completed_at) == check,
             )
             .count()

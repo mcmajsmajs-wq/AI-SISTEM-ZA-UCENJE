@@ -4,7 +4,7 @@
 QUIZ PROMPT TEMPLATES
 ================================================================================
 
-Verzija: 1.0.0
+Verzija: 1.2.0 - Fixed ALL curly brace escaping for Python format()
 ================================================================================
 """
 
@@ -36,21 +36,48 @@ ONLY create questions from:
 - Detailed explanations of concepts
 - Historical events with dates and details
 
-IMPORTANT - QUESTION TYPES:
-- 60% multiple_choice — 1 correct answer, 4 plausible options
-- 25% checkbox — 2-4 correct answers, 4 options (select ALL that apply)  
-- 15% true_false — balanced mix of TRUE and FALSE statements
+IMPORTANT - QUESTION TYPES (use variety!):
+- 30% multiple_choice - 1 correct answer, 4 plausible options
+- 15% checkbox - 2-4 correct answers, 4 options (select ALL that apply)
+- 10% true_false - balanced mix of TRUE and FALSE statements  
+- 15% sequencing - Sort elements in correct order (e.g., chronological events, steps)
+- 15% matching - Connect related pairs (left column to right column via drag/drop)
+- 15% categorization - Put items in correct categories (buckets)
 
-CRITICAL: TRUE/FALSE BALANCE
-- For TRUE/FALSE questions: Exactly 50% should be TRUE, 50% FALSE
-- Create false statements by: negating a fact, changing a number/date, reversing cause-effect, stating opposite
-- NEVER make all true/false questions have the same answer!
+================================================================================
+SEQUENCING QUESTIONS - Detailed Instructions:
+- Provide 3-5 elements that MUST be sorted in correct order
+- Elements should be: chronological events, steps in a process, sizes, dates
+- correct_answer: JSON array AS STRING with exact order
+- Example: correct_answer: "[Element1, Element2, Element3]"
+- Options must be the elements in WRONG order initially
+
+MATCHING QUESTIONS - Detailed Instructions:
+- Provide 3-5 pairs to connect (left-right)
+- Left items: Letters A, B, C, D, E with values
+- Right items: Matching values/definitions/years
+- correct_answer: JSON object AS STRING mapping left to right
+- Example: correct_answer: '{{{{"A": "Value1", "B": "Value2", "C": "Value3"}}}}'
+
+CATEGORIZATION QUESTIONS - Detailed Instructions:
+- Provide 5-8 items to categorize
+- Define 2-3 categories in extra_data.categories
+- Each item belongs to EXACTLY ONE category
+- correct_answer: JSON object AS STRING
+- Example: correct_answer: '{{{{"Item1": "Category1", "Item2": "Category2"}}}}'
+- extra_data: '{{{{"categories": ["Category1", "Category2", "Category3"]}}}}'
+
+TEXT_INPUT QUESTIONS - Detailed Instructions:
+- Simple factual questions with specific answers
+- Use case_insensitive: true for fuzzy matching
+- Can also set exact_word: false for partial matches
+- correct_answer: The exact expected answer string
 
 QUESTION QUALITY - Make questions ANALYTICAL and THOUGHT-PROVOKING:
 - NOT: "Koji je glavni grad Mesopotamije?" (simple recall)
-- YES: "Zašto su gradovi Mesopotamije nastajali na rekama? Objasni geografski i ekonomski razlog."
-- NOT: "Šta je hram?" (definition only)
-- YES: "Čemu su služili zikgurati u drevnoj Mesopotamiji i kako se njihova funkcija razlikovala od običnih hramova?"
+- YES: "Zasto su gradovi Mesopotamije nastajali na rekama? Objasni geografski i ekonomski razlog."
+- NOT: "Sta je hram?" (definition only)
+- YES: "Cemu su sluzili zikgurati u drevnoj Mesopotamiji i kako se njihova funkcija razlikovala od obicnih hramova?"
 
 Options must be:
 - Complete meaningful sentences (not single letters/words)
@@ -66,7 +93,7 @@ FOR MATHEMATICS (especially important!):
 - Show the STEP-BY-STEP CALCULATION process
 - Include the FORMULA used for the solution
 - Explain the MATHEMATICAL LOGIC and reasoning
-- For example, if question is about triangle area: "Површина троугла се рачуна као половина производа основице и висине: P = (a * h) / 2. За a=6 и h=4, добијамо P = (6 * 4) / 2 = 12cm²"
+- Example: "Povrsina trougla se racuna kao polovina proizvoda osnovice i visine: P = (a * h) / 2. Za a=6 i h=4, dobijamo P = (6 * 4) / 2 = 12cm2"
 
 For geometry:
 - Always include which formula was used
@@ -91,53 +118,23 @@ GENERAL EXPLANATION RULES:
 - NEVER just say "because it's in the text" - EXPLAIN THE REASONING
 
 BAD explanation examples (DO NOT USE):
-- "Тачно је зато што пише у тексту" ❌
-- "Одговор је тачан" ❌
+- "Tacno je zato sto pise u tekstu" 
+- "Odgovor je tacan" 
 
 GOOD explanation examples (USE THESE):
-- "Тачан одговор је 24cm². Површина правоугаоника рачуна се као производ страница: P = a * b = 6 * 4 = 24cm². Други одговори су погрешни јер користе погрешну формулу или погрешно израчунавају." ✅
-- "Нетачно. Збир углова у троуглу увек износи 180° без обзира на облик троугла. Ово следи из Теореме о збиру углова троугла." ✅
-- "Одговор А је тачан. Користимо Питагорину теорему: a² + b² = c². За a=3 и b=4: 9 + 16 = 25, па је c = 5." ✅
+- "Tacan odgovor je 24cm2. Povrsina pravougaonika racuna se kao proizvod stranica: P = a * b = 6 * 4 = 24cm2. Drugi odgovori su pogresni jer koriste pogresnu formulu ili pogresno izracunavaju." 
+- "Netacno. Zbir uglova u trouglu uvek iznosi 180 stepeni bez obzira na oblik trougla. Ovo sledi iz Teoreme o zbiru uglova trougla." 
+- "Odgovor A je tacan. Koristimo Pitagorinu teoremu: a2 + b2 = c2. Za a=3 i b=4: 9 + 16 = 25, pa je c = 5." 
 
-LANGUAGE: Use the SAME LANGUAGE as the input text (Serbian Cyrillic: Ћ, Њ, Љ, Ш, Ч, Ж, etc.)
+CRITICAL: USE SERBIAN LATIN SCRIPT ONLY (a, b, c, c, d, dj, e, f, g, h, i, j, k, l, lj, m, n, nj, o, p, r, s, s, t, u, v, z, z)
+- DO NOT USE CYRILLIC
 
-Return ONLY valid JSON array:
-[
-  {{
-    "question_text": "Питање на српском језику?",
-    "question_type": "multiple_choice",
-    "options": [
-      "Тачан одговор са рачуницом",
-      "Погрешан одговор 1",
-      "Погрешан одговор 2", 
-      "Погрешан одговор 3"
-    ],
-    "correct_answer": "Тачан одговор са рачуницом",
-    "explanation": "Тачан одговор је [A]. Користимо формулу [формула]. Заменом вредности добијамо [израчунавање]. Други одговори су погрешни јер [објашњење зашто].",
-    "points": 1
-  }},
-  {{
-    "question_text": "Да ли је следећа тврдња тачна: 'Зигурати су били трговачки центри'?",
-    "question_type": "true_false", 
-    "options": ["Тачно", "Нетачно"],
-    "correct_answer": "Нетачно",
-    "explanation": "Нетачно. Зигурати су били храмови посвећени богу Луни, а не трговачки центри. Они су служили као религијски објекти и астрономске осматрачнице.",
-    "points": 1
-  }},
-  {{
-    "question_text": "Које од следећих су биле карактеристике старог Египта?",
-    "question_type": "checkbox",
-    "options": [
-      "Фараон као божански владар",
-      "Пирамиде као гробнице",
-      "Демократски систем владавине",
-      "Развијена трговина и занати"
-    ],
-    "correct_answer": "Фараон као божански владар,Пирамиде као гробнице,Развијена трговина и занати",
-    "explanation": "Египат није имао демократски систем. Фараон је био божански владар са апсолутном влашћу, градили су грандиозне пирамиде као краљевске гробнице, и имали су развијену трговину дуж Нила и занате.",
-    "points": 2
-  }}
-]
+Return ONLY valid JSON array. Each object must have:
+- question_text, question_type, options, correct_answer, explanation, points
+- For sequencing: correct_answer is JSON array as STRING like "[first,second,third]"
+- For matching: correct_answer is JSON object as STRING like left-right pairs
+- For categorization: add extra_data with categories array
+- For text_input: add case_insensitive:true
 
 Text:
 {text}

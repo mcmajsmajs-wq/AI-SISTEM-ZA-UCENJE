@@ -1,8 +1,8 @@
 # ================================================================================
 # GUIDE ZA INSTALACIJU I POKRETANJE - AI LEARNING SYSTEM
 # ================================================================================
-# Datum: 2026-04-10
-# Verzija: 1.1.0
+# Datum: 2026-04-16
+# Verzija: 1.2.0
 # ================================================================================
 
 # ================================================================================
@@ -92,7 +92,7 @@ docker compose version
 # ================================================================================
 
 ## 3.1 Navigacija do projekta
-cd "/home/dju/Projekti/AI SISTEM ZA UCENJE/ai-learning-system"
+cd "/home/dju/mojAiProjekat/New folder"
 
 ## 3.2 Kreiranje potrebnih direktorijuma
 mkdir -p logs
@@ -191,12 +191,12 @@ docker compose ps
 # Očekivani output - svi servisi treba da imaju status "Up" ili "healthy"
 
 ## 6.2 Health check endpoint-i
-curl http://localhost:8000/health
-curl http://localhost:8000/ready
-curl http://localhost:8000/live
+curl http://localhost:8010/health
+curl http://localhost:8010/ready
+curl http://localhost:8010/live
 
 ## 6.3 API dokumentacija (Swagger)
-# Otvorite u browseru: http://localhost:8000/docs
+# Otvorite u browseru: http://localhost:8010/docs
 
 ## 6.4 Provera baze podataka
 docker compose exec db psql -U ai_learning_user -d ai_learning_db -c "SELECT 1"
@@ -206,8 +206,8 @@ docker compose exec redis redis-cli ping
 # Očekivano: PONG
 
 ## 6.6 Provera MinIO
-curl http://localhost:9000/minio/health/live
-# Otvorite konzolu: http://localhost:9001
+curl http://localhost:9002/minio/health/live
+# Otvorite konzolu: http://localhost:9003
 
 ## 6.7 Provera Ollama
 curl http://localhost:11434/api/tags
@@ -224,17 +224,18 @@ curl http://localhost:11434/api/tags
 +------------------+----------------------+--------------------------------+
 | Servis           | URL                  | Opis                           |
 +------------------+----------------------+--------------------------------+
-| FastAPI App      | http://localhost:8000| Glavna API aplikacija          |
-| API Docs (Swagger)| http://localhost:8000/docs | API dokumentacija        |
-| ReDoc            | http://localhost:8000/redoc | Alternativna dokumentacija|
+| FastAPI App      | http://localhost:8010| Glavna API aplikacija          |
+| API Docs (Swagger)| http://localhost:8010/docs | API dokumentacija        |
+| ReDoc            | http://localhost:8010/redoc | Alternativna dokumentacija|
+| Frontend/Nginx   | http://localhost:8090 | Web aplikacija (frontend)     |
 | PostgreSQL       | localhost:5432       | Database                       |
 | Redis            | localhost:6379       | Cache & Queue                  |
-| MinIO Console    | http://localhost:9001| File Storage UI                |
-| MinIO API        | localhost:9000       | S3-compatible API              |
+| MinIO Console    | http://localhost:9003| File Storage UI                |
+| MinIO API        | localhost:9002       | S3-compatible API              |
 | Grafana          | http://localhost:3000| Monitoring Dashboards          |
 | Prometheus       | http://localhost:9090| Metrics                        |
 | Ollama API       | http://localhost:11434| Local AI LLM                  |
-| Nginx            | http://localhost:80  | Reverse Proxy                  |
+| Nginx SSL        | https://localhost:9443 | HTTPS proxy (SSL)           |
 +------------------+----------------------+--------------------------------+
 
 # ================================================================================
@@ -284,7 +285,7 @@ docker compose exec ollama ollama pull llama3.2:1b
 
 ## Problem 8: MinIO bucket ne postoji
 # Kreirajte bucket:
-docker compose exec minio mc alias set myminio http://localhost:9000 minioadmin minioadmin
+docker compose exec minio mc alias set myminio http://localhost:9002 minioadmin minioadmin
 docker compose exec minio mc mb myminio/ai-learning-uploads
 
 # ================================================================================
@@ -358,7 +359,7 @@ docker compose exec app python backend/scripts/verify_faza11.py
 
 ## Provera optimizacija
 # Rate limiting status:
-curl -s http://localhost:8000/api/monitoring/rate-limit-status
+curl -s http://localhost:8010/api/monitoring/rate-limit-status
 
 # Cache statistike:
 docker compose exec redis redis-cli INFO stats | grep -E "keyspace_hits|keyspace_misses"

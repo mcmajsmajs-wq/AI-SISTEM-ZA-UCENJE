@@ -32,6 +32,7 @@ from app.schemas.study_plan import (
     QuizBrief,
 )
 from app.services.auth import get_current_user
+from app.core.posthog import posthog_client
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
@@ -280,6 +281,17 @@ async def complete_plan_item(
 
     db.commit()
     db.refresh(item)
+
+    posthog_client.capture(
+        "study plan item completed",
+        distinct_id=str(current_user.id),
+        properties={
+            "quiz_id": str(item.quiz_id),
+            "priority": item.priority,
+            "has_attempt": bool(item.attempt_id),
+        },
+    )
+
     return item_to_response(item)
 
 

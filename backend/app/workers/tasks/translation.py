@@ -46,20 +46,26 @@ def get_db_session():
 
 
 def translate_with_fallback(
-    text: str, source_language: str, target_language: str, user_api_keys: dict = None
+    text: str,
+    source_language: str,
+    target_language: str,
+    user_api_keys: dict = None,
+    preferred_provider: str = None,
 ) -> Any:
     """
     Prevodi tekst sa automatskim prebacivanjem između provajdera.
 
     Pokušava više provajdera redom dok neki ne uspe:
-    1. Korisnikovi API ključevi (Mistral, Groq, Gemini, DeepSeek, OpenAI)
-    2. Sistemski provajderi (LibreTranslate - besplatan)
+    1. Preferirani provajder (ako je naveden)
+    2. Korisnikovi API ključevi (Mistral, Groq, Gemini, DeepSeek, OpenAI)
+    3. Sistemski provajderi (Ollama - lokalni)
 
     Args:
         text: Tekst za prevođenje
         source_language: Izvorni jezik (npr. 'en', 'sr')
         target_language: Ciljni jezik (npr. 'sr', 'en')
         user_api_keys: Rečnik korisnikovih API ključeva
+        preferred_provider: Preferirani provajder (npr. 'deepseek', 'openai')
 
     Returns:
         Prevedeni tekst ili None ako prevod ne uspe
@@ -67,36 +73,88 @@ def translate_with_fallback(
     Raises:
         Exception: Poslednja greška ako nijedan provajder ne uspe
     """
-    # Get all available user API keys
     providers_to_try = []
 
+    if preferred_provider and preferred_provider not in ["auto", "libretranslate"]:
+        providers_to_try.append(preferred_provider)
+
+    # Add user API keys first
     if user_api_keys:
-        priority_order = ["mistral", "groq", "gemini", "deepseek", "openai"]
+        priority_order = ["deepseek", "openai", "mistral", "groq", "gemini"]
         for p in priority_order:
-            if user_api_keys.get(p):
+            if user_api_keys.get(p) and p not in providers_to_try:
                 providers_to_try.append(p)
 
-    system_order = ["libretranslate"]
+    # Add system-level API keys as fallback
+    system_keys = {
+        "deepseek": getattr(settings, "DEEPSEEK_API_KEY", None),
+        "openai": getattr(settings, "OPENAI_API_KEY", None),
+        "mistral": getattr(settings, "MISTRAL_API_KEY", None),
+        "groq": getattr(settings, "GROQ_API_KEY", None),
+        "gemini": getattr(settings, "GOOGLE_API_KEY", None),
+    }
+    priority_order = ["deepseek", "openai", "mistral", "groq", "gemini"]
+    for p in priority_order:
+        if system_keys.get(p) and p not in providers_to_try:
+            providers_to_try.append(p)
+
+    system_order = ["ollama"]
     for p in system_order:
         if p not in providers_to_try:
             providers_to_try.append(p)
 
     last_error = None
+    logger.info(f"Translation providers to try: {providers_to_try}")
 
     for provider in providers_to_try:
         client = None
-        if provider == "mistral" and user_api_keys.get("mistral"):
-            client = make_mistral_client(user_api_keys["mistral"])
-        elif provider == "groq" and user_api_keys.get("groq"):
-            client = make_groq_client(user_api_keys["groq"])
-        elif provider == "gemini" and user_api_keys.get("gemini"):
-            client = make_gemini_client(user_api_keys["gemini"])
+        if provider == "mistral":
+            api_key = user_api_keys.get("mistral") or getattr(
+                settings, "MISTRAL_API_KEY", None
+            )
+            if api_key:
+                client = make_mistral_client(api_key)
+        elif provider == "groq":
+            api_key = user_api_keys.get("groq") or getattr(
+                settings, "GROQ_API_KEY", None
+            )
+            if api_key:
+                client = make_groq_client(api_key)
+        elif provider == "gemini":
+            api_key = user_api_keys.get("gemini") or getattr(
+                settings, "GOOGLE_API_KEY", None
+            )
+            if api_key:
+                client = make_gemini_client(api_key)
+        elif provider == "deepseek":
+            api_key = user_api_keys.get("deepseek") or getattr(
+                settings, "DEEPSEEK_API_KEY", None
+            )
+            if api_key:
+                try:
+                    from app.services.translation.clients import DeepSeekClient
+
+                    client = DeepSeekClient(api_key)
+                except Exception as e:
+                    logger.warning(f"Failed to create DeepSeek client: {e}")
+        elif provider == "openai":
+            api_key = user_api_keys.get("openai") or getattr(
+                settings, "OPENAI_API_KEY", None
+            )
+            if api_key:
+                try:
+                    from app.services.translation.clients import OpenAIClient
+
+                    client = OpenAIClient(api_key)
+                except Exception as e:
+                    logger.warning(f"Failed to create OpenAI client: {e}")
 
         if client:
             for attempt in range(3):
                 try:
                     result = client.translate(text, source_language, target_language)
                     if result.success:
+                        logger.info(f"Translation successful with provider: {provider}")
                         return result
                     last_error = result.error
                 except Exception as e:
@@ -106,22 +164,22 @@ def translate_with_fallback(
                 if attempt < 2:
                     time.sleep(1)
 
-        # Fallback: use system translation service
-        if provider not in ["mistral", "groq", "gemini", "deepseek", "openai"]:
+        if provider == "ollama":
             try:
                 result = translation_service.translate(
                     text,
                     source_language=source_language,
                     target_language=target_language,
-                    provider=provider,
+                    provider="ollama",
                 )
                 if result.success:
+                    logger.info("Translation successful with Ollama")
                     return result
                 last_error = result.error
             except Exception as e:
                 last_error = str(e)
+                logger.warning(f"Ollama translation failed: {e}")
 
-    # All providers failed
     logger.error(f"All translation providers failed. Last error: {last_error}")
     raise Exception(f"Translation failed: {last_error}")
 
@@ -191,17 +249,29 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
 
         _use_provider = provider
 
-        # Auto-detect provider based on user's available API keys
+        # Auto-detect provider based on available API keys (user first, then system)
         if not _use_provider or _use_provider == "auto":
-            if user_obj:
-                if getattr(user_obj, "ai_api_key_mistral", None):
-                    _use_provider = "mistral"
-                elif getattr(user_obj, "ai_api_key_groq", None):
-                    _use_provider = "groq"
-                elif getattr(user_obj, "ai_api_key_gemini", None):
-                    _use_provider = "gemini"
-                elif getattr(user_obj, "ai_api_key_deepseek", None):
-                    _use_provider = "deepseek"
+            # Check user keys first, then system keys
+            if getattr(user_obj, "ai_api_key_mistral", None) or getattr(
+                settings, "MISTRAL_API_KEY", None
+            ):
+                _use_provider = "mistral"
+            elif getattr(user_obj, "ai_api_key_groq", None) or getattr(
+                settings, "GROQ_API_KEY", None
+            ):
+                _use_provider = "groq"
+            elif getattr(user_obj, "ai_api_key_gemini", None) or getattr(
+                settings, "GOOGLE_API_KEY", None
+            ):
+                _use_provider = "gemini"
+            elif getattr(user_obj, "ai_api_key_deepseek", None) or getattr(
+                settings, "DEEPSEEK_API_KEY", None
+            ):
+                _use_provider = "deepseek"
+            elif getattr(user_obj, "ai_api_key_openai", None) or getattr(
+                settings, "OPENAI_API_KEY", None
+            ):
+                _use_provider = "openai"
 
         logger.info(
             f"Translating {total_chunks} chunks for document {document_id} using provider: {_use_provider or 'auto'}"
@@ -226,6 +296,7 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
                 source_language=document.source_language,
                 target_language=document.target_language,
                 user_api_keys=user_api_keys,
+                preferred_provider=_use_provider,
             )
 
             if result.success:
@@ -295,6 +366,7 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
             "translated_chunks": translated_count,
             "errors": errors[:10] if errors else [],
         }
+        flag_modified(document, "file_metadata")
 
         if translated_count == total_chunks:
             document.status = "completed"

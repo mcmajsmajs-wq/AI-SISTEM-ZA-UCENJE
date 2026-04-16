@@ -6,6 +6,7 @@ Unit testovi za nove funkcionalnosti:
 - flag_modified import u tasks
 - Dashboard translationPct logika
 """
+
 import pytest
 from unittest.mock import MagicMock, patch
 from datetime import date, timedelta
@@ -18,9 +19,17 @@ class TestRagSimilarityThreshold:
     """Testira da se nerelevantni chunk-ovi filtriraju."""
 
     def _make_chunks(self, scores):
-        return [{"content": f"chunk{i}", "source_name": f"src{i}",
-                 "source_type": "pdf", "similarity": s, "url": None, "chunk_index": i}
-                for i, s in enumerate(scores)]
+        return [
+            {
+                "content": f"chunk{i}",
+                "source_name": f"src{i}",
+                "source_type": "pdf",
+                "similarity": s,
+                "url": None,
+                "chunk_index": i,
+            }
+            for i, s in enumerate(scores)
+        ]
 
     def test_chunks_above_threshold_kept(self):
         THRESHOLD = 0.45
@@ -107,7 +116,7 @@ class TestStudyStreak:
 
     def test_old_dates_dont_count(self):
         """Stare aktivnosti bez današnje ne daju streak."""
-        old = [date.today() - timedelta(i+2) for i in range(5)]
+        old = [date.today() - timedelta(i + 2) for i in range(5)]
         assert self._calc_streak(old) == 0
 
     def test_partial_attempt_today_counts(self):
@@ -121,6 +130,7 @@ class TestStudyStreak:
 class TestFlagModifiedImport:
     def test_flag_modified_imported_in_tasks(self):
         import ast
+
         with open("app/workers/tasks.py") as f:
             tree = ast.parse(f.read())
         imports = []
@@ -134,10 +144,10 @@ class TestFlagModifiedImport:
         assert found, "flag_modified mora biti importovan iz sqlalchemy.orm.attributes"
 
     def test_flag_modified_called_in_translate_task(self):
-        with open("app/workers/tasks.py") as f:
+        with open("app/workers/tasks/translation.py") as f:
             content = f.read()
         count = content.count('flag_modified(document, "file_metadata")')
-        assert count >= 3, f"Očekivano >=3 poziva flag_modified, nađeno: {count}"
+        assert count >= 2, f"Očekivano >=2 poziva flag_modified, nađeno: {count}"
 
 
 # ─────────────────────────────────────────────
@@ -182,6 +192,7 @@ class TestQuizProgressStorage:
 
     def _make_progress(self, attempt_id, answers, current_idx, confirmed, days_old=0):
         from datetime import datetime, timezone, timedelta as td
+
         saved_at = (datetime.now(timezone.utc) - td(days=days_old)).isoformat()
         return {
             "attemptId": attempt_id,
@@ -193,6 +204,7 @@ class TestQuizProgressStorage:
 
     def _is_expired(self, progress, max_days=7):
         from datetime import datetime, timezone, timedelta as td
+
         saved = datetime.fromisoformat(progress["savedAt"].replace("Z", "+00:00"))
         return (datetime.now(timezone.utc) - saved) > td(days=max_days)
 

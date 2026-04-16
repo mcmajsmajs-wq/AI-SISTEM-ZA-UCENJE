@@ -16,10 +16,15 @@ from typing import List, Optional, Any
 # QUESTION SCHEMAS
 # ============================================================
 
+
 class QuestionCreate(BaseModel):
     """Kreiranje pitanja."""
+
     question_text: str = Field(..., min_length=5)
-    question_type: str = Field("multiple_choice", pattern="^(multiple_choice|checkbox|true_false|fill_blank|calculation|step_by_step)$")
+    question_type: str = Field(
+        "multiple_choice",
+        pattern="^(multiple_choice|checkbox|true_false|fill_blank|calculation|step_by_step|text_input|sequencing|categorization|matching|odd_one_out)$",
+    )
     options: List[str] = Field(..., min_length=2)
     correct_answer: str
     explanation: Optional[str] = None
@@ -36,6 +41,7 @@ class QuestionCreate(BaseModel):
 
 class QuestionResponse(BaseModel):
     """Pitanje za prikaz sa tačnim odgovorom i objašnjenjem."""
+
     id: str
     quiz_id: str
     question_text: str
@@ -61,6 +67,7 @@ class QuestionResponse(BaseModel):
 
 class QuestionWithAnswer(QuestionResponse):
     """Pitanje sa tačnim odgovorom (za prikaz rezultata)."""
+
     correct_answer: str
     explanation: Optional[str] = None
     image_url: Optional[str] = None
@@ -71,18 +78,28 @@ class QuestionWithAnswer(QuestionResponse):
 # QUIZ SCHEMAS
 # ============================================================
 
+
 class QuizCreate(BaseModel):
     """Pokretanje generisanja kviza."""
+
     document_id: str
-    num_questions: int = Field(0, ge=0, le=30, description="Broj pitanja (0 = automatski na osnovu veličine dokumenta)")
+    num_questions: int = Field(
+        0,
+        ge=0,
+        le=30,
+        description="Broj pitanja (0 = automatski na osnovu veličine dokumenta)",
+    )
     time_limit: Optional[int] = Field(None, ge=60, description="Vreme u sekundama")
     passing_score: int = Field(60, ge=1, le=100)
     shuffle_questions: bool = Field(False, description="Mešanje redosleda pitanja")
-    provider: Optional[str] = Field(None, description="AI provajder: ollama|openai|claude (None=auto)")
+    provider: Optional[str] = Field(
+        None, description="AI provajder: ollama|openai|claude (None=auto)"
+    )
 
 
 class QuizResponse(BaseModel):
     """Kviz za prikaz."""
+
     id: str
     document_id: str
     user_id: str
@@ -104,11 +121,13 @@ class QuizResponse(BaseModel):
 
 class QuizWithQuestions(QuizResponse):
     """Kviz sa listom pitanja (bez odgovora)."""
+
     questions: List[QuestionResponse] = []
 
 
 class QuizListResponse(BaseModel):
     """Paginisana lista kvizova."""
+
     items: List[QuizResponse]
     total: int
     skip: int
@@ -119,19 +138,23 @@ class QuizListResponse(BaseModel):
 # ATTEMPT SCHEMAS
 # ============================================================
 
+
 class AnswerSubmit(BaseModel):
     """Jedan odgovor u submitu."""
+
     question_id: str
     user_answer: str  # za checkbox — comma-separated vrednosti
 
 
 class AttemptSubmit(BaseModel):
     """Submitovanje celog kviza."""
+
     answers: List[AnswerSubmit]
 
 
 class AnswerResult(BaseModel):
     """Rezultat jednog odgovora."""
+
     question_id: str
     user_answer: str
     correct_answer: str
@@ -142,6 +165,7 @@ class AnswerResult(BaseModel):
 
 class AttemptResponse(BaseModel):
     """Rezultat pokušaja."""
+
     id: str
     quiz_id: str
     user_id: str
@@ -158,11 +182,13 @@ class AttemptResponse(BaseModel):
 
 class AttemptResult(AttemptResponse):
     """Detaljan rezultat sa odgovorima."""
+
     answers: List[AnswerResult] = []
 
 
 class AttemptListResponse(BaseModel):
     """Lista pokušaja."""
+
     items: List[AttemptResponse]
     total: int
 
@@ -171,26 +197,35 @@ class AttemptListResponse(BaseModel):
 # PIPELINE SCHEMAS
 # ============================================================
 
+
 class PipelineRequest(BaseModel):
     """Pokretanje automatskog pipeline-a: PDF → prevod → kviz."""
-    file_id: Optional[str] = None       # ako fajl već postoji
+
+    file_id: Optional[str] = None  # ako fajl već postoji
     document_id: Optional[str] = None  # ako dokument već postoji
     source_language: str = "en"
     target_language: str = "sr"
-    translation_provider: Optional[str] = Field(None, description="ollama|deepl|openai|google|claude")
+    translation_provider: Optional[str] = Field(
+        None, description="ollama|deepl|openai|google|claude"
+    )
     quiz_provider: Optional[str] = Field(None, description="ollama|openai|claude")
-    num_questions: int = Field(0, ge=0, le=30, description="Broj pitanja (0 = automatski)")
+    num_questions: int = Field(
+        0, ge=0, le=30, description="Broj pitanja (0 = automatski)"
+    )
     skip_translation: bool = False
     passing_score: int = Field(60, ge=1, le=100)
 
 
 class PipelineStatus(BaseModel):
     """Status automatskog pipeline-a."""
+
     pipeline_id: str
     document_id: Optional[str] = None
     quiz_id: Optional[str] = None
-    stage: str          # pending | processing_pdf | translating | generating_quiz | done | error
-    progress: int = 0   # 0-100
+    stage: (
+        str  # pending | processing_pdf | translating | generating_quiz | done | error
+    )
+    progress: int = 0  # 0-100
     message: str = ""
     error: Optional[str] = None
     providers_used: Optional[Any] = None

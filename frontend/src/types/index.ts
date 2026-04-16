@@ -3,11 +3,12 @@ export interface User {
   email: string
   full_name: string | null
   is_active: boolean
-  is_superuser: boolean
-  timezone: string
-  language: string
+  is_verified: boolean
+  is_superuser?: boolean
+  timezone?: string
+  language?: string
   created_at: string
-  updated_at: string
+  updated_at?: string
 }
 
 export interface UserStats {
@@ -134,9 +135,12 @@ export interface Question {
   case_insensitive?: boolean
   formula?: string | null
   steps?: string | null
+  extra_data?: {
+    categories?: string[]
+  }
 }
 
-export type QuestionType = 'multiple_choice' | 'checkbox' | 'true_false' | 'calculation' | 'fill_blank' | 'step_by_step' | 'chemical_equation'
+export type QuestionType = 'multiple_choice' | 'checkbox' | 'true_false' | 'calculation' | 'fill_blank' | 'step_by_step' | 'chemical_equation' | 'sequencing' | 'matching' | 'categorization' | 'text_input'
 
 export interface QuizAttempt {
   id: string

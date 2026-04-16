@@ -4,6 +4,17 @@ set -e
 
 echo "=== Auto-fix ports for AI Learning System ==="
 
+# Auto-detect project root (where docker-compose.yml is)
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
+
+if [ -z "$PROJECT_ROOT" ] || [ ! -f "$PROJECT_ROOT/docker-compose.yml" ]; then
+    echo "Error: Cannot find project root (docker-compose.yml not found)"
+    exit 1
+fi
+
+echo "Project root: $PROJECT_ROOT"
+
 NGINX_PORT=$(docker port ai-learning-nginx 2>/dev/null | head -1 | cut -d':' -f2)
 APP_PORT=$(docker port ai-learning-app 2>/dev/null | head -1 | cut -d':' -f2)
 
@@ -19,7 +30,7 @@ echo "Detected ports:"
 echo "  - Nginx (Frontend): $NGINX_PORT"
 echo "  - App (API): $APP_PORT"
 
-FRONTEND_DIR="/home/dju/mojAiProjekat/New folder/frontend"
+FRONTEND_DIR="$PROJECT_ROOT/frontend"
 
 if [ -f "$FRONTEND_DIR/.env" ]; then
     sed -i "s|http://localhost:[0-9]*/api/v1|http://localhost:$NGINX_PORT/api/v1|g" "$FRONTEND_DIR/.env"

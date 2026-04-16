@@ -94,7 +94,8 @@ export const useAuthStore = create<AuthState>()(
             token: data.access_token, 
             refreshToken: data.refresh_token,
             tokenObtainedAt: Date.now(),
-            isAuthenticated: true 
+            isAuthenticated: true,
+            isLoading: false
           })
           get().scheduleTokenRefresh()
           await get().fetchUser()
@@ -129,9 +130,10 @@ export const useAuthStore = create<AuthState>()(
       fetchUser: async () => {
         try {
           const response = await authApi.getMe()
-          set({ user: response.data, isAuthenticated: true, isLoading: false })
-        } catch {
-          set({ user: null, token: null, isAuthenticated: false, isLoading: false })
+          set({ user: response.data, isLoading: false })
+        } catch (error) {
+          console.error('fetchUser failed:', error)
+          set({ isLoading: false })
         }
       },
     }),

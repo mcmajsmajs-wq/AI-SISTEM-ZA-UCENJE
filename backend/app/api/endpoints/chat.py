@@ -197,6 +197,8 @@ async def chat(
     # Get user API keys
     user_api_keys = {
         "openai": current_user.ai_api_key_openai,
+        "groq": current_user.ai_api_key_groq,
+        "mistral": current_user.ai_api_key_mistral,
         "claude": current_user.ai_api_key_claude,
         "deepseek": current_user.ai_api_key_deepseek,
         "gemini": current_user.ai_api_key_gemini,
@@ -366,6 +368,8 @@ async def chat_stream(
         # Stream response
         user_api_keys = {
             "openai": current_user.ai_api_key_openai,
+            "groq": current_user.ai_api_key_groq,
+            "mistral": current_user.ai_api_key_mistral,
             "claude": current_user.ai_api_key_claude,
             "deepseek": current_user.ai_api_key_deepseek,
             "gemini": current_user.ai_api_key_gemini,
@@ -600,6 +604,8 @@ async def get_providers(current_user: User = Depends(get_current_user)):
     """
     user_api_keys = {
         "openai": current_user.ai_api_key_openai,
+        "groq": current_user.ai_api_key_groq,
+        "mistral": current_user.ai_api_key_mistral,
         "claude": current_user.ai_api_key_claude,
         "deepseek": current_user.ai_api_key_deepseek,
         "gemini": current_user.ai_api_key_gemini,

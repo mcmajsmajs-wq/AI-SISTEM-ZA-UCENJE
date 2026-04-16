@@ -955,6 +955,7 @@ async def start_pipeline(
     first_chunk = db.query(Chunk).filter(Chunk.document_id == document.id).first()
     if first_chunk and first_chunk.content:
         text = first_chunk.content[:1000]  # Proveri prvih 1000 karaktera
+        text_lower = text.lower()
 
         # Proveri da li sadrži ćirilične karaktere
         cyrillic_chars = sum(1 for c in text if "\u0400" <= c <= "\u04ff")
@@ -963,13 +964,204 @@ async def start_pipeline(
         # Proveri srpske latinične karaktere
         serbian_latin_chars = sum(1 for c in text if c in "čćžšđČĆŽŠĐ")
 
-        # Detekcija:
-        # 1. Ako ima dosta ćirilice (>10%) → srpski
-        # 2. Ako ima srpskih latiničnih karaktera → srpski
-        # 3. Ako ima samo latiničnih bez ćirilice → engleski
-        if cyrillic_chars > latin_chars * 0.1 or serbian_latin_chars > 3:
+        # Srpske reči bez specijalnih karaktera (detektuju srpski tekst koji je sacuvan kao ASCII)
+        SERBIAN_WORDS = [
+            "i",
+            "u",
+            "na",
+            "za",
+            "od",
+            "sa",
+            "su",
+            "se",
+            "da",
+            "je",
+            "ili",
+            "to",
+            "je",
+            "samo",
+            "ali",
+            "tak",
+            "jer",
+            "pa",
+            "te",
+            "kao",
+            "biti",
+            "bitno",
+            "moze",
+            "sadrzi",
+            "sadrzi",
+            "ima",
+            "jesu",
+            "bila",
+            "bili",
+            "bilo",
+            "smo",
+            "ste",
+            "hemijski",
+            "hemija",
+            "element",
+            "molekul",
+            "atom",
+            "reakcija",
+            "jedinjenje",
+            "kiselina",
+            "baza",
+            "oksidacija",
+            "redukcija",
+            "supstanca",
+            "rastvor",
+            "matematika",
+            "matematicki",
+            "matematike",
+            "jednacina",
+            "formula",
+            "resenje",
+            "fizika",
+            "fizicki",
+            "energije",
+            "sila",
+            "brzina",
+            "masa",
+            "temperatura",
+            "biologija",
+            "bilogija",
+            "organizam",
+            "celija",
+            "tkivo",
+            "organ",
+            "sistem",
+            "istorija",
+            "istorijski",
+            "godina",
+            "veka",
+            "doba",
+            "događaj",
+            "dogadaj",
+            "srbija",
+            "beograd",
+            "narod",
+            "drzava",
+            "drzavni",
+            "vojvodina",
+            "kosovo",
+            "geografija",
+            "drzava",
+            "grad",
+            "reka",
+            "planina",
+            "more",
+            "jezero",
+            "knjizevnost",
+            "autor",
+            "del",
+            "glavni",
+            "lik",
+            "radnja",
+            "pesnik",
+            "informati",
+            "racunar",
+            "program",
+            "algoritam",
+            "podatak",
+            "sistem",
+            "lekcija",
+            "nastav",
+            "ucenik",
+            "skola",
+            "udzbenik",
+            "gradivo",
+            "poglavlje",
+            "strana",
+            " stran",
+            "zadatak",
+            "pitanje",
+            "odgovor",
+            "primer",
+            "objasnjenje",
+        ]
+
+        # Prepoznaje srpski tekst bez specijalnih karaktera
+        serbian_word_matches = sum(1 for word in SERBIAN_WORDS if word in text_lower)
+
+        # Engleske reči koje mogu da se pojave u srpskim dokumentima
+        ENGLISH_WORDS = [
+            "the",
+            "is",
+            "are",
+            "was",
+            "were",
+            "has",
+            "have",
+            "had",
+            "been",
+            "being",
+            "this",
+            "that",
+            "these",
+            "those",
+            "it",
+            "its",
+            "they",
+            "their",
+            "them",
+            "and",
+            "or",
+            "but",
+            "not",
+            "no",
+            "if",
+            "then",
+            "so",
+            "because",
+            "when",
+            "which",
+            "what",
+            "who",
+            "whom",
+            "how",
+            "where",
+            "why",
+            "chapter",
+            "page",
+            "figure",
+            "table",
+            "section",
+            "introduction",
+            "conclusion",
+            "abstract",
+            "references",
+            "bibliography",
+            "appendix",
+        ]
+        english_word_matches = sum(
+            1 for word in ENGLISH_WORDS if f" {word} " in f" {text_lower} "
+        )
+
+        # Detekcija - POPRAVLJENA LOGIKA:
+        # Srpski se detektuje ako:
+        # 1. Ima bilo koju ćirilicu (> 0)
+        # 2. Ima srpske latinične karaktere (č, ć, ž, š, đ)
+        # 3. Ima dosta ćirilice (>10%) - za mešovite tekstove
+        # 4. Ima dosta srpskih reči bez specijalnih karaktera (> 3)
+        if cyrillic_chars > 0:
             detected_lang = "sr"
-        elif latin_chars > 10 and cyrillic_chars < 5 and serbian_latin_chars < 3:
+        elif serbian_latin_chars > 0:
+            detected_lang = "sr"
+        elif cyrillic_chars > latin_chars * 0.1:
+            detected_lang = "sr"
+        elif serbian_word_matches >= 3 and english_word_matches < 3:
+            # Ako ima dosta srpskih reči a malo engleskih → srpski
+            detected_lang = "sr"
+        elif serbian_word_matches >= english_word_matches + 2:
+            # Ako ima značajno više srpskih reči → srpski
+            detected_lang = "sr"
+        elif (
+            latin_chars > 10
+            and cyrillic_chars < 5
+            and serbian_latin_chars < 3
+            and serbian_word_matches < 3
+        ):
             detected_lang = "en"
 
     # Koristi auto-detektovani jezik ili default
