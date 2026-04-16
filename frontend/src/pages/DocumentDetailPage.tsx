@@ -563,7 +563,7 @@ export default function DocumentDetailPage() {
                     Prethodna
                   </button>
                   <span className="text-sm text-gray-500">
-                    Stranica {chunkPage + 1} od {Math.ceil(doc.total_chunks / CHUNKS_PER_PAGE)}
+                    Prikaz {chunkPage + 1}/{Math.ceil(doc.total_chunks / CHUNKS_PER_PAGE)}
                   </span>
                   <button
                     onClick={() => setChunkPage(p => p + 1)}

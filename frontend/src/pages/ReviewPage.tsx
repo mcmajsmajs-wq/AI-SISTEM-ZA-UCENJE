@@ -99,7 +99,8 @@ export default function ReviewPage() {
   })
 
   const chunkList: any[] = Array.isArray(chunks?.data) ? chunks.data : []
-  const chunkIndex = currentPage % chunkList.length
+  // We just fetched chunks for this page, so always start at index 0
+  const chunkIndex = 0
   const currentChunk = chunkList[chunkIndex]
 
   useEffect(() => {
@@ -193,7 +194,7 @@ export default function ReviewPage() {
           <h1 className="text-xl font-extrabold text-gray-900 truncate">
             {doc?.title || 'Pregled prevoda'}
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Stranica {currentPage + 1} od {totalPages} ({totalChunks} odlomaka)</p>
+          <p className="text-sm text-gray-500 mt-0.5">Prikaz {currentPage + 1}/{totalPages} ({totalChunks} odlomaka, 20 po prikazu)</p>
         </div>
       </div>
 
@@ -424,7 +425,7 @@ export default function ReviewPage() {
         </div>
 
         <p className="text-xs text-gray-400 mt-3 text-center">
-          Ukupno {totalChunks} odlomaka na {totalPages} stranica
+          Ukupno {totalChunks} odlomaka na {totalPages} prikaza (20 odlomaka po prikazu)
         </p>
       </div>
     </div>
