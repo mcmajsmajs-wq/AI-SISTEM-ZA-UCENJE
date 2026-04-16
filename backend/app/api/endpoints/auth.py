@@ -205,7 +205,7 @@ async def refresh_token(
         try:
             body = await request.json()
             refresh_token = body.get("refresh_token")
-        except:
+        except (ValueError, KeyError):
             pass
 
     if not refresh_token:

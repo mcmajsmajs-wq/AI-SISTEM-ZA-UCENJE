@@ -324,13 +324,13 @@ class QuizService:
 
         elif q_type == "text_input":
             # Text input: provera tekstualnog odgovora sa opcijom za fuzzy matching
-            return self._check_text_input_answer_static(
+            return QuizService._check_text_input_answer_static(
                 user_answer, correct_answer, extra_data
             )
 
         elif q_type == "fill_blank":
             # Fill in the blank: provera sa alternativnim rečima
-            return self._check_fill_blank_answer_static(
+            return QuizService._check_fill_blank_answer_static(
                 user_answer, correct_answer, extra_data
             )
 
@@ -500,7 +500,7 @@ def _transliterate_text(text: str) -> str:
         "ц": "c",
         "ч": "č",
         "Ѓ": "Đ",
-        "Џ": "dž",
+        # lowercase dž = дж (commented to avoid duplicate key),
         "ш": "š",
         "А": "A",
         "Б": "B",
@@ -530,7 +530,7 @@ def _transliterate_text(text: str) -> str:
         "Х": "H",
         "Ц": "C",
         "Ч": "Č",
-        "Џ": "DŽ",
+        "Џ": "DŽ",  # uppercase
         "Ш": "Š",
     }
 
@@ -600,7 +600,7 @@ def _transliterate_text(text: str) -> str:
         "ц": "c",
         "ч": "č",
         "Ѓ": "Đ",
-        "Џ": "dž",
+        # lowercase dž = дж (commented to avoid duplicate key),
         "ш": "š",
         "А": "A",
         "Б": "B",

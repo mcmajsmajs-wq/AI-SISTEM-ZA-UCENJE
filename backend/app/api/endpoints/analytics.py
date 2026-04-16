@@ -325,7 +325,7 @@ def _calc_streak(user_id, db: Session) -> int:
         db.query(QuizAttempt)
         .filter(
             QuizAttempt.user_id == user_id,
-            QuizAttempt.completed_at != None,
+            QuizAttempt.completed_at is not None,
             func.date(QuizAttempt.completed_at) == today,
         )
         .count()
@@ -338,7 +338,7 @@ def _calc_streak(user_id, db: Session) -> int:
             db.query(QuizAttempt)
             .filter(
                 QuizAttempt.user_id == user_id,
-                QuizAttempt.completed_at != None,
+                QuizAttempt.completed_at is not None,
                 func.date(QuizAttempt.completed_at) == check,
             )
             .count()
