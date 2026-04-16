@@ -12,9 +12,44 @@ import json
 import logging
 import random
 import re
-from typing import List
+from typing import List, Any, Union
 
 logger = logging.getLogger(__name__)
+
+
+def _get_attr(obj: Any, attr: str, default: Any = None) -> Any:
+    """
+    Unified attribute access for both dict and object types.
+
+    Args:
+        obj: Object or dict
+        attr: Attribute name
+        default: Default value if not found
+
+    Returns:
+        Value of the attribute or default
+    """
+    if isinstance(obj, dict):
+        return obj.get(attr, default)
+    return getattr(obj, attr, default)
+
+
+def _get_content(chunk: Any) -> str:
+    """Get content from chunk (supports dict with 'text' key or object with 'content' attr)."""
+    return _get_attr(chunk, "content", "") or _get_attr(chunk, "text", "")
+
+
+def _get_chunk_id(chunk: Any) -> Any:
+    """Get id from chunk."""
+    return _get_attr(chunk, "id")
+
+
+def _is_used_for_quiz(chunk: Any) -> bool:
+    """Check if chunk is used for quiz (supports 'used_for_quiz' or 'used_in_quiz')."""
+    val = _get_attr(chunk, "used_for_quiz", False)
+    if val is False:
+        val = _get_attr(chunk, "used_in_quiz", False)
+    return bool(val)
 
 
 def _parse_questions(raw: str) -> List[dict]:
@@ -259,11 +294,11 @@ def select_chunks_for_quiz(chunks: list, max_chars: int = 10000) -> list:
     if not chunks:
         return []
 
-    quality_chunks = [c for c in chunks if is_chunk_quality(c.content)]
+    quality_chunks = [c for c in chunks if is_chunk_quality(_get_content(c))]
     if not quality_chunks:
         quality_chunks = chunks
 
-    total_chars = sum(len(c.content) for c in quality_chunks)
+    total_chars = sum(len(_get_content(c)) for c in quality_chunks)
     if total_chars <= max_chars:
         return quality_chunks
 
@@ -277,11 +312,14 @@ def select_chunks_for_quiz(chunks: list, max_chars: int = 10000) -> list:
 
     for idx in indices:
         chunk = quality_chunks[idx]
-        text = chunk.content or ""
+        text = _get_content(chunk) or ""
         if current_chars + len(text) > max_chars:
             remaining = max_chars - current_chars
             if remaining > 200:
-                chunk.content = text[:remaining]
+                if isinstance(chunk, dict):
+                    chunk["text"] = text[:remaining]
+                else:
+                    chunk.content = text[:remaining]
             break
         result.append(chunk)
         current_chars += len(text)
@@ -303,7 +341,7 @@ def get_images_for_chunks(chunks: list, quiz_images: list) -> dict:
     chunk_images = {}
 
     for chunk in chunks:
-        chunk_id = chunk.id
+        chunk_id = _get_chunk_id(chunk)
         if not chunk_id:
             continue
 
@@ -326,7 +364,7 @@ def get_quiz_usage_stats(chunks: list) -> dict:
         dict: Statistika
     """
     total = len(chunks)
-    used = sum(1 for c in chunks if c.used_for_quiz)
+    used = sum(1 for c in chunks if _is_used_for_quiz(c))
     unused = total - used
 
     return {

@@ -6,7 +6,7 @@
  * 
  * AI Learning System
  * ReviewPage.tsx
- * Verzija: 1.0.0
+ * Verzija: 2.0.0 - Prikazuje svih 20 chunks po stranici
  * Autor: Branko Suznjevic
  * Datum: 2026
  * ================================================================================
@@ -15,7 +15,7 @@
 import { useParams, Link } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { documentsApi } from '@/services/api'
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import toast from 'react-hot-toast'
 import { 
   ArrowLeft, 
@@ -26,7 +26,9 @@ import {
   Edit3,
   Save,
   Loader2,
-  CheckCircle
+  CheckCircle,
+  Circle,
+  Hash
 } from 'lucide-react'
 import clsx from 'clsx'
 
@@ -37,12 +39,9 @@ function generatePageNumbers(currentPage: number, totalPages: number): (number |
   }
 
   const pages: (number | '...')[] = []
-  const delta = 2 // broj stranica oko trenutne
+  const delta = 2
 
-  // Uvek prikazi prvih 5
   const firstPages = [0, 1, 2, 3, 4]
-  
-  // Uvek prikazi poslednjih 5
   const lastPages = [
     totalPages - 5,
     totalPages - 4,
@@ -51,16 +50,13 @@ function generatePageNumbers(currentPage: number, totalPages: number): (number |
     totalPages - 1,
   ]
 
-  // Stranice oko trenutne
   const aroundCurrent = Array.from(
     { length: delta * 2 + 1 },
     (_, i) => currentPage - delta + i
   ).filter((p) => p > 4 && p < totalPages - 5)
 
-  // Kombinuj i sortiraj
   const allPages = [...new Set([...firstPages, ...aroundCurrent, ...lastPages])].sort((a, b) => a - b)
 
-  // Dodaj ... gde je potrebno
   for (let i = 0; i < allPages.length; i++) {
     pages.push(allPages[i])
     if (i < allPages.length - 1 && allPages[i + 1] - allPages[i] > 1) {
@@ -71,6 +67,15 @@ function generatePageNumbers(currentPage: number, totalPages: number): (number |
   return pages
 }
 
+interface ChunkItem {
+  id: string
+  content: string
+  translated_content?: string
+  parent_heading?: string
+  is_reviewed?: boolean
+  is_translated?: boolean
+}
+
 export default function ReviewPage() {
   const { id } = useParams<{ id: string }>()
   const docId = id || ''
@@ -78,8 +83,8 @@ export default function ReviewPage() {
   
   const CHUNKS_PER_PAGE = 20
   const [currentPage, setCurrentPage] = useState(0)
-  const [editedText, setEditedText] = useState('')
-  const [isEditing, setIsEditing] = useState(false)
+  const [editingChunkId, setEditingChunkId] = useState<string | null>(null)
+  const [editedTexts, setEditedTexts] = useState<Record<string, string>>({})
 
   // First, get total count of chunks
   const { data: document } = useQuery({
@@ -98,56 +103,62 @@ export default function ReviewPage() {
     enabled: !!docId && totalChunks > 0,
   })
 
-  const chunkList: any[] = Array.isArray(chunks?.data) ? chunks.data : []
-  // We just fetched chunks for this page, so always start at index 0
-  const chunkIndex = 0
-  const currentChunk = chunkList[chunkIndex]
-
-  useEffect(() => {
-    if (currentChunk?.translated_content) {
-      setEditedText(currentChunk.translated_content)
-    }
-  }, [currentChunk])
+  const chunkList: ChunkItem[] = Array.isArray(chunks?.data) ? chunks.data : []
 
   const updateMutation = useMutation({
-    mutationFn: (data: { translated_content?: string; is_reviewed?: boolean }) =>
-      documentsApi.updateChunk(docId, currentChunk.id, data),
+    mutationFn: ({ chunkId, data }: { chunkId: string; data: { translated_content?: string; is_reviewed?: boolean } }) =>
+      documentsApi.updateChunk(docId, chunkId, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['document-chunks', docId] })
+      queryClient.invalidateQueries({ queryKey: ['document', docId] })
       toast.success('Sačuvano!')
-      setIsEditing(false)
+      setEditingChunkId(null)
+      setEditedTexts({})
     },
     onError: () => toast.error('Greška pri čuvanju'),
   })
 
-  const handleApprove = () => {
-    updateMutation.mutate({ is_reviewed: true })
+  const handleStartEdit = (chunk: ChunkItem) => {
+    setEditingChunkId(chunk.id)
+    setEditedTexts(prev => ({ ...prev, [chunk.id]: chunk.translated_content || '' }))
   }
 
-  const handleEdit = () => {
-    setIsEditing(true)
+  const handleCancelEdit = (chunkId: string) => {
+    setEditingChunkId(null)
+    setEditedTexts(prev => {
+      const newTexts = { ...prev }
+      delete newTexts[chunkId]
+      return newTexts
+    })
   }
 
-  const handleSave = () => {
-    updateMutation.mutate({ translated_content: editedText, is_reviewed: true })
+  const handleSaveEdit = (chunk: ChunkItem) => {
+    const text = editedTexts[chunk.id]
+    updateMutation.mutate({ 
+      chunkId: chunk.id, 
+      data: { translated_content: text, is_reviewed: true } 
+    })
   }
 
-  const handleCancel = () => {
-    setEditedText(currentChunk.translated_content || '')
-    setIsEditing(false)
+  const handleApprove = (chunkId: string) => {
+    updateMutation.mutate({ chunkId, data: { is_reviewed: true } })
+  }
+
+  const handleTextChange = (chunkId: string, text: string) => {
+    setEditedTexts(prev => ({ ...prev, [chunkId]: text }))
   }
 
   const handlePrevious = () => {
     if (currentPage > 0) {
       setCurrentPage(currentPage - 1)
-      setIsEditing(false)
+      setEditingChunkId(null)
     }
   }
 
   const handleNext = () => {
     if ((currentPage + 1) * CHUNKS_PER_PAGE < totalChunks) {
       setCurrentPage(currentPage + 1)
-      setIsEditing(false)
+      setEditingChunkId(null)
     }
   }
 
@@ -174,10 +185,10 @@ export default function ReviewPage() {
   }
 
   const doc = document?.data
-  
-  // Get total reviewed count from the document
   const reviewedCount = doc?.reviewed_chunks || 0
   const progress = totalChunks > 0 ? Math.round((reviewedCount / totalChunks) * 100) : 0
+
+  const pageStartIndex = currentPage * CHUNKS_PER_PAGE + 1
 
   return (
     <div className="space-y-5 animate-fade-in max-w-6xl mx-auto">
@@ -194,7 +205,9 @@ export default function ReviewPage() {
           <h1 className="text-xl font-extrabold text-gray-900 truncate">
             {doc?.title || 'Pregled prevoda'}
           </h1>
-          <p className="text-sm text-gray-500 mt-0.5">Prikaz {currentPage + 1}/{totalPages} ({totalChunks} odlomaka, 20 po prikazu)</p>
+          <p className="text-sm text-gray-500 mt-0.5">
+            Prikaz {currentPage + 1}/{totalPages} • {chunkList.length} odlomaka na ovoj stranici • {totalChunks} ukupno
+          </p>
         </div>
       </div>
 
@@ -215,145 +228,154 @@ export default function ReviewPage() {
         </div>
       </div>
 
-      {/* Chunk status */}
-      <div className="flex items-center gap-3">
-        {currentChunk?.parent_heading && (
-          <span className="text-xs text-indigo-600 font-medium bg-indigo-50 px-3 py-1 rounded-full">
-            {currentChunk.parent_heading}
-          </span>
-        )}
-        <span className={clsx(
-          'badge ml-auto',
-          currentChunk?.is_reviewed ? 'badge-success' :
-          currentChunk?.is_translated ? 'badge-warning' : 'badge-gray'
-        )}>
-          {currentChunk?.is_reviewed ? '✓ Odobreno' : currentChunk?.is_translated ? 'Prevedeno' : 'Na čekanju'}
-        </span>
-      </div>
+      {/* Chunks list - ALL chunks from current page */}
+      <div className="space-y-4">
+        {chunkList.map((chunk, idx) => {
+          const globalIndex = pageStartIndex + idx
+          const isEditing = editingChunkId === chunk.id
+          const editText = editedTexts[chunk.id] ?? chunk.translated_content ?? ''
+          const hasTranslation = !!chunk.translated_content
 
-      {/* Main split panel */}
-      <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-        {/* Original */}
-        <div className="card p-5">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-gray-100 flex items-center justify-center">
-              <span className="text-xs font-extrabold text-gray-700">EN</span>
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Originalni tekst</h3>
-              <p className="text-xs text-gray-400">Engleski</p>
-            </div>
-          </div>
-          <div className="bg-gray-50 rounded-2xl p-4 min-h-[220px]">
-            <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
-              {currentChunk?.content}
-            </p>
-          </div>
-        </div>
-
-        {/* Translation */}
-        <div className="card p-5">
-          <div className="flex items-center gap-3 mb-4">
-            <div className="w-8 h-8 rounded-xl bg-indigo-100 flex items-center justify-center">
-              <span className="text-xs font-extrabold text-indigo-700">SR</span>
-            </div>
-            <div>
-              <h3 className="text-sm font-bold text-gray-900">Prevedeni tekst</h3>
-              <p className="text-xs text-gray-400">Srpski</p>
-            </div>
-          </div>
-
-          {isEditing ? (
-            <div className="space-y-3">
-              <textarea
-                value={editedText}
-                onChange={(e) => setEditedText(e.target.value)}
-                className="input min-h-[220px] resize-none text-sm leading-relaxed rounded-2xl"
-                placeholder="Unesite prevod..."
-              />
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSave}
-                  disabled={updateMutation.isPending}
-                  className="btn-primary btn-sm flex-1"
-                >
-                  {updateMutation.isPending ? (
-                    <Loader2 className="w-4 h-4 animate-spin" />
-                  ) : (
-                    <><Save className="w-4 h-4" /> Sačuvaj</>
+          return (
+            <div key={chunk.id} className="card overflow-hidden">
+              {/* Chunk header */}
+              <div className="px-5 py-3 bg-gray-50 border-b border-gray-100 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-8 h-8 rounded-lg bg-indigo-100 flex items-center justify-center">
+                    <span className="text-xs font-bold text-indigo-600">{globalIndex}</span>
+                  </div>
+                  {chunk.parent_heading && (
+                    <span className="flex items-center gap-1 text-xs text-indigo-600 font-medium bg-indigo-50 px-2 py-1 rounded-lg">
+                      <Hash className="w-3 h-3" />
+                      {chunk.parent_heading}
+                    </span>
                   )}
-                </button>
-                <button onClick={handleCancel} className="btn-secondary btn-sm">
-                  <X className="w-4 h-4" />
-                  Otkaži
-                </button>
+                </div>
+                <div className="flex items-center gap-2">
+                  {hasTranslation ? (
+                    chunk.is_reviewed ? (
+                      <span className="badge badge-success">
+                        <CheckCircle className="w-3 h-3 mr-1" />
+                        Odobreno
+                      </span>
+                    ) : (
+                      <span className="badge badge-warning">Prevedeno</span>
+                    )
+                  ) : (
+                    <span className="badge badge-gray">
+                      <Circle className="w-3 h-3 mr-1" />
+                      Na čekanju
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              {/* Content */}
+              <div className="p-5">
+                <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                  {/* Original */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 rounded bg-gray-100 flex items-center justify-center">
+                        <span className="text-xs font-bold text-gray-600">EN</span>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-500">Originalni tekst</span>
+                    </div>
+                    <div className="bg-gray-50 rounded-xl p-4">
+                      <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
+                        {chunk.content}
+                      </p>
+                    </div>
+                  </div>
+
+                  {/* Translation */}
+                  <div>
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-6 h-6 rounded bg-indigo-100 flex items-center justify-center">
+                        <span className="text-xs font-bold text-indigo-600">SR</span>
+                      </div>
+                      <span className="text-xs font-semibold text-gray-500">Prevedeni tekst</span>
+                    </div>
+                    
+                    {isEditing ? (
+                      <div className="space-y-2">
+                        <textarea
+                          value={editText}
+                          onChange={(e) => handleTextChange(chunk.id, e.target.value)}
+                          className="input min-h-[120px] resize-none text-sm leading-relaxed rounded-xl"
+                          placeholder="Unesite prevod..."
+                        />
+                        <div className="flex gap-2">
+                          <button
+                            onClick={() => handleSaveEdit(chunk)}
+                            disabled={updateMutation.isPending}
+                            className="btn-primary btn-sm flex-1"
+                          >
+                            {updateMutation.isPending ? (
+                              <Loader2 className="w-4 h-4 animate-spin" />
+                            ) : (
+                              <><Save className="w-4 h-4" /> Sačuvaj</>
+                            )}
+                          </button>
+                          <button 
+                            onClick={() => handleCancelEdit(chunk.id)} 
+                            className="btn-secondary btn-sm"
+                          >
+                            <X className="w-4 h-4" />
+                            Otkaži
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className={clsx(
+                        'rounded-xl p-4',
+                        chunk.is_reviewed ? 'bg-emerald-50' : 'bg-indigo-50'
+                      )}>
+                        {hasTranslation ? (
+                          <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
+                            {chunk.translated_content}
+                          </p>
+                        ) : (
+                          <p className="text-gray-400 italic text-sm">Prevod nije dostupan</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                {/* Actions - only when not editing this chunk */}
+                {!isEditing && (
+                  <div className="flex items-center gap-2 mt-4 pt-4 border-t border-gray-100">
+                    <button 
+                      onClick={() => handleStartEdit(chunk)} 
+                      className="btn-secondary btn-sm"
+                    >
+                      <Edit3 className="w-4 h-4" />
+                      Uredi
+                    </button>
+                    {hasTranslation && !chunk.is_reviewed && (
+                      <button
+                        onClick={() => handleApprove(chunk.id)}
+                        disabled={updateMutation.isPending}
+                        className="btn-primary btn-sm"
+                      >
+                        {updateMutation.isPending ? (
+                          <Loader2 className="w-4 h-4 animate-spin" />
+                        ) : (
+                          <><Check className="w-4 h-4" /> Odobri</>
+                        )}
+                      </button>
+                    )}
+                  </div>
+                )}
               </div>
             </div>
-          ) : (
-            <div className={clsx(
-              'rounded-2xl p-4 min-h-[220px]',
-              currentChunk?.is_reviewed ? 'bg-emerald-50' : 'bg-indigo-50'
-            )}>
-              {currentChunk?.is_reviewed && (
-                <div className="flex items-center gap-1.5 mb-3">
-                  <CheckCircle className="w-4 h-4 text-emerald-500" />
-                  <span className="text-xs text-emerald-600 font-semibold">Odobreno</span>
-                </div>
-              )}
-              <p className="text-gray-700 text-sm whitespace-pre-wrap leading-relaxed">
-                {currentChunk?.translated_content || (
-                  <span className="text-gray-400 italic text-sm">Prevod nije dostupan</span>
-                )}
-              </p>
-            </div>
-          )}
-        </div>
+          )
+        })}
       </div>
-
-      {/* Controls */}
-      {!isEditing && (
-        <div className="card px-5 py-4 flex items-center justify-between gap-3">
-          <button
-            onClick={handlePrevious}
-            disabled={currentPage === 0}
-            className="btn-secondary"
-          >
-            <ChevronLeft className="w-4 h-4" />
-            Prethodna strana
-          </button>
-
-          <div className="flex items-center gap-2">
-            <button onClick={handleEdit} className="btn-secondary">
-              <Edit3 className="w-4 h-4" />
-              Uredi
-            </button>
-            <button
-              onClick={handleApprove}
-              disabled={updateMutation.isPending || !currentChunk?.translated_content}
-              className="btn-primary"
-            >
-              {updateMutation.isPending ? (
-                <Loader2 className="w-4 h-4 animate-spin" />
-              ) : (
-                <><Check className="w-4 h-4" /> Odobri</>
-              )}
-            </button>
-          </div>
-
-          <button
-            onClick={handleNext}
-            disabled={(currentPage + 1) * CHUNKS_PER_PAGE >= totalChunks}
-            className="btn-secondary"
-          >
-            Sledeća strana
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        </div>
-      )}
 
       {/* Page navigation */}
       <div className="card px-5 py-4">
-        <p className="text-xs text-gray-400 mb-3 font-medium">Navigacija stranica</p>
         <div className="flex flex-wrap gap-2 items-center justify-center">
           {/* Previous button */}
           <button
@@ -364,7 +386,7 @@ export default function ReviewPage() {
             <ChevronLeft className="w-4 h-4" />
           </button>
 
-          {/* Page numbers - smart pagination */}
+          {/* Page numbers */}
           {generatePageNumbers(currentPage, totalPages).map((page, idx) => {
             if (page === '...') {
               return (
@@ -378,7 +400,7 @@ export default function ReviewPage() {
             return (
               <button
                 key={pageNum}
-                onClick={() => { setCurrentPage(pageNum); setIsEditing(false) }}
+                onClick={() => { setCurrentPage(pageNum); setEditingChunkId(null) }}
                 title={`Stranica ${pageNum + 1}`}
                 className={clsx(
                   'w-10 h-10 rounded-xl text-sm font-bold transition-all duration-150',
@@ -402,7 +424,7 @@ export default function ReviewPage() {
           </button>
         </div>
 
-        {/* Quick jump to page */}
+        {/* Quick jump */}
         <div className="flex items-center justify-center gap-2 mt-3">
           <span className="text-xs text-gray-400">Idi na stranicu:</span>
           <input
@@ -415,7 +437,7 @@ export default function ReviewPage() {
                 const input = e.currentTarget
                 const page = Math.min(Math.max(1, parseInt(input.value) || 1), totalPages)
                 setCurrentPage(page - 1)
-                setIsEditing(false)
+                setEditingChunkId(null)
               }
             }}
             className="w-16 h-8 px-2 text-sm text-center border border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-indigo-500"
@@ -425,7 +447,7 @@ export default function ReviewPage() {
         </div>
 
         <p className="text-xs text-gray-400 mt-3 text-center">
-          Ukupno {totalChunks} odlomaka na {totalPages} prikaza (20 odlomaka po prikazu)
+          Prikaz {currentPage * CHUNKS_PER_PAGE + 1}-{Math.min((currentPage + 1) * CHUNKS_PER_PAGE, totalChunks)} od {totalChunks} odlomaka
         </p>
       </div>
     </div>

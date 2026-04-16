@@ -8,6 +8,7 @@ Verzija: 1.0.0
 ================================================================================
 """
 
+import json
 import logging
 import random
 import re
@@ -17,18 +18,14 @@ from typing import List, Optional, Tuple
 import httpx
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.db.models.quiz import Quiz, Question, QuizAttempt, QuizAnswer
+from app.db.models.quiz import Quiz, Question
 from app.db.models.document import Document, Chunk
 
 from app.services.quiz.prompts.quiz_prompt import QUIZ_PROMPT
 from app.services.quiz.helpers import (
     _parse_questions,
-    _validate_questions,
     _fallback_questions,
     select_chunks_for_quiz,
-    get_images_for_chunks,
-    get_quiz_usage_stats,
     mark_chunks_as_used,
 )
 from app.services.quiz.clients import _build_clients, _PROVIDER_ORDER
@@ -149,313 +146,6 @@ def _auto_num_questions(total_chunks: int, requested: int) -> int:
     return min(50, max(5, total_chunks // 10))
 
 
-class QuizService:
-    """
-    Servis za generisanje i upravljanje kvizovima.
-    Podržava Ollama, OpenAI, Claude sa fallback lancem.
-    """
-
-    @staticmethod
-    def _check_answer_static(
-        q_type: str, user_answer: str, correct_answer: str, extra_data: dict = None
-    ) -> bool:
-        """
-        Static method for checking quiz answers (useful for testing).
-
-        Podržava sve tipove pitanja (ažurirano 2026-04-06):
-        - multiple_choice, true_false, calculation: direktno poređenje stringova
-        - checkbox: skupovno poređenje (redosled nebitan)
-        - sequencing: poređenje niza indeksa
-        - categorization: poređenje mapping-a
-        - matching: poređenje parova
-        - odd_one_out: direktno poređenje
-        - estimation: tolerance-based poređenje
-        - matrix: poređenje niza odgovora
-
-        Args:
-            q_type: Tip pitanja
-            user_answer: Odgovor korisnika
-            correct_answer: Tačan odgovor
-            extra_data: Dodatni podaci (za kompleksne tipove)
-
-        Returns:
-            bool: True ako je odgovor tačan
-        """
-        # Osnovna priprema
-        user_answer = (user_answer or "").strip().lower()
-        correct_answer = (correct_answer or "").strip().lower()
-
-        # Postojeći tipovi
-        if q_type in ("multiple_choice", "true_false", "calculation"):
-            return user_answer == correct_answer
-
-        elif q_type == "checkbox":
-            # Skupovno poređenje - redosled nije bitan
-            correct_parts = set(
-                p.strip().lower() for p in correct_answer.split(",") if p.strip()
-            )
-            user_parts = set(
-                p.strip().lower() for p in user_answer.split(",") if p.strip()
-            )
-            return correct_parts == user_parts
-
-        # Novi tipovi pitanja (2026-04-06)
-        elif q_type == "sequencing":
-            # Sequencing: correct_answer je JSON string niza indeksa npr. "[0,2,1]"
-            # Ili extra_data sadrži correct_order listu
-            import json
-
-            try:
-                if extra_data and "correct_order" in extra_data:
-                    correct_order = extra_data["correct_order"]
-                else:
-                    # Pokušaj parsiranje iz correct_answer
-                    correct_order = (
-                        json.loads(correct_answer)
-                        if correct_answer.startswith("[")
-                        else []
-                    )
-
-                user_order = (
-                    json.loads(user_answer) if user_answer.startswith("[") else []
-                )
-                return correct_order == user_order
-            except (json.JSONDecodeError, ValueError):
-                # Fallback na string poređenje
-                return user_answer == correct_answer
-
-        elif q_type == "categorization":
-            # Categorization: correct_answer je JSON string mapping-a
-            import json
-
-            try:
-                if extra_data and "correct_mapping" in extra_data:
-                    correct_mapping = extra_data["correct_mapping"]
-                else:
-                    correct_mapping = (
-                        json.loads(correct_answer)
-                        if correct_answer.startswith("{")
-                        else {}
-                    )
-
-                user_mapping = (
-                    json.loads(user_answer) if user_answer.startswith("{") else {}
-                )
-                return correct_mapping == user_mapping
-            except (json.JSONDecodeError, ValueError):
-                return user_answer == correct_answer
-
-        elif q_type == "matching":
-            # Matching: correct_answer je JSON string parova
-            import json
-
-            try:
-                if extra_data and "correct_pairs" in extra_data:
-                    correct_pairs = extra_data["correct_pairs"]
-                else:
-                    correct_pairs = (
-                        json.loads(correct_answer)
-                        if correct_answer.startswith("{")
-                        else {}
-                    )
-
-                user_pairs = (
-                    json.loads(user_answer) if user_answer.startswith("{") else {}
-                )
-                return correct_pairs == user_pairs
-            except (json.JSONDecodeError, ValueError):
-                return user_answer == correct_answer
-
-        elif q_type == "odd_one_out":
-            # Odd one out: direktno poređenje - koja je opcija "uljez"
-            return user_answer == correct_answer
-
-        elif q_type == "estimation":
-            # Estimation: tolerance-based poređenje
-            # correct_answer je broj, user_answer je broj
-            import json
-
-            try:
-                # Pokušaj parsirati kao brojeve
-                correct_val = (
-                    float(correct_answer)
-                    if correct_answer.replace(".", "").replace("-", "").isdigit()
-                    else 0
-                )
-                user_val = (
-                    float(user_answer)
-                    if user_answer.replace(".", "").replace("-", "").isdigit()
-                    else 0
-                )
-
-                # Ako imamo extra_data, koristi tolerance
-                tolerance = 5  # podrazumevana tolerancija
-                if extra_data and "tolerance" in extra_data:
-                    tolerance = float(extra_data["tolerance"])
-
-                return abs(user_val - correct_val) <= tolerance
-            except (ValueError, TypeError):
-                return user_answer == correct_answer
-
-        elif q_type == "matrix":
-            # Matrix: correct_answer je JSON niz odgovora ["Tačno", "Netačno", ...]
-            import json
-
-            try:
-                if extra_data and "correct_answers" in extra_data:
-                    correct_answers = extra_data["correct_answers"]
-                else:
-                    correct_answers = (
-                        json.loads(correct_answer)
-                        if correct_answer.startswith("[")
-                        else []
-                    )
-
-                user_answers = (
-                    json.loads(user_answer) if user_answer.startswith("[") else []
-                )
-                return correct_answers == user_answers
-            except (json.JSONDecodeError, ValueError):
-                return user_answer == correct_answer
-
-        elif q_type == "hotspot":
-            # Hotspot: correct_answer je ime regiona/kliknute tačke
-            return user_answer == correct_answer
-
-        elif q_type == "text_input":
-            # Text input: provera tekstualnog odgovora sa opcijom za fuzzy matching
-            return QuizService._check_text_input_answer_static(
-                user_answer, correct_answer, extra_data
-            )
-
-        elif q_type == "fill_blank":
-            # Fill in the blank: provera sa alternativnim rečima
-            return QuizService._check_fill_blank_answer_static(
-                user_answer, correct_answer, extra_data
-            )
-
-        # Nepoznat tip - vraća False
-        logger.warning(f"Nepoznati tip pitanja: {q_type}")
-        return False
-
-    @staticmethod
-    def _check_text_input_answer_static(
-        user_answer: str, correct_answer: str, extra_data: dict = None
-    ) -> bool:
-        """
-        Proverava tekstualni odgovor za text_input tip.
-
-        Podržava:
-        - case_insensitive: Ignoriši velika/mala slova
-        - exact_word: Zahtevaj potpuno poklapanje reči
-        - fuzzy: Dozvoli manja odstupanja
-        - transliterate: Dozvoli latinica/ćirilica konverziju
-
-        Args:
-            user_answer: Odgovor korisnika
-            correct_answer: Tačan odgovor
-            extra_data: {'case_insensitive', 'exact_word', 'fuzzy', 'transliterate'}
-
-        Returns:
-            bool: True ako je odgovor tačan
-        """
-        if not user_answer or not correct_answer:
-            return False
-
-        user_answer = user_answer.strip()
-        correct_answer = correct_answer.strip()
-
-        # Default opcije
-        case_insensitive = True
-        exact_word = False
-        fuzzy = False
-        transliterate = True
-
-        if extra_data:
-            case_insensitive = extra_data.get("case_insensitive", True)
-            exact_word = extra_data.get("exact_word", False)
-            fuzzy = extra_data.get("fuzzy", False)
-            transliterate = extra_data.get("transliterate", True)
-
-        # Priprema - transliteracija latinica <-> ćirilica
-        if transliterate:
-            user_answer = _transliterate_text(user_answer)
-            correct_answer = _transliterate_text(correct_answer)
-
-        # Case insensitive
-        if case_insensitive:
-            user_answer = user_answer.lower()
-            correct_answer = correct_answer.lower()
-
-        # Potpuno poklapanje
-        if exact_word:
-            return user_answer == correct_answer
-
-        # Fuzzy matching - svaka reč iz correct_answer mora biti u user_answer
-        if fuzzy:
-            user_words = set(user_answer.split())
-            correct_words = set(correct_answer.split())
-            # Bare minimum 80% reči mora da se poklapa
-            matching = len(user_words & correct_words) / max(len(correct_words), 1)
-            return matching >= 0.8
-
-        # Default: direktno poređenje
-        return user_answer == correct_answer
-
-    @staticmethod
-    def _check_fill_blank_answer_static(
-        user_answer: str, correct_answer: str, extra_data: dict = None
-    ) -> bool:
-        """
-        Proverava fill_blank odgovor sa alternativnim rečima.
-
-        correct_answer može biti "reč1,reč2,reč3" - bilo koja je tačna
-        ILI "reč1|reč2|reč3" - bilo koja je tačna
-
-        Args:
-            user_answer: Odgovor korisnika
-            correct_answer: Tačan odgovor (sa alternativama)
-            extra_data: {'case_insensitive', 'all_words'}
-
-        Returns:
-            bool: True ako je odgovor tačan
-        """
-        if not user_answer or not correct_answer:
-            return False
-
-        user_answer = user_answer.strip()
-
-        # Podržava , ili | kao separator alternativnih odgovora
-        correct_answers = [
-            a.strip() for a in re.split(r"[,|]", correct_answer) if a.strip()
-        ]
-
-        if not correct_answers:
-            return False
-
-        # Default opcije
-        case_insensitive = True
-
-        if extra_data:
-            case_insensitive = extra_data.get("case_insensitive", True)
-
-        # Priprema - transliteracija
-        user_answer = _transliterate_text(user_answer)
-        if case_insensitive:
-            user_answer = user_answer.lower()
-
-        # Proveri svaki mogući tačan odgovor
-        for correct in correct_answers:
-            correct_processed = _transliterate_text(correct)
-            if case_insensitive:
-                correct_processed = correct_processed.lower()
-
-            if user_answer == correct_processed:
-                return True
-
-        return False
-
-
 def _transliterate_text(text: str) -> str:
     """
     Konvertuje tekst latinica <-> ćirilica.
@@ -556,108 +246,210 @@ def _transliterate_text(text: str) -> str:
     return "".join(result)
 
 
-def _transliterate_text(text: str) -> str:
-    """
-    Konvertuje tekst latinica <-> ćirilica.
-
-    Args:
-        text: Ulazni tekst
-
-    Returns:
-        str: Konvertovani tekst
-    """
-    if not text:
-        return text
-
-    # Ćirilica -> Latinica
-    cyrillic_to_latin = {
-        "а": "a",
-        "б": "b",
-        "в": "v",
-        "г": "g",
-        "д": "đ",
-        "ђ": "đ",
-        "е": "e",
-        "ж": "ž",
-        "з": "z",
-        "и": "i",
-        "ј": "j",
-        "к": "k",
-        "л": "l",
-        "љ": "lj",
-        "м": "m",
-        "н": "n",
-        "њ": "nj",
-        "о": "o",
-        "п": "p",
-        "р": "r",
-        "с": "s",
-        "т": "t",
-        "ћ": "ć",
-        "у": "u",
-        "ф": "f",
-        "х": "h",
-        "ц": "c",
-        "ч": "č",
-        "Ѓ": "Đ",
-        # lowercase dž = дж (commented to avoid duplicate key),
-        "ш": "š",
-        "А": "A",
-        "Б": "B",
-        "В": "V",
-        "Г": "G",
-        "Д": "D",
-        "Ђ": "Đ",
-        "Е": "E",
-        "Ж": "Ž",
-        "З": "Z",
-        "И": "I",
-        "Ј": "J",
-        "К": "K",
-        "Л": "L",
-        "Љ": "LJ",
-        "М": "M",
-        "Н": "N",
-        "Њ": "NJ",
-        "О": "O",
-        "П": "P",
-        "Р": "R",
-        "С": "S",
-        "Т": "T",
-        "Ћ": "Ć",
-        "У": "U",
-        "Ф": "F",
-        "Х": "H",
-        "Ц": "C",
-        "Ч": "Č",
-        "Џ": "DŽ",
-        "Ш": "Š",
-    }
-
-    # Latinica -> Ćirilica
-    latin_to_cyrillic = {v: k for k, v in cyrillic_to_latin.items()}
-
-    # Detektuj i konvertuj
-    has_cyrillic = any(
-        ord(c) >= 0x0430 and ord(c) <= 0x044F for c in text if c.isalpha()
-    )
-
-    if has_cyrillic:
-        result = []
-        for char in text:
-            result.append(cyrillic_to_latin.get(char, char))
-        return "".join(result)
-
-    result = []
-    for char in text:
-        result.append(latin_to_cyrillic.get(char, char))
-    return "".join(result)
-
-
 class QuizService:
-    """Glavni servis za kviz operacije."""
+    """
+    Servis za generisanje i upravljanje kvizovima.
+    Podržava Ollama, OpenAI, Claude sa fallback lancem.
+    """
 
-    def get_available_providers(self) -> List[dict]:
+    @staticmethod
+    def _check_answer_static(
+        q_type: str, user_answer: str, correct_answer: str, extra_data: dict = None
+    ) -> bool:
+        """
+        Static method for checking quiz answers.
+
+        Podržava sve tipove pitanja (ažurirano 2026-04-06):
+        - multiple_choice, true_false, calculation: direktno poređenje stringova
+        - checkbox: skupovno poređenje (redosled nebitan)
+        - sequencing: poređenje niza indeksa
+        - categorization: poređenje mapping-a
+        - matching: poređenje parova
+        - odd_one_out: direktno poređenje
+        - estimation: tolerance-based poređenje
+        - matrix: poređenje niza odgovora
+        - hotspot: direktno poređenje
+
+        Args:
+            q_type: Tip pitanja
+            user_answer: Odgovor korisnika
+            correct_answer: Tačan odgovor
+            extra_data: Dodatni podaci (za kompleksne tipove)
+
+        Returns:
+            bool: True ako je odgovor tačan
+        """
+        user_answer = (user_answer or "").strip().lower()
+        correct_answer = (correct_answer or "").strip().lower()
+
+        if q_type in ("multiple_choice", "true_false", "calculation"):
+            return user_answer == correct_answer
+
+        elif q_type == "checkbox":
+            correct_parts = set(
+                p.strip().lower() for p in correct_answer.split(",") if p.strip()
+            )
+            user_parts = set(
+                p.strip().lower() for p in user_answer.split(",") if p.strip()
+            )
+            return correct_parts == user_parts
+
+        elif q_type == "sequencing":
+            correct_indices = [i.strip() for i in correct_answer.split(",")]
+            user_indices = [i.strip() for i in user_answer.split(",")]
+            return correct_indices == user_indices
+
+        elif q_type == "categorization":
+            try:
+                correct_map = json.loads(correct_answer)
+                user_map = json.loads(user_answer)
+                return correct_map == user_map
+            except:
+                return False
+
+        elif q_type == "matching":
+            try:
+                correct_pairs = json.loads(correct_answer)
+                user_pairs = json.loads(user_answer)
+                return set(correct_pairs) == set(user_pairs)
+            except:
+                return False
+
+        elif q_type == "odd_one_out":
+            correct_items = [i.strip().lower() for i in correct_answer.split(",")]
+            return user_answer.strip().lower() in correct_items
+
+        elif q_type == "estimation":
+            try:
+                user_num = float(user_answer)
+                correct_num = float(correct_answer)
+                tolerance = float(extra_data.get("tolerance", 10)) if extra_data else 10
+                return abs(user_num - correct_num) <= tolerance
+            except:
+                return False
+
+        elif q_type == "matrix":
+            try:
+                correct_answers = json.loads(correct_answer)
+                user_answers = json.loads(user_answer)
+                return correct_answers == user_answers
+            except:
+                return False
+
+        elif q_type == "hotspot":
+            return user_answer == correct_answer
+
+        elif q_type in ("text_input", "fill_blank"):
+            return QuizService._check_text_input_answer_static(
+                user_answer, correct_answer, extra_data
+            )
+
+        return False
+
+    @staticmethod
+    def _check_text_input_answer_static(
+        user_answer: str, correct_answer: str, extra_data: dict = None
+    ) -> bool:
+        """Proverava tekstualni odgovor za text_input tip."""
+        if not user_answer or not correct_answer:
+            return False
+
+        user_answer = user_answer.strip()
+        correct_answer = correct_answer.strip()
+
+        case_insensitive = True
+        exact_word = False
+        fuzzy = False
+        transliterate = True
+
+        if extra_data:
+            case_insensitive = extra_data.get("case_insensitive", True)
+            exact_word = extra_data.get("exact_word", False)
+            fuzzy = extra_data.get("fuzzy", False)
+            transliterate = extra_data.get("transliterate", True)
+
+        if transliterate:
+            user_answer = _transliterate_text(user_answer)
+            correct_answer = _transliterate_text(correct_answer)
+
+        if case_insensitive:
+            user_answer = user_answer.lower()
+            correct_answer = correct_answer.lower()
+
+        if exact_word:
+            return user_answer == correct_answer
+
+        if fuzzy:
+            user_words = set(user_answer.split())
+            correct_words = set(correct_answer.split())
+            matching = len(user_words & correct_words) / max(len(correct_words), 1)
+            return matching >= 0.8
+
+        return user_answer == correct_answer
+
+    @staticmethod
+    def _check_fill_blank_answer_static(
+        user_answer: str, correct_answer: str, extra_data: dict = None
+    ) -> bool:
+        """Proverava fill_blank odgovor sa alternativnim rečima."""
+        if not user_answer or not correct_answer:
+            return False
+
+        user_answer = user_answer.strip()
+        correct_answers = [
+            a.strip() for a in re.split(r"[,|]", correct_answer) if a.strip()
+        ]
+
+        if not correct_answers:
+            return False
+
+        case_insensitive = True
+        if extra_data:
+            case_insensitive = extra_data.get("case_insensitive", True)
+
+        user_answer = _transliterate_text(user_answer)
+        if case_insensitive:
+            user_answer = user_answer.lower()
+
+        for correct in correct_answers:
+            correct_processed = _transliterate_text(correct)
+            if case_insensitive:
+                correct_processed = correct_processed.lower()
+            if user_answer == correct_processed:
+                return True
+
+        return False
+
+    def _check_text_input_answer(
+        self,
+        user_answer: str,
+        correct_answer: str,
+        exact_word: bool,
+        case_insensitive: bool,
+    ) -> bool:
+        """Wrapper for calling static method as instance method."""
+        return QuizService._check_text_input_answer_static(
+            user_answer,
+            correct_answer,
+            {"exact_word": exact_word, "case_insensitive": case_insensitive},
+        )
+
+    def _check_fill_blank_answer(
+        self,
+        user_answer: str,
+        correct_answer: str,
+        exact_word: bool,
+        case_insensitive: bool,
+    ) -> bool:
+        """Wrapper for calling static method as instance method."""
+        return QuizService._check_fill_blank_answer_static(
+            user_answer,
+            correct_answer,
+            {"exact_word": exact_word, "case_insensitive": case_insensitive},
+        )
+
+    @staticmethod
+    def get_available_providers() -> dict:
         """Vraća listu svih dostupnih provajdera."""
         from app.services.quiz.clients import get_available_providers as gap
 
