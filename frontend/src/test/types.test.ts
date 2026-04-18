@@ -63,7 +63,7 @@ describe('Types', () => {
     })
 
     it('should allow optional full_name', () => {
-      const data = {
+      const data: { email: string; password: string; full_name?: string } = {
         email: 'minimal@example.com',
         password: 'pass123',
       }
