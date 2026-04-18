@@ -95,6 +95,26 @@ Ovaj projekat koristi perzistentnu memoriju za pamćenje između sesija.
 - Restart OpenCode-a
 - Context loss
 
+### 📝 Learning from mistakes
+
+**2026-04-18: Frontend TypeScript error u CI-u**
+- Problem: Push-ovao kod sa TS greškama u test fajlovima (unused imports, property type error)
+- Uzrok: Nisam pokrenuo `tsc --noEmit` pre commit-a
+- Rešenje: Popravljeno u commit cea3858
+
+**KONTROLNA LISTA pre svakog commit-a:**
+```bash
+# Backend
+cd backend && flake8 app/ --max-line-length=120
+cd docker && docker exec ai-learning-app pytest app/tests/ -v --tb=short
+
+# Frontend
+cd frontend && npx tsc --noEmit
+cd frontend && npm run build
+```
+
+---
+
 ### 📝 POSLEDNJI UPDATE — 2026-04-18
 
 **CI/CD procedura zavrsena:** 2026-04-18
