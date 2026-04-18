@@ -95,9 +95,9 @@ Ovaj projekat koristi perzistentnu memoriju za pamćenje između sesija.
 - Restart OpenCode-a
 - Context loss
 
-### 📝 PRVA ANALIZA — 2026-04-04
+### 📝 POSLEDNJI UPDATE — 2026-04-18
 
-**Analiza backend-a urađena:** 2026-04-04
+**CI/CD procedura zavrsena:** 2026-04-18
 
 | Rezultat | Vrednost |
 |----------|----------|
@@ -370,6 +370,35 @@ Context:
 
 ### Kada koristiti:
 Kad trebaš da kreiraš više sličnih content-a (dokumentacija, quiz pitanja, email-ovi, itd) - definišeš template JEDNOM, pa samo menjaš promenljive.
+
+---
+
+## 📝 POSLEDNJI UPDATE — 2026-04-18
+
+**CI/CD procedura zavrsena:** 2026-04-18
+
+| Rezultat | Vrednost |
+|----------|----------|
+| Testovi | 443 passed, 3 skipped |
+| Coverage | 63.22% (iznad 60% threshold) |
+| Commit | 461a269 |
+| GitHub push | ✅ Uspesno |
+
+**Sta je urađeno:**
+1. Analiziran MCP server vs MCP dokumentacija (modelcontextprotocol.io)
+2. FastMCP vs low-level Server - razlike dokumentovane
+3. Popravljen CI coverage threshold (50% → 60%) u ci.yml
+4. Verifikovani svi testovi prolaze lokalno
+5. Commit + push po CI_CD_STRATEGIJA.md proceduri
+
+**MCP Server Status:**
+- Ima 30+ tool-ova (docker, health, quiz, translate, document, skills)
+- Koristi low-level Server klasu (ne FastMCP - radi ali nije optimalno)
+- Svi tool-ovi imaju ispravne inputSchema i descriptions
+- Response format koristi TextContent - ispravno
+
+**Nije urađeno (nije kritično):**
+- Refaktor na FastMCP - trenutni kod radi ispravno
 
 ---
 
