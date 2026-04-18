@@ -105,12 +105,18 @@ Ovaj projekat koristi perzistentnu memoriju za pamćenje između sesija.
 **KONTROLNA LISTA pre svakog commit-a:**
 ```bash
 # Backend
-cd backend && flake8 app/ --max-line-length=120
-cd docker && docker exec ai-learning-app pytest app/tests/ -v --tb=short
+flake8 app/ --max-line-length=120                    # Linting
+pytest app/tests/ -v --tb=short --cov-fail-under=60   # Testovi + coverage
 
 # Frontend
-cd frontend && npx tsc --noEmit
-cd frontend && npm run build
+npx tsc --noEmit                                      # TypeScript
+npm run build                                         # Build
+
+# Safety
+git diff --cached --name-only | grep -E "\.env|secrets"  # Provera da nije .env
+
+# Bonus
+git diff --name-only | xargs grep -l "TODO\|FIXME" 2>/dev/null || echo "Nema"
 ```
 
 ---
