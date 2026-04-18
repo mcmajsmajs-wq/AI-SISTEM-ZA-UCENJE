@@ -334,6 +334,37 @@ services:
         max-file: "3"
 
 # ================================================================================
+# MCP SERVER (AI Model Context Protocol)
+# ================================================================================
+# MCP Server omogućava AI asistentima direktan pristup aplikaciji
+# Tool-ovi: quiz, document, translate, skills
+# ================================================================================
+  mcp:
+    build:
+      context: ../mcp-server
+      dockerfile: Dockerfile
+    container_name: ai-learning-mcp
+    restart: unless-stopped
+    environment:
+      - API_BASE_URL=http://ai-learning-app:8000
+      - PYTHONUNBUFFERED=1
+      # Project root za MCP - putanja do projekta
+      - PROJECT_ROOT=/project
+    volumes:
+      # Povezivanje sa glavnim projektom za pristup docker-compose.yml
+      - ..:/project:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - ai-learning-network
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "50m"
+        max-file: "3"
+
+# ================================================================================
 # VOLUMES (Persistent Storage)
 # ================================================================================
 volumes:

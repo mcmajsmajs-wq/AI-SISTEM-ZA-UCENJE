@@ -22,6 +22,8 @@ from app.services.translation.clients import (
     GoogleTranslateClient,
     ClaudeClient,
     DeepSeekClient,
+    GroqClient,
+    MistralClient,
 )
 from app.services.translation.providers import TranslationProvider
 from dataclasses import dataclass, field
@@ -83,6 +85,8 @@ class TranslationService:
             TranslationProvider.GOOGLE.value: GoogleTranslateClient(),
             TranslationProvider.CLAUDE.value: ClaudeClient(),
             TranslationProvider.DEEPSEEK.value: DeepSeekClient(),
+            TranslationProvider.GROQ.value: GroqClient(),
+            TranslationProvider.MISTRAL.value: MistralClient(),
         }
 
         self._glossary: Dict[str, str] = {}
@@ -253,6 +257,7 @@ class TranslationService:
         """Estimira cenu prevoda."""
         try:
             import tiktoken
+
             encoder = tiktoken.get_encoding("cl100k_base")
         except ImportError:
             encoder = None

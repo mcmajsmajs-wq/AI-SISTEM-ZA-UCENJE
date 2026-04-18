@@ -20,6 +20,9 @@ from app.services.translation.clients.openai import OpenAIClient
 from app.services.translation.clients.google import GoogleTranslateClient
 from app.services.translation.clients.claude import ClaudeClient
 from app.services.translation.clients.deepseek import DeepSeekClient
+from app.services.translation.clients.groq import GroqClient
+from app.services.translation.clients.mistral import MistralClient
+from app.services.translation.clients.simplytranslate import SimplyTranslateClient
 from app.services.translation.providers import TranslationProvider
 
 
@@ -45,6 +48,9 @@ def get_client(provider: str, **kwargs):
         "claude": ClaudeClient,
         "anthropic": ClaudeClient,
         "deepseek": DeepSeekClient,
+        "groq": GroqClient,
+        "mistral": MistralClient,
+        "simplytranslate": SimplyTranslateClient,
     }
 
     client_class = clients.get(provider)
@@ -61,7 +67,15 @@ def get_available_clients():
         List[dict] - Lista sa info o dostupnim client-ima
     """
     available = []
-    for provider in ["ollama", "deepl", "openai", "google", "claude", "deepseek"]:
+    for provider in [
+        "ollama",
+        "deepl",
+        "openai",
+        "google",
+        "claude",
+        "deepseek",
+        "simplytranslate",
+    ]:
         client = get_client(provider)
         if client and client.is_available():
             available.append(
@@ -84,6 +98,9 @@ __all__ = [
     "GoogleTranslateClient",
     "ClaudeClient",
     "DeepSeekClient",
+    "GroqClient",
+    "MistralClient",
+    "SimplyTranslateClient",
     "TranslationProvider",
     "get_client",
     "get_available_clients",

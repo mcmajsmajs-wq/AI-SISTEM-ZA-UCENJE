@@ -22,3 +22,6 @@ class TranslationProvider(str, Enum):
     CLAUDE = "claude"
     DEEPSEEK = "deepseek"
     LIBRETRANSLATE = "libretranslate"
+    GROQ = "groq"
+    MISTRAL = "mistral"
+    SIMPLYTRANSLATE = "simplytranslate"

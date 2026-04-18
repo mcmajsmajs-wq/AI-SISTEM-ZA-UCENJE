@@ -44,11 +44,26 @@ help: ## Prikaži ovu poruku sa svim dostupnim komandama
 
 # ── Build ─────────────────────────────────────────────────────────────────────
 .PHONY: build
-build: ## Izgradi sve Docker images lokalno
-	@echo "$(BOLD)Izgradnja Docker images...$(NC)"
-	docker build -t ai-learning-backend:$(TAG) ./$(BACKEND_DIR)
-	docker build -t ai-learning-frontend:$(TAG) ./$(FRONTEND_DIR)
+build: build-backend build-frontend build-mcp ## Izgradi sve Docker images lokalno
 	@echo "$(GREEN)✅ Build završen!$(NC)"
+
+.PHONY: build-backend
+build-backend: ## Izgradi backend Docker image
+	@echo "$(BOLD)Izgradnja backend image...$(NC)"
+	docker build -t ai-learning-backend:$(TAG) ./$(BACKEND_DIR)
+	@echo "$(GREEN)✅ Backend izgrađen!$(NC)"
+
+.PHONY: build-frontend
+build-frontend: ## Izgradi frontend Docker image
+	@echo "$(BOLD)Izgradnja frontend image...$(NC)"
+	docker build -t ai-learning-frontend:$(TAG) ./$(FRONTEND_DIR)
+	@echo "$(GREEN)✅ Frontend izgrađen!$(NC)"
+
+.PHONY: build-mcp
+build-mcp: ## Izgradi MCP server Docker image
+	@echo "$(BOLD)Izgradnja MCP server image...$(NC)"
+	docker build -t ai-learning-mcp:$(TAG) ./$(BACKEND_DIR)/../mcp-server
+	@echo "$(GREEN)✅ MCP server izgrađen!$(NC)"
 
 .PHONY: build-prod
 build-prod: ## Izgradi produkcijske Docker images (Dockerfile.prod)
@@ -71,7 +86,10 @@ frontend-build: ## Izgradi frontend (Node.js via Docker — bez lokalne instalac
 # ── Testovi ───────────────────────────────────────────────────────────────────
 .PHONY: test
 test: test-backend test-frontend ## Pokreni sve testove (backend + frontend)
-	@echo "$(GREEN)✅ Svi testovi završeni!$(NC)"
+	@echo ""
+	@echo "$(GREEN)=========================================$(NC)"
+	@echo "$(GREEN)  SVI TESTOVI ZAVRŠENI!$(NC)"
+	@echo "$(GREEN)=========================================$(NC)"
 
 .PHONY: test-backend
 test-backend: ## Pokreni backend testove (pytest)
@@ -100,10 +118,25 @@ test-backend-coverage: ## Backend testovi sa coverage izvještajem
 	@echo "$(GREEN)HTML coverage: backend/htmlcov/index.html$(NC)"
 
 .PHONY: test-frontend
-test-frontend: ## Pokreni frontend testove (ako postoje)
-	@echo "$(BOLD)Frontend provjere...$(NC)"
-	cd $(FRONTEND_DIR) && npx tsc --noEmit
-	@echo "$(GREEN)✅ TypeScript provjera prošla!$(NC)"
+test-frontend: ## Pokreni frontend testove (Vitest)
+	@echo "$(BOLD)Frontend testovi...$(NC)"
+	cd $(FRONTEND_DIR) && npm test
+	@echo "$(GREEN)✅ Frontend testovi završeni!$(NC)"
+
+.PHONY: test-frontend-watch
+test-frontend-watch: ## Pokreni frontend testove u watch modu
+	@echo "$(BOLD)Frontend testovi (watch)...$(NC)"
+	cd $(FRONTEND_DIR) && npm run test:watch
+
+.PHONY: test-frontend-ui
+test-frontend-ui: ## Pokreni frontend testove sa UI
+	@echo "$(BOLD)Frontend testovi (UI)...$(NC)"
+	cd $(FRONTEND_DIR) && npm run test:ui
+
+.PHONY: test-frontend-coverage
+test-frontend-coverage: ## Pokreni frontend testove sa coverage
+	@echo "$(BOLD)Frontend testovi sa coverage...$(NC)"
+	cd $(FRONTEND_DIR) && npm run test:coverage
 
 # ── Linting ───────────────────────────────────────────────────────────────────
 .PHONY: lint

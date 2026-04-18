@@ -140,6 +140,26 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
 
         db.commit()
 
+        # Send email notification about chunks being ready
+        if document.user_id:
+            try:
+                from app.db.models.user import User
+
+                user = db.query(User).filter(User.id == document.user_id).first()
+                if user and user.email:
+                    from app.services.email_service import email_service
+
+                    email_service.send_chunks_ready(
+                        to=user.email,
+                        full_name=user.full_name or "",
+                        document_title=document.title or "Dokument",
+                        total_chunks=document.total_chunks or 0,
+                        total_pages=document.total_pages or 0,
+                    )
+                    logger.info(f"Email notification sent for document {document_id}")
+            except Exception as email_err:
+                logger.warning(f"Email notification failed (non-critical): {email_err}")
+
     except Exception as exc:
         logger.error(f"PDF processing failed: {exc}")
 

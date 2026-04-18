@@ -373,3 +373,138 @@ class TestSendQuizCompleted:
             )
 
             assert result is True
+
+
+class TestSendChunksReady:
+    """Testovi za send_chunks_ready metodu."""
+
+    @patch("app.services.email_service.EmailService._send")
+    def test_send_chunks_ready_success(self, mock_send):
+        """Test uspešno slanje email-a kada su chunk-ovi kreirani."""
+        with patch("app.services.email_service.settings") as mock_settings:
+            mock_settings.SMTP_HOST = "smtp.example.com"
+            mock_settings.SMTP_USER = "user"
+            mock_settings.SMTP_PASSWORD = "password"
+            mock_settings.EMAIL_FROM = "noreply@example.com"
+
+            mock_send.return_value = True
+
+            service = EmailService()
+            result = service.send_chunks_ready(
+                to="user@example.com",
+                full_name="Petar",
+                document_title="VMware vSphere Priručnik",
+                total_chunks=45,
+                total_pages=12,
+            )
+
+            assert result is True
+            mock_send.assert_called_once()
+            call_args = mock_send.call_args
+            assert call_args[0][0] == "user@example.com"
+            assert "VMware vSphere Priručnik" in call_args[0][1]
+            assert "45" in call_args[0][2]
+            assert "12" in call_args[0][2]
+
+    @patch("app.services.email_service.EmailService._send")
+    def test_send_chunks_ready_empty_name(self, mock_send):
+        """Test sa praznim imenom koristi email username."""
+        with patch("app.services.email_service.settings") as mock_settings:
+            mock_settings.SMTP_HOST = "smtp.example.com"
+            mock_settings.SMTP_USER = "user"
+            mock_settings.SMTP_PASSWORD = "password"
+            mock_settings.EMAIL_FROM = "noreply@example.com"
+
+            mock_send.return_value = True
+
+            service = EmailService()
+            result = service.send_chunks_ready(
+                to="user@example.com",
+                full_name="",
+                document_title="Test Dokument",
+                total_chunks=10,
+                total_pages=5,
+            )
+
+            assert result is True
+
+
+class TestSendTranslationReady:
+    """Testovi za send_translation_ready metodu."""
+
+    @patch("app.services.email_service.EmailService._send")
+    def test_send_translation_ready_success(self, mock_send):
+        """Test uspešno slanje email-a kada je prevod završen."""
+        with patch("app.services.email_service.settings") as mock_settings:
+            mock_settings.SMTP_HOST = "smtp.example.com"
+            mock_settings.SMTP_USER = "user"
+            mock_settings.SMTP_PASSWORD = "password"
+            mock_settings.EMAIL_FROM = "noreply@example.com"
+
+            mock_send.return_value = True
+
+            service = EmailService()
+            result = service.send_translation_ready(
+                to="user@example.com",
+                full_name="Petar",
+                document_title="VMware vSphere Priručnik",
+                source_language="en",
+                target_language="sr",
+                total_chunks=45,
+            )
+
+            assert result is True
+            mock_send.assert_called_once()
+            call_args = mock_send.call_args
+            assert call_args[0][0] == "user@example.com"
+            assert "Prevod dokumenta završen" in call_args[0][1]
+
+    @patch("app.services.email_service.EmailService._send")
+    def test_send_translation_ready_language_mapping(self, mock_send):
+        """Test mapiranje jezičkih kodova u imena."""
+        with patch("app.services.email_service.settings") as mock_settings:
+            mock_settings.SMTP_HOST = "smtp.example.com"
+            mock_settings.SMTP_USER = "user"
+            mock_settings.SMTP_PASSWORD = "password"
+            mock_settings.EMAIL_FROM = "noreply@example.com"
+
+            mock_send.return_value = True
+
+            service = EmailService()
+            result = service.send_translation_ready(
+                to="user@example.com",
+                full_name="Petar",
+                document_title="Test",
+                source_language="de",
+                target_language="fr",
+                total_chunks=20,
+            )
+
+            assert result is True
+            call_args = mock_send.call_args
+            html_content = call_args[0][2]
+            assert "German" in html_content
+            assert "French" in html_content
+
+    @patch("app.services.email_service.EmailService._send")
+    def test_send_translation_ready_empty_name(self, mock_send):
+        """Test sa praznim imenom koristi email username."""
+        with patch("app.services.email_service.settings") as mock_settings:
+            mock_settings.SMTP_HOST = "smtp.example.com"
+            mock_settings.SMTP_USER = "user"
+            mock_settings.SMTP_PASSWORD = "password"
+            mock_settings.EMAIL_FROM = "noreply@example.com"
+
+            mock_send.return_value = True
+
+            service = EmailService()
+            result = service.send_translation_ready(
+                to="user@example.com",
+                full_name="",
+                document_title="Test Dokument",
+                source_language="en",
+                target_language="sr",
+                total_chunks=10,
+            )
+
+            assert result is True

@@ -274,6 +274,105 @@ docker-compose up -d app worker
 ```
 
 
+## Plan: Novi Translation Provideri (2026-04-17)
+
+### Cilj
+Zameniti postojeće skupe translation provajdere (OpenAI, Claude, Gemini) sa besplatnim alternativama.
+
+### Besplatni Provideri za Prevod
+
+| Provider | Besplatno | Link | Status |
+|----------|-----------|------|--------|
+| Microsoft Translator | 2M karaktera/mesečno | https://portal.azure.com/ | ⏳ Na čekanju |
+| DeepL Free | 500K karaktera/mesečno | https://www.deepl.com/pro-api | ⏳ Na čekanju |
+| SimplyTranslate | 100 req/day | https://simplytranslate.ai/ | ⏳ Na čekanju |
+
+### Provideri za Quiz (ostaju)
+
+| Provider | Cena | Status |
+|----------|------|--------|
+| Ollama | Besplatno (lokalno) | ✅ Radi |
+| Groq | Besplatno (30 RPM) | ✅ Radi |
+| DeepSeek | $0.14/M | ✅ Radi |
+| Claude | $3/M | ✅ Radi |
+| OpenAI | $2.50/M | ✅ Radi |
+
+### Separacija Servisa
+
+```
+TRANSLATION SERVICE (novi)      →     QUIZ SERVICE (stari)
+├── Microsoft Translator              ├── generate_quiz()
+├── DeepL API                         ├── generate_questions()
+├── SimplyTranslate (fallback)         ├── evaluate_answer()
+└── LLM fallback (Ollama/Groq)        └── (isti provajderi)
+```
+
+### sledeći koraci
+1. ⏳ Korisnik pravi Azure nalog → Translator resource → F0 tier
+2. 🔄 Refaktorisati translation service
+3. 🔄 Dodati nove provajdere
+4. 🔄 Testirati
+
+---
+
+---
+
+## Prompt Templates (2026-04-18)
+
+### Concept
+Prompt template je reusable, pre-structured format sa placeholder-ima koji se popunjavaju sa konkretnim vrednostima. To je blueprint za kreiranje AI prompt-ova.
+
+### Zašto koristiti:
+- **Konzistentnost** - svi output-i izgledaju isto
+- **Efikasnost** - ne pišeš prompt od nule
+- **Skalabilnost** - lako kreiraš više prompt-ova
+- **Optimizacija** - improve-aš template over time
+
+### Struktura Prompt Template-a
+
+```
+1. PERSONA
+   "You are an expert technical writer..."
+
+2. IZVORI INFORMACIJA  
+   "Use these sources as truth..."
+
+3. ZADATAK
+   *Topic:* <popuni>
+   *Product:* <popuni>
+   *Audience:* <popuni>
+
+4. IZLAZNI FORMAT
+   "Generate content with..."
+
+5. STRUKTURA
+   [template sa section-ima]
+```
+
+### Primer: Quiz Prompt Template
+
+```python
+QUIZ_PROMPT = """
+You are an expert teacher for {subject}.
+Create {num_questions} quiz questions about: {topic}
+
+Requirements:
+- Clear and specific
+- 4 options (1 correct)
+- Difficulty: {difficulty}
+
+Context:
+{context}
+"""
+# Popuniš: {subject}, {topic}, {num_questions}, {difficulty}, {context}
+# Dobiješ: gotov prompt za quiz
+```
+
+### Kada koristiti:
+Kad trebaš da kreiraš više sličnih content-a (dokumentacija, quiz pitanja, email-ovi, itd) - definišeš template JEDNOM, pa samo menjaš promenljive.
+
+---
+
 ## Dokumentacija
 
 Detaljno uputstvo: [OPENCODE_SKILLS_GUIDE.md](./OPENCODE_SKILLS_GUIDE.md)

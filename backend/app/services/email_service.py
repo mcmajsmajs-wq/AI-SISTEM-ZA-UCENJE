@@ -194,5 +194,102 @@ class EmailService:
         html += "<a href='http://localhost:5173/quizzes' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj kvizove</a></div>"
         return self._send(to, subject, html)
 
+    def send_chunks_ready(
+        self,
+        to: str,
+        full_name: str,
+        document_title: str,
+        total_chunks: int,
+        total_pages: int,
+    ) -> bool:
+        """
+        Šalje email kada su chunk-ovi uspešno kreirani.
+
+        Args:
+            to: Email adresa primaoca
+            full_name: Ime korisnika
+            document_title: Naslov dokumenta
+            total_chunks: Broj kreiranih chunk-ova
+            total_pages: Broj stranica dokumenta
+        """
+        name = full_name or to.split("@")[0]
+        subject = f"Odlomci dokumenta spremni - {document_title}"
+        html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
+        html += f"<h2 style='color:#10b981'>Odlomci su spremni, {name}!</h2>"
+        html += (
+            f"<p>Vaš dokument <strong>{document_title}</strong> je uspešno obrađen.</p>"
+        )
+        html += "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Stranica</td><td style='padding:8px;font-weight:bold'>{total_pages}</td></tr>"
+        html += f"<tr><td style='padding:8px'>Odlomaka (chunk-ova)</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"
+        html += "</table>"
+        html += "<p>Sada možete:</p><ul>"
+        html += "<li>Prevesti dokument na drugi jezik</li>"
+        html += "<li>Generisati kviz iz sadržaja</li>"
+        html += "<li>Koristiti dokument za RAG pretragu</li></ul>"
+        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a>"
+        html += f"<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Započnite novi zadatak ili se izlogujte. Agent će vas obavestiti putem email-a kada završi.</p></div>"
+        return self._send(to, subject, html)
+
+    def send_translation_ready(
+        self,
+        to: str,
+        full_name: str,
+        document_title: str,
+        source_language: str,
+        target_language: str,
+        total_chunks: int,
+    ) -> bool:
+        """
+        Šalje email kada je prevod dokumenta završen.
+
+        Args:
+            to: Email adresa primaoca
+            full_name: Ime korisnika
+            document_title: Naslov dokumenta
+            source_language: Izvorni jezik
+            target_language: Ciljni jezik
+            total_chunks: Broj prevedenih chunk-ova
+        """
+        name = full_name or to.split("@")[0]
+        subject = f"Prevod dokumenta završen - {document_title}"
+
+        # Mapiranje jezičkih kodova u imena
+        lang_names = {
+            "en": "English",
+            "sr": "Serbian",
+            "de": "German",
+            "fr": "French",
+            "es": "Spanish",
+            "it": "Italian",
+            "ru": "Russian",
+            "zh": "Chinese",
+            "ja": "Japanese",
+            "ko": "Korean",
+            "ar": "Arabic",
+            "pt": "Portuguese",
+            "nl": "Dutch",
+            "pl": "Polish",
+            "hu": "Hungarian",
+        }
+        src_name = lang_names.get(source_language, source_language)
+        tgt_name = lang_names.get(target_language, target_language)
+
+        html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
+        html += f"<h2 style='color:#10b981'>Prevod je završen, {name}!</h2>"
+        html += f"<p>Vaš dokument <strong>{document_title}</strong> je uspešno preveden.</p>"
+        html += "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Iz jezika</td><td style='padding:8px;font-weight:bold'>{src_name}</td></tr>"
+        html += f"<tr><td style='padding:8px'>Na jezik</td><td style='padding:8px;font-weight:bold'>{tgt_name}</td></tr>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb'>Prevedenih odlomaka</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"
+        html += "</table>"
+        html += "<p>Sada možete:</p><ul>"
+        html += "<li>Generisati kviz iz prevedenog sadržaja</li>"
+        html += "<li>Pretraživati prevedeni sadržaj</li>"
+        html += "<li>Pogledati dokument</li></ul>"
+        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a>"
+        html += f"<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Započnite novi zadatak ili se izlogujte. Agent će vas obavestiti putem email-a kada završi.</p></div>"
+        return self._send(to, subject, html)
+
 
 email_service = EmailService()

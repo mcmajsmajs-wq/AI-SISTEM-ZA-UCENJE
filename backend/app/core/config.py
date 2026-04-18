@@ -156,10 +156,11 @@ class Settings(BaseSettings):
     GEMINI_TIMEOUT: int = 60
 
     # Translation settings
-    TRANSLATION_PREFER_LOCAL: bool = True  # Prefer LibreTranslate (free)
-    # Translation: LibreTranslate (free), DeepL (quality), Google (reliable), then AI as backup
+    TRANSLATION_PREFER_LOCAL: bool = True  # Prefer local/free providers
+    # Translation order: Local AI (free) > Cheap cloud AI > Paid APIs
+    # Ollama (local, free), Groq (free tier), DeepSeek (cheap), then paid APIs
     TRANSLATION_FALLBACK_ORDER: str = (
-        "libretranslate,deepl,google,ollama,claude,gemini,groq,mistral,deepseek,openai"
+        "ollama,groq,deepseek,mistral,deepl,google,claude,gemini,openai"
     )
 
     # LibreTranslate settings (optional - can use public instance or self-hosted)

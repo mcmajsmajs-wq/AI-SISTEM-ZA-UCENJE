@@ -17,6 +17,7 @@ from celery import shared_task
 from sqlalchemy.orm import sessionmaker
 from sqlalchemy.orm.attributes import flag_modified
 import logging
+import os
 import time
 from typing import Any, Optional
 
@@ -47,10 +48,10 @@ def get_db_session():
 
 def translate_with_fallback(
     text: str,
-    source_language: str,
-    target_language: str,
-    user_api_keys: dict = None,
-    preferred_provider: str = None,
+    source_language: str = "en",
+    target_language: str = "sr",
+    user_api_keys: Optional[dict] = None,
+    preferred_provider: Optional[str] = None,
 ) -> Any:
     """
     Prevodi tekst sa automatskim prebacivanjem između provajdera.
@@ -78,22 +79,57 @@ def translate_with_fallback(
     if preferred_provider and preferred_provider not in ["auto", "libretranslate"]:
         providers_to_try.append(preferred_provider)
 
-    # Add user API keys first
-    if user_api_keys:
-        priority_order = ["deepseek", "openai", "mistral", "groq", "gemini"]
+    # Add user API keys first - mistral/groq first as they have free tiers
+    if user_api_keys and isinstance(user_api_keys, dict):
+        priority_order = ["mistral", "groq", "gemini", "deepseek", "openai"]
         for p in priority_order:
-            if user_api_keys.get(p) and p not in providers_to_try:
+            if (user_api_keys or {}).get(p) and p not in providers_to_try:
                 providers_to_try.append(p)
+    else:
+        user_api_keys = {}
 
-    # Add system-level API keys as fallback
+    # Add system-level API keys as fallback - mistral/groq first
+    # Read API keys - try environment first, then settings
+    mistral_key = (
+        os.environ.get("MISTRAL_API_KEY")
+        or os.environ.get("SYSTEM_MISTRAL_API_KEY")
+        or getattr(settings, "MISTRAL_API_KEY", None)
+        or getattr(settings, "SYSTEM_MISTRAL_API_KEY", None)
+    )
+    groq_key = (
+        os.environ.get("GROQ_API_KEY")
+        or os.environ.get("SYSTEM_GROQ_API_KEY")
+        or getattr(settings, "GROQ_API_KEY", None)
+        or getattr(settings, "SYSTEM_GROQ_API_KEY", None)
+    )
+    gemini_key = os.environ.get("GOOGLE_API_KEY") or getattr(
+        settings, "GOOGLE_API_KEY", None
+    )
+    deepseek_key = os.environ.get("DEEPSEEK_API_KEY") or getattr(
+        settings, "DEEPSEEK_API_KEY", None
+    )
+    openai_key = os.environ.get("OPENAI_API_KEY") or getattr(
+        settings, "OPENAI_API_KEY", None
+    )
+
+    logger.info(
+        f"DEBUG mistral: env={os.environ.get('MISTRAL_API_KEY')}, sys={getattr(settings, 'MISTRAL_API_KEY', 'NOT SET')}"
+    )
+    logger.info(
+        f"DEBUG groq: env={os.environ.get('GROQ_API_KEY')}, sys={getattr(settings, 'GROQ_API_KEY', 'NOT SET')}"
+    )
+    logger.info(
+        f"DEBUG mistral_key present={bool(mistral_key)}, groq_key present={bool(groq_key)}"
+    )
+
     system_keys = {
-        "deepseek": getattr(settings, "DEEPSEEK_API_KEY", None),
-        "openai": getattr(settings, "OPENAI_API_KEY", None),
-        "mistral": getattr(settings, "MISTRAL_API_KEY", None),
-        "groq": getattr(settings, "GROQ_API_KEY", None),
-        "gemini": getattr(settings, "GOOGLE_API_KEY", None),
+        "mistral": mistral_key,
+        "groq": groq_key,
+        "gemini": gemini_key,
+        "deepseek": deepseek_key,
+        "openai": openai_key,
     }
-    priority_order = ["deepseek", "openai", "mistral", "groq", "gemini"]
+    priority_order = ["mistral", "groq", "gemini", "deepseek", "openai"]
     for p in priority_order:
         if system_keys.get(p) and p not in providers_to_try:
             providers_to_try.append(p)
@@ -107,78 +143,20 @@ def translate_with_fallback(
     logger.info(f"Translation providers to try: {providers_to_try}")
 
     for provider in providers_to_try:
-        client = None
-        if provider == "mistral":
-            api_key = user_api_keys.get("mistral") or getattr(
-                settings, "MISTRAL_API_KEY", None
-            )
-            if api_key:
-                client = make_mistral_client(api_key)
-        elif provider == "groq":
-            api_key = user_api_keys.get("groq") or getattr(
-                settings, "GROQ_API_KEY", None
-            )
-            if api_key:
-                client = make_groq_client(api_key)
-        elif provider == "gemini":
-            api_key = user_api_keys.get("gemini") or getattr(
-                settings, "GOOGLE_API_KEY", None
-            )
-            if api_key:
-                client = make_gemini_client(api_key)
-        elif provider == "deepseek":
-            api_key = user_api_keys.get("deepseek") or getattr(
-                settings, "DEEPSEEK_API_KEY", None
-            )
-            if api_key:
-                try:
-                    from app.services.translation.clients import DeepSeekClient
+        try:
+            from app.services.translation import translation_service
 
-                    client = DeepSeekClient(api_key)
-                except Exception as e:
-                    logger.warning(f"Failed to create DeepSeek client: {e}")
-        elif provider == "openai":
-            api_key = user_api_keys.get("openai") or getattr(
-                settings, "OPENAI_API_KEY", None
+            result = translation_service.translate(
+                text, source_language, target_language, provider=provider
             )
-            if api_key:
-                try:
-                    from app.services.translation.clients import OpenAIClient
-
-                    client = OpenAIClient(api_key)
-                except Exception as e:
-                    logger.warning(f"Failed to create OpenAI client: {e}")
-
-        if client:
-            for attempt in range(3):
-                try:
-                    result = client.translate(text, source_language, target_language)
-                    if result.success:
-                        logger.info(f"Translation successful with provider: {provider}")
-                        return result
-                    last_error = result.error
-                except Exception as e:
-                    last_error = str(e)
-                    logger.warning(f"Translation attempt {attempt + 1} failed: {e}")
-
-                if attempt < 2:
-                    time.sleep(1)
-
-        if provider == "ollama":
-            try:
-                result = translation_service.translate(
-                    text,
-                    source_language=source_language,
-                    target_language=target_language,
-                    provider="ollama",
-                )
-                if result.success:
-                    logger.info("Translation successful with Ollama")
-                    return result
-                last_error = result.error
-            except Exception as e:
-                last_error = str(e)
-                logger.warning(f"Ollama translation failed: {e}")
+            if result.success:
+                logger.info(f"Translation successful with provider: {provider}")
+                return result
+            last_error = result.error
+            logger.warning(f"Provider {provider} failed: {result.error}")
+        except Exception as e:
+            last_error = str(e)
+            logger.warning(f"Provider {provider} exception: {e}")
 
     logger.error(f"All translation providers failed. Last error: {last_error}")
     raise Exception(f"Translation failed: {last_error}")
@@ -388,6 +366,27 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
             )
 
         db.commit()
+
+        # Send email notification about translation being ready
+        if document.user_id:
+            try:
+                user = db.query(User).filter(User.id == document.user_id).first()
+                if user and user.email:
+                    from app.services.email_service import email_service
+
+                    email_service.send_translation_ready(
+                        to=user.email,
+                        full_name=user.full_name or "",
+                        document_title=document.title or "Dokument",
+                        source_language=document.source_language or "en",
+                        target_language=document.target_language or "sr",
+                        total_chunks=translated_count,
+                    )
+                    logger.info(
+                        f"Translation email notification sent for document {document_id}"
+                    )
+            except Exception as email_err:
+                logger.warning(f"Email notification failed (non-critical): {email_err}")
 
         return {
             "status": "success",
