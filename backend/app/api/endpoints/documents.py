@@ -512,7 +512,7 @@ async def translate_document(
             status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
         )
 
-    if document.status not in ["completed", "translating"]:
+    if document.status not in ["completed", "translating", "partial"]:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail="Document must be processed before translation",
@@ -706,6 +706,19 @@ async def get_document_progress(
         current_phase = "error"
         phase_label = "Greška pri obradi"
         progress_percentage = 0
+    elif document.status == "partial":
+        current_phase = "partial"
+        partial_info = document.file_metadata.get("partial_translation", False)
+        if partial_info:
+            phase_label = (
+                f"Delimično prevedeno — {translated_chunks}/{total_chunks} odlomaka"
+            )
+            progress_percentage = (
+                int(translated_chunks / total_chunks * 100) if total_chunks > 0 else 0
+            )
+        else:
+            phase_label = "Prekid prevođenja"
+            progress_percentage = 0
 
     return {
         "document_id": document_id,

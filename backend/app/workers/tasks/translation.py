@@ -183,7 +183,7 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
         if not document:
             raise ValueError(f"Document not found: {document_id}")
 
-        if document.status not in ["completed", "translating"]:
+        if document.status not in ["completed", "translating", "partial"]:
             raise ValueError(
                 f"Document must be processed first. Current status: {document.status}"
             )
@@ -404,9 +404,30 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
         try:
             document = db.query(Document).filter(Document.id == document_id).first()
             if document:
-                document.status = "error"
+                # Check if some chunks were translated before failure
+                translated_before_failure = (
+                    db.query(Chunk)
+                    .filter(Chunk.document_id == document_id, Chunk.is_translated == 1)
+                    .count()
+                )
+
                 document.file_metadata = document.file_metadata or {}
                 document.file_metadata["translation_error"] = str(exc)
+                document.file_metadata["partial_translation"] = (
+                    translated_before_failure > 0
+                )
+
+                # If some chunks were translated, mark as "partial" instead of "error"
+                # This allows users to resume translation instead of deleting the document
+                if translated_before_failure > 0:
+                    document.status = "partial"
+                    logger.info(
+                        f"Document {document_id} marked as partial - "
+                        f"{translated_before_failure} chunks translated before failure"
+                    )
+                else:
+                    document.status = "error"
+
                 db.commit()
         except Exception as db_error:
             logger.error(f"Failed to update error status: {db_error}")

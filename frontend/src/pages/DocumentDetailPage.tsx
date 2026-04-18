@@ -32,7 +32,8 @@ import {
   AlertTriangle,
   AlertCircle,
   Activity,
-  Trash2
+  Trash2,
+  RotateCcw
 } from 'lucide-react'
 import clsx from 'clsx'
 import PipelineModal from '@/components/PipelineModal'
@@ -55,6 +56,21 @@ export default function DocumentDetailPage() {
     },
     onError: () => toast.error('Greška pri brisanju dokumenta'),
   })
+
+  const translateMutation = useMutation({
+    mutationFn: ({ docId, provider }: { docId: string; provider?: string }) => 
+      documentsApi.translate(docId, provider),
+    onSuccess: () => {
+      toast.success('Prevođenje nastavljeno')
+      queryClient.invalidateQueries({ queryKey: ['document', docId] })
+      queryClient.invalidateQueries({ queryKey: ['document-progress', docId] })
+    },
+    onError: () => toast.error('Greška pri nastavku prevođenja'),
+  })
+
+  const handleTranslate = () => {
+    translateMutation.mutate({ docId })
+  }
 
   const handleExportPdf = async () => {
     if (!docId) return
@@ -414,7 +430,23 @@ export default function DocumentDetailPage() {
             )}
           </div>
         )}
-        {doc.status === 'error' && (
+        {doc.status === 'partial' && (
+          <div className="w-full bg-orange-50 border border-orange-200 rounded-lg p-4 mb-2">
+            <div className="flex items-center gap-2 text-orange-700 font-medium mb-2">
+              <AlertTriangle className="w-5 h-5" />
+              Delimično prevedeno
+            </div>
+            <p className="text-orange-600 text-sm mb-3">
+              Prevođenje je prekinuto pre kraja. Možete nastaviti od mesta gde je stalo.
+            </p>
+            {doc.translated_chunks > 0 && (
+              <p className="text-gray-600 text-xs">
+                Prevedeno: {doc.translated_chunks} od {doc.total_chunks} odlomaka
+              </p>
+            )}
+          </div>
+        )}
+        {(doc.status === 'error' || doc.status === 'partial') && (
           <button
             onClick={() => {
               if (confirm('Da li želite da obrisete ovaj dokument?')) {
@@ -426,6 +458,16 @@ export default function DocumentDetailPage() {
           >
             <Trash2 className="w-4 h-4" />
             {deleteMutation.isPending ? 'Brisanje...' : 'Obriši dokument'}
+          </button>
+        )}
+        {doc.status === 'partial' && (
+          <button
+            onClick={handleTranslate}
+            disabled={translateMutation.isPending}
+            className="btn-primary bg-orange-600 hover:bg-orange-700 disabled:opacity-50"
+          >
+            <RotateCcw className="w-4 h-4" />
+            {translateMutation.isPending ? 'Nastavak...' : 'Nastavi prevođenje'}
           </button>
         )}
         {doc.status !== 'error' && (

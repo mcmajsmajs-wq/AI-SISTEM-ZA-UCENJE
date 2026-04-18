@@ -14,12 +14,14 @@ from typing import List, Optional, Dict, Any
 
 class DocumentBase(BaseModel):
     """Base document model."""
+
     title: str = Field(..., min_length=1, max_length=500)
     description: Optional[str] = None
 
 
 class DocumentCreate(DocumentBase):
     """Document creation model."""
+
     file_id: str
     source_language: Optional[str] = "en"
     target_language: Optional[str] = "sr"
@@ -27,13 +29,16 @@ class DocumentCreate(DocumentBase):
 
 class DocumentResponse(DocumentBase):
     """Document response model."""
+
     id: str
     file_id: str
     user_id: Optional[str] = None
     total_pages: Optional[int] = None
     total_chunks: int = 0
     translated_chunks: int = 0
-    status: str = Field(..., description="pending|processing|translating|completed|error")
+    status: str = Field(
+        ..., description="pending|processing|translating|completed|error|partial"
+    )
     source_language: str = "en"
     target_language: str = "sr"
     metadata: Dict[str, Any] = {}
@@ -46,6 +51,7 @@ class DocumentResponse(DocumentBase):
 
 class ChunkResponse(BaseModel):
     """Chunk response model."""
+
     id: str
     document_id: str
     sequence_number: int
@@ -65,6 +71,7 @@ class ChunkResponse(BaseModel):
 
 class DocumentListResponse(BaseModel):
     """Paginated list of documents."""
+
     items: List[DocumentResponse]
     total: int
     skip: int
@@ -73,6 +80,7 @@ class DocumentListResponse(BaseModel):
 
 class ChunkUpdate(BaseModel):
     """Chunk update model for manual corrections."""
+
     content: Optional[str] = None
     translated_content: Optional[str] = None
     is_reviewed: Optional[bool] = None

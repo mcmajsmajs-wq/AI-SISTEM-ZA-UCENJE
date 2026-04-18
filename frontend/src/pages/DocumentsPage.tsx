@@ -140,6 +140,7 @@ export default function DocumentsPage() {
       completed:   { badge: 'badge-success', strip: 'from-emerald-400 to-green-500', label: 'Obrađeno' },
       translating: { badge: 'badge-primary', strip: 'from-violet-400 to-purple-500', label: 'Prevodi se' },
       error:       { badge: 'badge-error',   strip: 'from-red-400 to-rose-500',      label: 'Greška' },
+      partial:     { badge: 'badge-warning', strip: 'from-orange-400 to-amber-500', label: 'Delimično' },
     }
     return configs[status] || configs['pending']
   }
@@ -321,6 +322,7 @@ export default function DocumentsPage() {
             <option value="">Svi statusi</option>
             <option value="pending">Na čekanju</option>
             <option value="completed">Obrađeno</option>
+            <option value="partial">Delimično prevedeno</option>
             <option value="error">Greška</option>
           </select>
         </div>
