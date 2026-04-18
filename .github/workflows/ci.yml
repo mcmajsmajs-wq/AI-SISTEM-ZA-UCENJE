@@ -35,11 +35,12 @@ jobs:
         run: |
           cd backend
           flake8 app/ tests/ --max-line-length=120 --ignore=E501,W503,E226,W293,E203,F401,F811,F541,F841,W291,E302,E305,E402,W292,E712 --per-file-ignores='__init__.py:F401'
+        # Note: app/tests contains unit/integration tests
       
       - name: Run pytest
         run: |
           cd backend
-          python -m pytest tests/ -v --tb=short --cov=app --cov-report=xml --cov-fail-under=60
+          python -m pytest app/tests/ -v --tb=short --cov=app --cov-report=xml --cov-fail-under=60
         continue-on-error: true
       
       - name: Upload coverage
