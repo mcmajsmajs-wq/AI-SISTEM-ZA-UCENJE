@@ -24,6 +24,7 @@ class Document(Base):
     Reprezentuje procesuirani dokument.
     ================================================================================
     """
+
     __tablename__ = "documents"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -38,8 +39,16 @@ class Document(Base):
 
     # Status i jezik
     status = Column(
-        Enum("pending", "processing", "translating", "completed", "error", name="document_status"),
-        default="pending"
+        Enum(
+            "pending",
+            "processing",
+            "translating",
+            "completed",
+            "error",
+            "partial",
+            name="document_status",
+        ),
+        default="pending",
     )
     source_language = Column(String(10), default="en")
     target_language = Column(String(10), default="sr")
@@ -52,8 +61,12 @@ class Document(Base):
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
     # Relacije
-    chunks = relationship("Chunk", back_populates="document", cascade="all, delete-orphan")
-    quiz_images = relationship("QuizImage", back_populates="document", cascade="all, delete-orphan")
+    chunks = relationship(
+        "Chunk", back_populates="document", cascade="all, delete-orphan"
+    )
+    quiz_images = relationship(
+        "QuizImage", back_populates="document", cascade="all, delete-orphan"
+    )
 
     def __repr__(self):
         return f"<Document(id={self.id}, title={self.title}, status={self.status})>"
@@ -67,6 +80,7 @@ class Chunk(Base):
     Reprezentuje segment dokumenta (chunk).
     ================================================================================
     """
+
     __tablename__ = "chunks"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -85,7 +99,9 @@ class Chunk(Base):
     # Status
     is_translated = Column(Integer, default=0)  # 0=False, 1=True
     is_reviewed = Column(Integer, default=0)
-    used_for_quiz = Column(Integer, default=0)  # 0=False, 1=True - da li je chunk korišćen za kviz
+    used_for_quiz = Column(
+        Integer, default=0
+    )  # 0=False, 1=True - da li je chunk korišćen za kviz
 
     # Page number for image mapping
     page_number = Column(Integer, nullable=True)  # Broj stranice u PDF-u
