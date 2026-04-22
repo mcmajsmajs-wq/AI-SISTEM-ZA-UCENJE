@@ -428,6 +428,69 @@ Kad trebaš da kreiraš više sličnih content-a (dokumentacija, quiz pitanja, e
 
 ---
 
+## 🔧 FAZA 13 - File Skills System (2026-04-19) - Anthropic Pattern
+
+### Cilj
+Omogućiti korisnicima da koriste lepo formatirane izlaze za prevod i export fajlova po Anthropic skill pattern-u.
+
+### Reference
+- [Anthropic Skills](https://github.com/anthropics/skills)
+- Skills = folderi sa SKILL.md fajlovima koji sadrže instrukcije za AI
+
+### Implementacija
+
+**Database - FileSkill model** (`app/services/skills/models.py`):
+- Novi model za file skill-ove (translate, pdf, docx, xlsx)
+- `prompt_template` - skill instrukcije za AI
+
+**Migracija** (`alembic/versions/009_file_skills.py`):
+- Kreira tabelu `file_skills`
+- Seed-uje 3 skills: translate, pdf, docx
+
+**Skill prompts:**
+
+| Skill | Opis | Prompt |
+|-------|------|--------|
+| translate | Lep prevod sa poglavljima | "Translate with chapters, headings, markdown..." |
+| pdf | Lep PDF sa header/footer | "Add header, page numbers, proper margins..." |
+| docx | Lep Word sa stilovima i TOC | "Use heading styles, add TOC, page numbers..." |
+
+**Servis** (`app/services/skills/file_skills.py`):
+- `FileSkillService.get_skill_prompt(category)` - dohvata prompt
+- `FileSkillService.get_translate_prompt()` - translate prompt
+- `FileSkillService.get_pdf_prompt()` - PDF prompt
+- `FileSkillService.get_docx_prompt()` - DOCX prompt
+
+### Kako radi
+
+1. Korisnik klikne "Prevedi" → koristi se translate skill prompt
+2. Korisnik klikne "Export u PDF" → koristi se pdf skill prompt + svi prevedeni chunks
+3. Korisnik klikne "Export u Word" → koristi se docx skill prompt + svi prevedeni chunks
+
+### Korišćenje
+
+```python
+from app.services.skills.file_skills import get_file_skill
+
+# Get translate skill prompt
+translate_prompt = get_file_skill().get_translate_prompt()
+
+# Get PDF export skill prompt
+pdf_prompt = get_file_skill().get_pdf_prompt()
+
+# Get DOCX export skill prompt
+docx_prompt = get_file_skill().get_docx_prompt()
+```
+
+### Napomene
+
+- Svi korisnici automatski imaju pristup svim file skills
+- Nema potrebe za enabled_skills - to je bilo pogrešno shvatanje
+- Skills se koriste kao dodatni prompt context pri prevodu/exportu
+- Podaci ostaju u chunks-ovima (translated_content polje)
+
+---
+
 ## Dokumentacija
 
 Detaljno uputstvo: [OPENCODE_SKILLS_GUIDE.md](./OPENCODE_SKILLS_GUIDE.md)

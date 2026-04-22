@@ -305,6 +305,8 @@ export const aiSettingsApi = {
   }) => api.put('/users/me/ai-settings', data),
 }
 
+
+
 export const knowledgeApi = {
   query: (query: string, top_k = 5, provider?: string) =>
     api.post('/knowledge/query', { query, top_k, provider }),

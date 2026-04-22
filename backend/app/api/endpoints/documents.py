@@ -25,6 +25,8 @@ from app.schemas.document import (
     DocumentResponse,
     DocumentListResponse,
     ChunkResponse,
+    DocumentFromTextCreate,
+    DocumentFromTextResponse,
 )
 from app.services.auth import get_current_user
 from app.workers.tasks import process_pdf_task, auto_pipeline_task
@@ -188,6 +190,118 @@ async def create_document(
     logger.info(f"Started PDF processing task: {task.id}")
 
     return document_to_response(new_document, db)
+
+
+@router.post(
+    "/from-text",
+    response_model=DocumentFromTextResponse,
+    status_code=status.HTTP_201_CREATED,
+)
+async def create_document_from_text(
+    data: DocumentFromTextCreate,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ================================================================================
+    CREATE DOCUMENT FROM TEXT
+    ================================================================================
+    Kreira dokument direktno iz teksta (bez PDF fajla).
+    Text se chunk-uje i čuva u bazi podataka.
+
+    Args:
+        data: Podaci sa tekstom za chunk-ovanje
+        current_user: Trenutni korisnik
+        db: Database session
+    ================================================================================
+    """
+    from app.services.rag import chunk_text
+    from app.workers.tasks import translate_document_task
+    import hashlib
+
+    logger.info(
+        f"Creating document from text for user {current_user.email}: {data.title}"
+    )
+
+    # Generate checksum for text content
+    content_checksum = hashlib.sha256(data.content.encode("utf-8")).hexdigest()
+
+    # Kreiramo privremeni file zapis (bez fajla na disku)
+    temp_file = File(
+        id=uuid.uuid4(),
+        user_id=current_user.id,
+        original_filename=f"{data.title}.txt",
+        storage_path=f"text-uploads/{current_user.id}/{uuid.uuid4()}.txt",
+        file_size=len(data.content.encode("utf-8")),
+        mime_type="text/plain",
+        checksum=content_checksum,
+        status="uploaded",
+        file_metadata={"source": "from_text", "char_count": len(data.content)},
+    )
+    db.add(temp_file)
+    db.commit()  # Commit file first so it exists for foreign key
+    db.refresh(temp_file)
+
+    # Kreiramo dokument
+    new_document = Document(
+        user_id=current_user.id,
+        file_id=temp_file.id,
+        title=data.title,
+        description=data.description,
+        status="pending",
+        source_language=data.source_language or "en",
+        target_language=data.target_language or "sr",
+    )
+    db.add(new_document)
+    db.commit()
+    db.refresh(new_document)
+
+    # Chunk-ujemo tekst koristeći postojeću funkciju
+    chunks = chunk_text(data.content, chunk_size=500, overlap=50)
+    logger.info(f"Created {len(chunks)} chunks from text")
+
+    # Čuvamo chunk-ove u bazu
+    for idx, chunk_content in enumerate(chunks):
+        chunk = Chunk(
+            id=uuid.uuid4(),
+            document_id=new_document.id,
+            sequence_number=idx,
+            content=chunk_content,
+            token_count=len(chunk_content.split()),
+            is_translated=0,
+            is_reviewed=0,
+        )
+        db.add(chunk)
+
+    new_document.total_chunks = len(chunks)
+    new_document.status = "completed"  # Čim se chunk-uju, status je completed
+    db.commit()
+
+    task_id = None
+    if data.translate_immediately:
+        # Pokrećemo translaciju
+        logger.info(f"Starting translation for document {new_document.id}")
+        task = translate_document_task.delay(
+            str(new_document.id),
+            provider=data.provider,
+        )
+        task_id = task.id
+        new_document.status = "translating"
+        db.commit()
+
+    return DocumentFromTextResponse(
+        document_id=str(new_document.id),
+        title=new_document.title,
+        total_chunks=len(chunks),
+        status=new_document.status,
+        task_id=task_id,
+        message=f"Document created with {len(chunks)} chunks"
+        + (
+            f". Translation started (task: {task_id})"
+            if task_id
+            else ". Translation not started."
+        ),
+    )
 
 
 @router.get("/{document_id}", response_model=DocumentResponse)

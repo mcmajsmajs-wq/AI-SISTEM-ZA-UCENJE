@@ -17,7 +17,17 @@ Verzija: 1.0.0 (FAZA 6 - Skill Sistem)
 from enum import Enum as PyEnum
 from uuid import UUID, uuid4
 
-from sqlalchemy import Column, Integer, String, Text, Boolean, JSON, DateTime, ForeignKey, func
+from sqlalchemy import (
+    Column,
+    Integer,
+    String,
+    Text,
+    Boolean,
+    JSON,
+    DateTime,
+    ForeignKey,
+    func,
+)
 from sqlalchemy.dialects.postgresql import UUID as PGUUID
 from sqlalchemy.orm import relationship
 
@@ -43,7 +53,9 @@ class Skill(Base):
     __tablename__ = "skills"
 
     id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
-    user_id = Column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True)
+    user_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=True, index=True
+    )
 
     name = Column(String(100), nullable=False)
     description = Column(Text)
@@ -51,12 +63,15 @@ class Skill(Base):
     category = Column(String(50), nullable=False)
     prompt_template = Column(Text, nullable=False)
 
-    rules = Column(JSON, default=lambda: {
-        "difficulty": "medium",
-        "question_types": ["multiple_choice"],
-        "num_questions": 10,
-        "focus_areas": []
-    })
+    rules = Column(
+        JSON,
+        default=lambda: {
+            "difficulty": "medium",
+            "question_types": ["multiple_choice"],
+            "num_questions": 10,
+            "focus_areas": [],
+        },
+    )
 
     allowed_tools = Column(JSON, default=list)
 
@@ -135,8 +150,12 @@ class UserSkill(Base):
     __tablename__ = "user_skills"
 
     id = Column(Integer, primary_key=True, autoincrement=True)
-    user_id = Column(PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True)
-    skill_id = Column(PGUUID(as_uuid=True), ForeignKey("skills.id"), nullable=False, index=True)
+    user_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("users.id"), nullable=False, index=True
+    )
+    skill_id = Column(
+        PGUUID(as_uuid=True), ForeignKey("skills.id"), nullable=False, index=True
+    )
 
     usage_count = Column(Integer, default=0)
     last_used_at = Column(DateTime(timezone=True))
@@ -146,10 +165,47 @@ class UserSkill(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 
+class FileSkillCategory(str, PyEnum):
+    """Kategorije file skill-ova."""
+
+    TRANSLATE = "translate"
+    PDF = "pdf"
+    DOCX = "docx"
+    XLSX = "xlsx"
+
+
+class FileSkill(Base):
+    """
+    FileSkill - šabloni za obradu fajlova (translate, pdf, docx, xlsx).
+
+    Ovo su Anthropic-style skills koji se primenjuju kad korisnik
+    klikne dugme "Prevedi" ili "Exportuj u PDF/Word".
+    """
+
+    __tablename__ = "file_skills"
+
+    id = Column(PGUUID(as_uuid=True), primary_key=True, default=uuid4)
+
+    name = Column(String(50), nullable=False, unique=True)
+    category = Column(String(20), nullable=False)
+
+    description = Column(Text)
+    prompt_template = Column(Text, nullable=False)
+
+    is_active = Column(Boolean, default=True)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    def __repr__(self):
+        return f"<FileSkill {self.name} ({self.category})>"
+
+
 __all__ = [
     "Skill",
     "SkillTemplate",
     "DocumentType",
     "UserSkill",
     "SkillCategory",
+    "FileSkill",
+    "FileSkillCategory",
 ]

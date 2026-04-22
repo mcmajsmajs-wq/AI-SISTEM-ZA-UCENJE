@@ -19,7 +19,7 @@ from app.db.session import get_db
 from app.db.models.user import User
 from app.db.models.quiz import Quiz, QuizAttempt
 from app.db.models.study_plan import StudyPlan, StudyPlanItem
-from app.db.models.document import Document
+from app.db.models.document import Document, Chunk
 from app.services.auth import get_current_user
 
 router = APIRouter()
@@ -228,6 +228,12 @@ async def get_quiz_performance(
                 if last_attempt.completed_at
                 else None,
                 "last_passed": last_attempt.passed,
+                # Question stats
+                "target_questions": quiz.target_questions or 0,
+                "created_questions": quiz.total_questions or 0,
+                "remaining_questions": max(
+                    0, (quiz.target_questions or 0) - (quiz.total_questions or 0)
+                ),
             }
         )
 
@@ -264,6 +270,26 @@ async def get_document_stats(
                 .count()
             )
 
+        # Chunk-based calculation
+        total_chunks = doc.total_chunks or 0
+        chunks_used = (
+            db.query(func.coalesce(func.sum(Chunk.used_for_quiz), 0))
+            .filter(Chunk.document_id == doc.id)
+            .scalar()
+            or 0
+        )
+        chunks_available = max(0, total_chunks - chunks_used)
+
+        # MCP server može da izvuče 2+ pitanja iz jednog chunk-a
+        questions_per_chunk = 2  # prosečno 2 pitanja po chunk-u
+        max_total_questions = chunks_available * questions_per_chunk
+
+        # Već kreirana pitanja (svi kvizovi)
+        total_created = sum(q.total_questions or 0 for q in quizzes)
+
+        # Preostalo za kreiranje
+        remaining_questions = max(0, max_total_questions - total_created)
+
         result.append(
             {
                 "document_id": str(doc.id),
@@ -272,6 +298,14 @@ async def get_document_stats(
                 "quiz_count": len(quizzes),
                 "attempt_count": attempt_count,
                 "created_at": doc.created_at.isoformat(),
+                # Chunk-based question stats
+                "total_chunks": total_chunks,
+                "chunks_used_for_quiz": chunks_used,
+                "chunks_available": chunks_available,
+                "questions_per_chunk": questions_per_chunk,
+                "max_possible_questions": max_total_questions,
+                "created_questions": total_created,
+                "remaining_questions": remaining_questions,
             }
         )
 

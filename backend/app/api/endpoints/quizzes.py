@@ -711,8 +711,10 @@ async def quiz_question_chat(
     """
     AI chat za pojašnjenje posle potvrde odgovora.
     Korisnik može da pita AI za dodatna objašnjenja vezana za pitanje.
+    Podržava i opšte chat poruke sa question_id="help" ili slično.
     """
-    # Verify quiz belongs to user
+    import uuid as uuid_module
+
     quiz = (
         db.query(Quiz)
         .filter(Quiz.id == quiz_id, Quiz.user_id == current_user.id)
@@ -721,66 +723,29 @@ async def quiz_question_chat(
     if not quiz:
         raise HTTPException(status_code=404, detail="Kviz nije pronađen")
 
-    # Get question with explanation and correct answer
-    question = (
-        db.query(Question)
-        .filter(
-            Question.id == body.question_id,
-            Question.quiz_id == quiz_id,
-        )
-        .first()
-    )
-    if not question:
-        raise HTTPException(status_code=404, detail="Pitanje nije pronađeno")
+    is_general_help = False
+    try:
+        uuid_module.UUID(body.question_id)
+    except (ValueError, AttributeError):
+        is_general_help = True
 
-    # Build system prompt with full question context
-    is_correct = (
-        body.user_answer.strip().lower() == question.correct_answer.strip().lower()
-    )
-    options_text = ""
-    if question.options:
-        try:
-            import json as _json
+    if is_general_help:
+        system_prompt = f"""Ti si pedagoški AI tutor koji pomaže studentu da razume gradivo iz kviza.
 
-            opts = (
-                _json.loads(question.options)
-                if isinstance(question.options, str)
-                else question.options
-            )
-            if isinstance(opts, list):
-                options_text = "\n".join(
-                    f"  {chr(65 + i)}) {o}" for i, o in enumerate(opts)
-                )
-            elif isinstance(opts, dict):
-                options_text = "\n".join(f"  {k}) {v}" for k, v in opts.items())
-        except Exception:
-            options_text = str(question.options)
+Kviz: {quiz.title}
+Broj pitanja: {quiz.total_questions}
 
-    system_prompt = f"""Ti si pedagoški AI tutor koji pomaže studentu da razume gradivo.
-Korisnik je upravo odgovorio na pitanje iz kviza i želi dodatna pojašnjenja.
+Korisnik traži pomoć ili objašnjenje. Odgovori jasno, pedagoški i motivišuće.
+Fokusiraj se na temu kviza i pomozi korisniku da razume gradivo.
+Budi koncizan ali potpun. Odgovaraj na srpskom jeziku."""
 
-=== KONTEKST PITANJA ===
-Pitanje: {question.question_text}
-Tip: {question.question_type}
-{f"Opcije:{chr(10)}{options_text}" if options_text else ""}
-Tačan odgovor: {question.correct_answer}
-Korisnikov odgovor: {body.user_answer} ({"✓ TAČNO" if is_correct else "✗ NETAČNO"})
-{f"Objašnjenje: {question.explanation}" if question.explanation else ""}
-========================
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in body.history[-8:]:
+            messages.append({"role": msg.role, "content": msg.content})
+        messages.append({"role": "user", "content": body.message})
 
-Odgovaraj jasno, pedagoški i motivišuće. Fokusiraj se na razjašnjavanje nedoumica vezanih za ovo pitanje i temu.
-Budi koncizan ali potpun. Odgovaraj na jeziku na kom ti je korisnik postavio pitanje (srpski ili engleski)."""
-
-    # Build messages for API call
-    messages = [{"role": "system", "content": system_prompt}]
-    for msg in body.history[-8:]:  # max 8 poruka historije
-        messages.append({"role": msg.role, "content": msg.content})
-    messages.append({"role": "user", "content": body.message})
-
-    # Call AI using user's provider preference (or override from request)
     reply = await _call_chat_ai(messages, current_user, provider_override=body.provider)
 
-    # Auto-save conversation to knowledge base for future RAG retrieval
     try:
         _save_chat_to_knowledge(db, current_user, question, body, reply)
     except Exception as kb_err:

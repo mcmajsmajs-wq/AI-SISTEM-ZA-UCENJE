@@ -448,6 +448,8 @@ export default function SettingsPage() {
       {activeTab === 'ai' && (
         <AIProviderTab />
       )}
+
+      
     </div>
   )
 }
@@ -842,3 +844,5 @@ function AIProviderTab() {
     </div>
   )
 }
+
+

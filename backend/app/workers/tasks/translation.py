@@ -112,16 +112,7 @@ def translate_with_fallback(
         settings, "OPENAI_API_KEY", None
     )
 
-    logger.info(
-        f"DEBUG mistral: env={os.environ.get('MISTRAL_API_KEY')}, sys={getattr(settings, 'MISTRAL_API_KEY', 'NOT SET')}"
-    )
-    logger.info(
-        f"DEBUG groq: env={os.environ.get('GROQ_API_KEY')}, sys={getattr(settings, 'GROQ_API_KEY', 'NOT SET')}"
-    )
-    logger.info(
-        f"DEBUG mistral_key present={bool(mistral_key)}, groq_key present={bool(groq_key)}"
-    )
-
+    # Build system keys dictionary
     system_keys = {
         "mistral": mistral_key,
         "groq": groq_key,
@@ -129,15 +120,25 @@ def translate_with_fallback(
         "deepseek": deepseek_key,
         "openai": openai_key,
     }
-    priority_order = ["mistral", "groq", "gemini", "deepseek", "openai"]
-    for p in priority_order:
-        if system_keys.get(p) and p not in providers_to_try:
-            providers_to_try.append(p)
 
-    system_order = ["ollama"]
-    for p in system_order:
-        if p not in providers_to_try:
-            providers_to_try.append(p)
+    # CRITICAL: Only add system keys if user has NO user-level keys
+    # User keys ALWAYS take priority over system keys
+    has_user_keys = bool(user_api_keys and any(v for v in user_api_keys.values() if v))
+
+    if not has_user_keys:
+        # Add system keys as fallback only when user has no keys
+        priority_order = ["groq", "mistral", "deepseek", "openai", "gemini"]
+        for p in priority_order:
+            if system_keys.get(p) and p not in providers_to_try:
+                providers_to_try.append(p)
+
+    # ONLY add Ollama as absolute LAST resort - only if no cloud providers available
+    # This ensures cloud providers are tried first
+    if not any(
+        p in providers_to_try
+        for p in ["groq", "mistral", "deepseek", "openai", "gemini"]
+    ):
+        providers_to_try.append("ollama")
 
     last_error = None
     logger.info(f"Translation providers to try: {providers_to_try}")
@@ -227,35 +228,38 @@ def translate_document_task(self, document_id: str, provider: Optional[str] = No
 
         _use_provider = provider
 
-        # Auto-detect provider based on available API keys (user first, then system)
+        # Auto-detect provider - USER keys take priority over system keys
         if not _use_provider or _use_provider == "auto":
-            # Check user keys first, then system keys
-            if getattr(user_obj, "ai_api_key_mistral", None) or getattr(
-                settings, "MISTRAL_API_KEY", None
-            ):
+            # FIRST check only user keys - never use system keys if user has their own
+            if getattr(user_obj, "ai_api_key_mistral", None):
                 _use_provider = "mistral"
-            elif getattr(user_obj, "ai_api_key_groq", None) or getattr(
-                settings, "GROQ_API_KEY", None
-            ):
+            elif getattr(user_obj, "ai_api_key_groq", None):
                 _use_provider = "groq"
-            elif getattr(user_obj, "ai_api_key_gemini", None) or getattr(
-                settings, "GOOGLE_API_KEY", None
-            ):
+            elif getattr(user_obj, "ai_api_key_gemini", None):
                 _use_provider = "gemini"
-            elif getattr(user_obj, "ai_api_key_deepseek", None) or getattr(
-                settings, "DEEPSEEK_API_KEY", None
-            ):
+            elif getattr(user_obj, "ai_api_key_deepseek", None):
                 _use_provider = "deepseek"
-            elif getattr(user_obj, "ai_api_key_openai", None) or getattr(
-                settings, "OPENAI_API_KEY", None
-            ):
+            elif getattr(user_obj, "ai_api_key_openai", None):
+                _use_provider = "openai"
+            # Only fallback to system keys if user has NO keys at all
+            elif getattr(settings, "MISTRAL_API_KEY", None):
+                _use_provider = "mistral"
+            elif getattr(settings, "GROQ_API_KEY", None):
+                _use_provider = "groq"
+            elif getattr(settings, "GOOGLE_API_KEY", None):
+                _use_provider = "gemini"
+            elif getattr(settings, "DEEPSEEK_API_KEY", None):
+                _use_provider = "deepseek"
+            elif getattr(settings, "OPENAI_API_KEY", None):
                 _use_provider = "openai"
 
         logger.info(
             f"Translating {total_chunks} chunks for document {document_id} using provider: {_use_provider or 'auto'}"
         )
 
-        BATCH_SIZE = 8
+        # Smaller batch size to avoid Groq 413 errors (was 8, now 4)
+        BATCH_SIZE = 4
+        MAX_RETRIES_PER_CHUNK = 3
         untranslated = [c for c in chunks if not c.is_translated]
         translated_count += total_chunks - len(untranslated)
 

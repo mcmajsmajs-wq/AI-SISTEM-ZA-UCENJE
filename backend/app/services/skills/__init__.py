@@ -23,6 +23,8 @@ from app.services.skills.models import (
     DocumentType,
     UserSkill,
     SkillCategory,
+    FileSkill,
+    FileSkillCategory,
 )
 
 from app.services.skills.templates import (
@@ -52,6 +54,13 @@ from app.services.skills.service import (
     get_skill_service,
 )
 
+from app.services.skills.file_skills import (
+    FileSkillService,
+    file_skill_service,
+    get_file_skill,
+    get_file_skill_service,
+)
+
 from app.services.skills.templates import (
     get_template,
     get_template_by_category,
@@ -66,6 +75,8 @@ __all__ = [
     "DocumentType",
     "UserSkill",
     "SkillCategory",
+    "FileSkill",
+    "FileSkillCategory",
     "SYSTEM_SKILL_TEMPLATES",
     "DOCUMENT_TYPE_KEYWORDS",
     "SkillDetector",
@@ -87,6 +98,10 @@ __all__ = [
     "get_template_names",
     "get_categories",
     "get_skill_templates",  # Alias for backward compatibility
+    "FileSkillService",
+    "file_skill_service",
+    "get_file_skill",
+    "get_file_skill_service",
 ]
 
 # Alias for backward compatibility

@@ -90,7 +90,7 @@ export default function DocumentDetailPage() {
     }
   }
 
-  const activeStatuses = ['pending', 'processing', 'translating']
+  const activeStatuses = ['pending', 'processing', 'translating', 'partial']
 
   // Track seconds since last worker activity
   const [secondsSinceActivity, setSecondsSinceActivity] = useState<number | null>(null)
@@ -489,11 +489,11 @@ export default function DocumentDetailPage() {
             </button>
             <button
               onClick={handleExportPdf}
-              disabled={doc.status !== 'completed' || downloadingPdf}
-              className={clsx('btn-primary bg-emerald-600 hover:bg-emerald-700', doc.status !== 'completed' && 'opacity-50 pointer-events-none')}
+              disabled={(doc.status !== 'completed' && doc.status !== 'partial') || downloadingPdf}
+              className={clsx('btn-primary bg-emerald-600 hover:bg-emerald-700', (doc.status !== 'completed' && doc.status !== 'partial') && 'opacity-50 pointer-events-none')}
             >
               {downloadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              Preuzmi PDF
+              {doc.status === 'partial' ? 'Preuzmi delimični PDF' : 'Preuzmi PDF'}
             </button>
           </>
         )}

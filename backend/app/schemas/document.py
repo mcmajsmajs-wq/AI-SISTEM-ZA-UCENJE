@@ -27,6 +27,40 @@ class DocumentCreate(DocumentBase):
     target_language: Optional[str] = "sr"
 
 
+class DocumentFromTextCreate(BaseModel):
+    """Create document directly from text (without file upload).
+
+    The text will be chunked and stored in the database.
+    """
+
+    title: str = Field(..., min_length=1, max_length=500)
+    content: str = Field(
+        ..., min_length=1, description="Text content to chunk and translate"
+    )
+    source_language: Optional[str] = "en"
+    target_language: Optional[str] = "sr"
+    description: Optional[str] = None
+    translate_immediately: bool = Field(
+        default=False,
+        description="Whether to start translation immediately after chunking",
+    )
+    provider: Optional[str] = Field(
+        default=None,
+        description="Translation provider to use (auto-detected if not specified)",
+    )
+
+
+class DocumentFromTextResponse(BaseModel):
+    """Response for document created from text."""
+
+    document_id: str
+    title: str
+    total_chunks: int
+    status: str
+    task_id: Optional[str] = None
+    message: str
+
+
 class DocumentResponse(DocumentBase):
     """Document response model."""
 
