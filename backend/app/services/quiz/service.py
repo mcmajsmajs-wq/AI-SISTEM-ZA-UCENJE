@@ -29,106 +29,13 @@ from app.services.quiz.helpers import (
     mark_chunks_as_used,
 )
 from app.services.quiz.clients import _build_clients, _PROVIDER_ORDER
+from app.utils.cyrillic import (
+    CYRILLIC_TO_LATIN,
+    cyrillic_to_latin,
+    transliterate_text,
+)
 
 logger = logging.getLogger(__name__)
-
-
-CYRILLIC_TO_LATIN = {
-    "а": "a",
-    "б": "b",
-    "в": "v",
-    "г": "g",
-    "д": "d",
-    "ѓ": "đ",
-    "е": "e",
-    "ж": "ž",
-    "з": "z",
-    "и": "i",
-    "ј": "j",
-    "к": "k",
-    "л": "l",
-    "љ": "lj",
-    "м": "m",
-    "н": "n",
-    "њ": "nj",
-    "о": "o",
-    "п": "p",
-    "р": "r",
-    "с": "s",
-    "т": "t",
-    "ћ": "ć",
-    "у": "u",
-    "ф": "f",
-    "х": "h",
-    "ц": "c",
-    "ч": "č",
-    "Ѓ": "Đ",
-    "Ѐ": "È",
-    "Ё": "Ë",
-    "Љ": "LJ",
-    "Њ": "NJ",
-    "Ћ": "Ć",
-    "Џ": "DŽ",
-    "ш": "š",
-    "щ": "št",
-    "ъ": "",
-    "ы": "y",
-    "ь": "",
-    "э": "e",
-    "ю": "ju",
-    "я": "ja",
-    "А": "A",
-    "Б": "B",
-    "В": "V",
-    "Г": "G",
-    "Д": "D",
-    "Ѓ": "Đ",
-    "Е": "E",
-    "Ё": "Ë",
-    "Ж": "Ž",
-    "З": "Z",
-    "И": "I",
-    "Й": "J",
-    "К": "K",
-    "Л": "L",
-    "Љ": "LJ",
-    "М": "M",
-    "Н": "N",
-    "Њ": "NJ",
-    "О": "O",
-    "П": "P",
-    "Р": "R",
-    "С": "S",
-    "Т": "T",
-    "Ћ": "Ć",
-    "У": "U",
-    "Ф": "F",
-    "Х": "H",
-    "Ц": "C",
-    "Ч": "Č",
-    "Џ": "DŽ",
-    "Ш": "Š",
-    "Щ": "ŠT",
-    "Ъ": "",
-    "Ы": "Y",
-    "Ь": "",
-    "Э": "E",
-    "Ю": "JU",
-    "Я": "JA",
-}
-
-
-def cyrillic_to_latin(text: str) -> str:
-    """Convert Cyrillic text to Latin script."""
-    if not text:
-        return text
-    result = []
-    for char in text:
-        if "\u0400" <= char <= "\u04ff" or char in "ёЁ":
-            result.append(CYRILLIC_TO_LATIN.get(char, char))
-        else:
-            result.append(char)
-    return "".join(result)
 
 
 def _auto_num_questions(total_chunks: int, requested: int) -> int:
@@ -149,6 +56,7 @@ def _auto_num_questions(total_chunks: int, requested: int) -> int:
 def _transliterate_text(text: str) -> str:
     """
     Konvertuje tekst latinica <-> ćirilica.
+    Koristi transliterate_text iz utils.
 
     Args:
         text: Ulazni tekst
@@ -156,94 +64,7 @@ def _transliterate_text(text: str) -> str:
     Returns:
         str: Konvertovani tekst
     """
-    if not text:
-        return text
-
-    # Ćirilica -> Latinica
-    cyrillic_to_latin = {
-        "а": "a",
-        "б": "b",
-        "в": "v",
-        "г": "g",
-        "д": "đ",
-        "ђ": "đ",
-        "е": "e",
-        "ж": "ž",
-        "з": "z",
-        "и": "i",
-        "ј": "j",
-        "к": "k",
-        "л": "l",
-        "љ": "lj",
-        "м": "m",
-        "н": "n",
-        "њ": "nj",
-        "о": "o",
-        "п": "p",
-        "р": "r",
-        "с": "s",
-        "т": "t",
-        "ћ": "ć",
-        "у": "u",
-        "ф": "f",
-        "х": "h",
-        "ц": "c",
-        "ч": "č",
-        "Ѓ": "Đ",
-        # lowercase dž = дж (commented to avoid duplicate key),
-        "ш": "š",
-        "А": "A",
-        "Б": "B",
-        "В": "V",
-        "Г": "G",
-        "Д": "D",
-        "Ђ": "Đ",
-        "Е": "E",
-        "Ж": "Ž",
-        "З": "Z",
-        "И": "I",
-        "Ј": "J",
-        "К": "K",
-        "Л": "L",
-        "Љ": "LJ",
-        "М": "M",
-        "Н": "N",
-        "Њ": "NJ",
-        "О": "O",
-        "П": "P",
-        "Р": "R",
-        "С": "S",
-        "Т": "T",
-        "Ћ": "Ć",
-        "У": "U",
-        "Ф": "F",
-        "Х": "H",
-        "Ц": "C",
-        "Ч": "Č",
-        "Џ": "DŽ",  # uppercase
-        "Ш": "Š",
-    }
-
-    # Latinica -> Ćirilica
-    latin_to_cyrillic = {v: k for k, v in cyrillic_to_latin.items()}
-
-    # Detektuj i konvertuj
-    # Ako tekst sadrži ćirilična slova, konvertuj u latinicnu
-    has_cyrillic = any(
-        ord(c) >= 0x0430 and ord(c) <= 0x044F for c in text if c.isalpha()
-    )
-
-    if has_cyrillic:
-        result = []
-        for char in text:
-            result.append(cyrillic_to_latin.get(char, char))
-        return "".join(result)
-
-    # Inače, konvertuj u ćirilicu (za fallback)
-    result = []
-    for char in text:
-        result.append(latin_to_cyrillic.get(char, char))
-    return "".join(result)
+    return transliterate_text(text)
 
 
 class QuizService:

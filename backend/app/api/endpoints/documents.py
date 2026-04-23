@@ -31,9 +31,14 @@ from app.schemas.document import (
 from app.services.auth import get_current_user
 from app.workers.tasks import process_pdf_task, auto_pipeline_task
 from app.core.config import settings
+from app.api.endpoints.documents_helpers import document_to_response, chunk_to_response
 
 router = APIRouter()
 logger = logging.getLogger(__name__)
+
+
+# UKLONJENO: document_to_response() i chunk_to_response()
+# Sada su u documents_helpers.py
 
 
 def document_to_response(doc: Document, db=None) -> DocumentResponse:

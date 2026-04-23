@@ -1,0 +1,24 @@
+# ================================================================================
+# CRON JOBS - AI LEARNING SYSTEM
+# ================================================================================
+# Cron jobs za automatske zadatke
+#
+#Instalacija:
+#   sudo cp this file to /etc/cron.d/ai-learning-cron
+#   sudo chmod 644 /etc/cron.d/ai-learning-cron
+# ================================================================================
+
+# Health monitoring - svakih 5 minuta
+*/5 * * * * root /home/dju/mojAiProjekat/New\ folder/scripts/health_monitor.sh >> /var/log/ai-learning-health.log 2>&1
+
+# Database backup - svakog dana u 2:00
+0 2 * * * root /home/dju/mojAiProjekat/New\ folder/scripts/backup_db.sh >> /var/log/ai-learning-backup.log 2>&1
+
+# Database cleanup - nedeljno u 3:00
+0 3 * * 0 root /home/dju/mojAiProjekat/New\ folder/scripts/cleanup_db.sh >> /var/log/ai-learning-cleanup.log 2>&1
+
+# Log rotation - svakog dana u 0:00
+0 0 * * * root /home/dju/mojAiProjekat/New\ folder/scripts/rotate_logs.sh >> /var/log/ai-learning-rotate.log 2>&1
+
+# Celery task cleanup - svakih 6 sati
+0 */6 * * * root docker exec ai-learning-worker celery -A app.workers.celery_app purge -f >> /dev/null 2>&1

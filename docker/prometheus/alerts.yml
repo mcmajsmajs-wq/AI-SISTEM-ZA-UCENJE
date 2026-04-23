@@ -1,0 +1,95 @@
+# ================================================================================
+# ALERT RULES - AI Learning System
+# ================================================================================
+
+groups:
+  - name: ai-learning-alerts
+    interval: 30s
+    rules:
+      # API Down Alert
+      - alert: APIDown
+        expr: up{job="ai-learning-app"} == 0
+        for: 2m
+        labels:
+          severity: critical
+          team: ai-learning
+        annotations:
+          summary: "AI Learning API is down!"
+          description: "The API has been down for more than 2 minutes"
+
+      # High Response Time
+      - alert: HighResponseTime
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 2
+        for: 5m
+        labels:
+          severity: warning
+          team: ai-learning
+        annotations:
+          summary: "High API response time"
+          description: "95th percentile response time is above 2 seconds"
+
+      # High Error Rate
+      - alert: HighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: ai-learning
+        annotations:
+          summary: "High error rate detected"
+          description: "More than 10% of requests are returning 5xx errors"
+
+      # Database Connection Issues
+      - alert: DatabaseDown
+        expr: up{job="postgres"} == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: ai-learning
+        annotations:
+          summary: "Database is not responding"
+          description: "PostgreSQL is not accepting connections"
+
+      # Redis Connection Issues  
+      - alert: RedisDown
+        expr: up{job="redis"} == 0
+        for: 1m
+        labels:
+          severity: warning
+          team: ai-learning
+        annotations:
+          summary: "Redis is not responding"
+          description: "Redis is not responding to PING commands"
+
+      # Celery Worker Offline
+      - alert: CeleryWorkerDown
+        expr: up{job="celery-workers"} == 0
+        for: 5m
+        labels:
+          severity: warning
+          team: ai-learning
+        annotations:
+          summary: "Celery worker is not responding"
+          description: "No active Celery workers detected"
+
+      # Disk Space Low
+      - alert: DiskSpaceLow
+        expr: (node_filesystem_avail_bytes / node_filesystem_size_bytes) < 0.1
+        for: 10m
+        labels:
+          severity: warning
+          team: ai-learning
+        annotations:
+          summary: "Disk space is running low"
+          description: "Less than 10% disk space available"
+
+      # Memory Low
+      - alert: MemoryLow
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) < 0.15
+        for: 10m
+        labels:
+          severity: warning
+          team: ai-learning
+        annotations:
+          summary: "Memory is running low"
+          description: "Less than 15% memory available"
