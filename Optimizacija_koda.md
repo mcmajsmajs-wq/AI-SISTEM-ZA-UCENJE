@@ -308,8 +308,26 @@
 ### Stavka 2: Unifikacija Translation Klijenata ✅ ZAVRŠENO (2026-04-23)
 - Kreiran `app/utils/translation_constants.py`
 - Shared konstanta: `TRANSLATION_SYSTEM_PROMPT` (jedan tekst za sve)
-- Ažurirani: GroqClient, DeepSeekClient, MistralClient
-- Rezultat: -6 linija + jedinstven prompt za sve
+- Ažurirani SVI LLM klijenti (5):
+  - GroqClient
+  - DeepSeekClient
+  - MistralClient
+  - OpenAIClient
+  - ClaudeClient
+- Rezultat: -10 linija + jedinstven prompt za sve
+
+### Stavka 6: Translation Validacija ✅ NOVO (2026-04-23)
+- Kreiran `app/services/translation/translation_config.py`
+  - Centralna konfiguracija svih providera
+  - Default modeli i fallback modeli
+- Kreiran `app/services/translation/translation_validator.py`
+  - Validacija API ključeva (test request)
+  - Validacija modela (provera da li postoji)
+  - Auto-fallback na default model
+  - Jasne poruke za korisnika:
+    - "❌ OpenAI: API ključ je istekao ili nije validan. Molim ažurirajte API ključ."
+    - "⚠️ Model 'gpt-4-turbo' nije dostupan. Koristim 'gpt-4o' umesto toga."
+- Ažuriran `translation/service.py` - integrisana validacija
 
 ### Stavka 3: Razdvoji documents.py ✅ ZAVRŠENO (2026-04-23)
 - Kreiran `app/api/endpoints/documents_helpers.py` (78 linija)
@@ -375,20 +393,30 @@ print('✅ Svi moduli uspešno uvezeni!')
 | Stavka | Opis | Rezultat |
 |--------|-----|---------|
 | 1 | CYRILLIC_TO_LATIN u utils | -179 linija (quiz/service.py) |
-| 2 | Translation klijenti | Preskočeno (visok rizik) |
+| 2 | Translation klijenti | Shared prompt |
 | 3 | documents.py helpers | +1 novi fajl |
 | 4 | ai_chat.py helpers | +1 novi fajl |
-| 5 | Dodatne optimizacije | Ostavljeno za kasnije |
+| 5 | Dodatne optimizacije | Organizacija |
+| 6 | Translation validacija | API key + model validacija |
 
 **Novi fajlovi:**
 - `app/utils/cyrillic.py` (146 linija)
+- `app/utils/translation_constants.py`
 - `app/api/endpoints/documents_helpers.py` (78 linija)
 - `app/services/ai_chat_helpers.py` (78 linija)
+- `app/services/translation/translation_config.py`
+- `app/services/translation/translation_validator.py`
 
 **Izmenjeni fajlovi:**
 - `app/services/quiz/service.py` (1018 → 839 linija)
 - `app/api/endpoints/documents.py`
 - `app/utils/__init__.py`
+- `app/services/translation/clients/groq.py`
+- `app/services/translation/clients/deepseek.py`
+- `app/services/translation/clients/mistral.py`
+- `app/services/translation/clients/openai.py`
+- `app/services/translation/clients/claude.py`
+- `app/services/translation/service.py`
 - `Optimizacija_koda.md`
 
 ---

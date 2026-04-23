@@ -1,0 +1,137 @@
+# ================================================================================
+# GITHUB MONITORING WORKFLOW
+# ================================================================================
+# Automatski prati CI/CD status i issues
+# Radi na schedule ili ručno
+#
+# Podešavanje:
+# 1. Dodaj GITHUB_TOKEN u repository secrets
+# 2. Workflow se aktivira automatski
+# ================================================================================
+
+name: GitHub Monitor
+
+on:
+  # Pokreni dnevno u 8:00
+  schedule:
+    - cron: '0 8 * * *'
+  
+  # Ručno pokretanje
+  workflow_dispatch:
+    inputs:
+      check_type:
+        description: 'Šta proveriti'
+        required: true
+        default: 'all'
+        type: choice
+        options:
+          - all
+          - runs
+          - issues
+          - prs
+
+  # Posle svakog push-a
+  push:
+    branches: [main]
+
+jobs:
+  check-status:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      issues: read
+      pull-requests: read
+      actions: read
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Check CI/CD Runs
+        if: github.event_name == 'workflow_dispatch' && (github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'runs')
+        run: |
+          echo "=== CI/CD Runs ==="
+          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=5" | \
+            jq '.workflow_runs[] | "\(.name): \(.status) - \(.conclusion // "running")"'
+      
+      - name: Check Issues
+        if: github.event_name == 'workflow_dispatch' && (github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'issues')
+        run: |
+          echo "=== Issues ==="
+          ISSUES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open")
+          COUNT=$(echo "$ISSUES" | jq 'length')
+          echo "Otvorenih issues: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "$ISSUES" | jq -r '.[] | "  #\(.number): \(.title) - \(.html_url)"'
+          fi
+      
+      - name: Check PRs
+        if: github.event_name == 'workflow_dispatch' && (github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'prs')
+        run: |
+          echo "=== Pull Requests ==="
+          PRS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/pulls?state=open")
+          COUNT=$(echo "$PRS" | jq 'length')
+          echo "Otvorenih PR-ova: $COUNT"
+          if [ "$COUNT" -gt 0 ]; then
+            echo "$PRS" | jq -r '.[] | "  #\(.number): \(.title) - \(.html_url)"'
+          fi
+      
+      - name: Check Latest CI Status
+        if: github.event_name == 'push'
+        run: |
+          echo "=== Latest CI Status ==="
+          RUN=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=1" | \
+            jq '.workflow_runs[0]')
+          STATUS=$(echo "$RUN" | jq -r '.status')
+          CONCLUSION=$(echo "$RUN" | jq -r '.conclusion // "running"')
+          echo "Status: $STATUS - $CONCLUSION"
+          if [ "$CONCLUSION" = "failure" ]; then
+            echo "❌ CI FAILED!"
+            echo "URL: $(echo "$RUN" | jq -r '.html_url')"
+            exit 1
+          elif [ "$CONCLUSION" = "success" ]; then
+            echo "✅ CI Passed!"
+          fi
+      
+      - name: Notify on Failure
+        if: failure() && github.event_name == 'push'
+        run: |
+          echo "CI Failed! Sending notification..."
+          # Ovde možeš dodati Discord/Slack webhook
+          # curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" -d "content=CI Failed!"
+
+  # Self-healing: Auto-fix common issues
+  auto-fix:
+    runs-on: ubuntu-latest
+    if: github.event_name == 'push'
+    needs: check-status
+    
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      
+      - name: Check for lint issues
+        run: |
+          # Proveri da li je problem u flake8/lint
+          echo "Checking for auto-fixable issues..."
+          
+          # Možeš dodati logiku za auto-fix
+          # npx prettier --write
+          # black .
+          # autoflake .
+      
+      - name: Create issue on failure
+        if: failure()
+        run: |
+          curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            "https://api.github.com/repos/${{ github.repository }}/issues" \
+            -d '{
+              "title": "CI Failed - Auto-investigation",
+              "body": "CI workflow failed. Please check the logs.",
+              "labels": ["bug", "ci"]
+            }'

@@ -26,6 +26,10 @@ from app.services.translation.clients import (
     MistralClient,
 )
 from app.services.translation.providers import TranslationProvider
+from app.services.translation.translation_validator import (
+    validate_translation_provider,
+    ValidationStatus,
+)
 from dataclasses import dataclass, field
 
 logger = logging.getLogger(__name__)
@@ -161,6 +165,31 @@ class TranslationService:
                 source_language=source_language,
                 target_language=target_language,
             )
+
+        # Ako je specificiran provider, validiraj ga PRVI
+        if provider:
+            if provider.lower() in self._clients:
+                client = self._clients[provider.lower()]
+
+                # Validacija: proveri API key i model
+                validation = validate_translation_provider(
+                    provider=provider.lower(),
+                    api_key=client.api_key if hasattr(client, "api_key") else None,
+                    model=client.model if hasattr(client, "model") else None,
+                )
+
+                if not validation.is_ok:
+                    # VRATI JASNU PORUKU KORISNIKU!
+                    return TranslationResult(
+                        success=False,
+                        error=validation.user_message,
+                        source_language=source_language,
+                        target_language=target_language,
+                    )
+
+                # Ako je model deprecated ali radi sa fallback
+                if validation.status == ValidationStatus.MODEL_DEPRECATED:
+                    logger.info(validation.user_message)
 
         if provider:
             if provider.lower() in self._clients:
