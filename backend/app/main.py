@@ -14,9 +14,19 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.middleware.gzip import GZipMiddleware
 from contextlib import asynccontextmanager
-from slowapi import Limiter, _rate_limit_exceeded_handler
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+
+try:
+    from slowapi import Limiter, _rate_limit_exceeded_handler
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+
+    SLOWAPI_AVAILABLE = True
+except ImportError:
+    SLOWAPI_AVAILABLE = False
+    Limiter = None
+    _rate_limit_exceeded_handler = None
+    get_remote_address = None
+    RateLimitExceeded = None
 
 from app.core.config import settings
 from app.core.logging_config import setup_logging
@@ -105,9 +115,12 @@ async def lifespan(app: FastAPI):
 
 
 # ================================================================================
-# RATE LIMITER
+# RATE LIMITER (optional - requires slowapi)
 # ================================================================================
-limiter = Limiter(key_func=get_remote_address)
+if SLOWAPI_AVAILABLE:
+    limiter = Limiter(key_func=get_remote_address)
+else:
+    limiter = None
 
 # ================================================================================
 # KREIRANJE FASTAPI APLIKACIJE
@@ -122,8 +135,10 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+# Add limiter state and exception handler if slowapi is available
+if SLOWAPI_AVAILABLE and limiter:
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 # ================================================================================
 # MIDDLEWARE
@@ -173,7 +188,12 @@ async def readiness_check():
     """
     from app.db.session import check_database_connection
 
-    db_healthy = check_database_connection()
+    try:
+        db_healthy = check_database_connection()
+    except Exception as e:
+        from fastapi import HTTPException
+
+        raise HTTPException(status_code=503, detail=f"Database check failed: {str(e)}")
 
     if db_healthy:
         return {"status": "ready", "checks": {"database": "healthy"}}

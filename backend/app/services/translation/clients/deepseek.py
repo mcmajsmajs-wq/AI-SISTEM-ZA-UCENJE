@@ -27,6 +27,7 @@ from app.services.translation.clients.base import (
     TranslationResult,
 )
 from app.services.translation.providers import TranslationProvider
+from app.utils.translation_constants import TRANSLATION_SYSTEM_PROMPT
 
 logger = logging.getLogger(__name__)
 
@@ -34,11 +35,8 @@ logger = logging.getLogger(__name__)
 class DeepSeekClient(BaseTranslationClient):
     """Klijent za DeepSeek API."""
 
-    TRANSLATION_SYSTEM_PROMPT = """You are a professional translator. Translate the given text accurately while:
-1. Maintaining the original formatting and structure
-2. Preserving technical terms in their original form if they are standard terminology
-3. Keeping any code snippets, URLs, or special markers unchanged
-4. Providing only the translation, no explanations"""
+    # Koristi shared konstantu iz translation_constants
+    TRANSLATION_SYSTEM_PROMPT = TRANSLATION_SYSTEM_PROMPT
 
     COST_PER_1K_TOKENS = {
         "deepseek-chat": 0.00014,

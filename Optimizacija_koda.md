@@ -305,9 +305,11 @@
 - Ažuriran `app/utils/__init__.py`
 - Rezultat: quiz/service.py smanjen sa 1018 na 839 linija (-179 linija)
 
-### Stavka 2: Unifikacija Translation Klijenata ⏳ (preskočeno za sada)
-- kompleksna promena - visok rizik
-- ostavljeno za kasnije
+### Stavka 2: Unifikacija Translation Klijenata ✅ ZAVRŠENO (2026-04-23)
+- Kreiran `app/utils/translation_constants.py`
+- Shared konstanta: `TRANSLATION_SYSTEM_PROMPT` (jedan tekst za sve)
+- Ažurirani: GroqClient, DeepSeekClient, MistralClient
+- Rezultat: -6 linija + jedinstven prompt za sve
 
 ### Stavka 3: Razdvoji documents.py ✅ ZAVRŠENO (2026-04-23)
 - Kreiran `app/api/endpoints/documents_helpers.py` (78 linija)

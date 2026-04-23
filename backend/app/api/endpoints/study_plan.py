@@ -9,10 +9,12 @@ Verzija: 1.0.0
 ================================================================================
 """
 
+from __future__ import annotations
+
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from datetime import date, datetime, timezone, timedelta
-from typing import Optional
+from typing import Optional, List
 import logging
 
 from app.db.session import get_db
@@ -157,7 +159,7 @@ async def create_my_plan(
 # ============================================================
 
 
-@router.get("/me/items", response_model=list[StudyPlanItemResponse])
+@router.get("/me/items", response_model=List[StudyPlanItemResponse])
 async def list_plan_items(
     from_date: Optional[date] = None,
     to_date: Optional[date] = None,
