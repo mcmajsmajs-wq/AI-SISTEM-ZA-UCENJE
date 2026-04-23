@@ -743,13 +743,42 @@ Budi koncizan ali potpun. Odgovaraj na srpskom jeziku."""
         for msg in body.history[-8:]:
             messages.append({"role": msg.role, "content": msg.content})
         messages.append({"role": "user", "content": body.message})
+        question = None
+    else:
+        question = (
+            db.query(Question)
+            .filter(
+                Question.id == body.question_id,
+                Question.quiz_id == quiz_id,
+            )
+            .first()
+        )
+        if not question:
+            raise HTTPException(status_code=404, detail="Pitanje nije pronađeno")
+
+        system_prompt = f"""Ti si pedagoški AI tutor koji pomaže studentu da razume gradivo iz kviza.
+
+Kviz: {quiz.title}
+Pitanje: {question.question_text}
+Tačan odgovor: {question.correct_answer}
+Objašnjenje: {question.explanation or "N/A"}
+
+Korisnik traži dodatno objašnjenje. Odgovori jasno, pedagoški i motivišuće.
+Fokusiraj se na pitanje i pomozi korisniku da razume gradivo.
+Budi koncizan ali potpun. Odgovaraj na srpskom jeziku."""
+
+        messages = [{"role": "system", "content": system_prompt}]
+        for msg in body.history[-8:]:
+            messages.append({"role": msg.role, "content": msg.content})
+        messages.append({"role": "user", "content": body.message})
 
     reply = await _call_chat_ai(messages, current_user, provider_override=body.provider)
 
-    try:
-        _save_chat_to_knowledge(db, current_user, question, body, reply)
-    except Exception as kb_err:
-        logger.warning(f"Failed to save chat to knowledge base: {kb_err}")
+    if not is_general_help:
+        try:
+            _save_chat_to_knowledge(db, current_user, question, body, reply)
+        except Exception as kb_err:
+            logger.warning(f"Failed to save chat to knowledge base: {kb_err}")
 
     return QuestionChatResponse(reply=reply, question_id=body.question_id)
 
