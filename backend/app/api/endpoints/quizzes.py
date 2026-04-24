@@ -995,3 +995,63 @@ AI odgovor: {reply}"""
     )
     db.commit()
     logger.info(f"Saved quiz chat to knowledge base for user {user.email}")
+
+
+# ============================================================
+# QUIZ PROVIDER VALIDATION
+# ============================================================
+
+
+@router.get("/validate")
+async def validate_quiz_provider(
+    provider: str = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    ================================================================================
+    VALIDATE QUIZ PROVIDER
+    ================================================================================
+    Proverava da li je API ključ i model validni za zadati quiz provider.
+    Vraća jasne poruke za korisnika.
+
+    Args:
+        provider: Ime providera (openai, claude, groq, ollama, etc.)
+        current_user: Trenutni korisnik
+
+    Returns:
+        Validation result sa porukom za korisnika
+    """
+    from app.services.quiz.quiz_validator import (
+        validate_quiz_provider as validate,
+        validate_all_quiz_providers,
+    )
+
+    # Ako nije dat provider, vrati sve dostupne
+    if not provider:
+        # Vrati listu svih providera sa statusom
+        all_results = validate_all_quiz_providers()
+        return {
+            "providers": [
+                {
+                    "provider": r.provider,
+                    "status": r.status,
+                    "user_message": r.user_message,
+                    "is_ok": r.is_ok,
+                    "model": r.model,
+                }
+                for r in all_results
+            ],
+            "message": "Svi dostupni quiz provideri",
+        }
+
+    # Validiraj specificnog providera
+    result = validate(provider)
+
+    return {
+        "provider": result.provider,
+        "status": result.status,
+        "user_message": result.user_message,
+        "is_ok": result.is_ok,
+        "model": result.model,
+        "error": result.error,
+    }

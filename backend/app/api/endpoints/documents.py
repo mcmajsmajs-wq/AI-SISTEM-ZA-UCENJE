@@ -660,7 +660,6 @@ async def get_translation_providers():
 
     Returns:
         Lista dostupnih provajdera sa statusom
-    ================================================================================
     """
     from app.services.translation import translation_service
 
@@ -669,6 +668,78 @@ async def get_translation_providers():
     return {
         "providers": providers,
         "default_order": settings.TRANSLATION_FALLBACK_ORDER,
+    }
+
+
+@router.get("/translation/validate")
+async def validate_translation_provider(
+    provider: str = None,
+    current_user: User = Depends(get_current_user),
+):
+    """
+    ================================================================================
+    VALIDATE TRANSLATION PROVIDER
+    ================================================================================
+    Proverava da li je API ključ i model validni za zadati provider.
+    Vraća jasne poruke za korisnika.
+
+    Args:
+        provider: Ime providera (openai, claude, deepl, etc.)
+        current_user: Trenutni korisnik
+
+    Returns:
+        Validation result sa porukom za korisnika
+    """
+    from app.services.translation import translation_service
+    from app.services.translation.translation_validator import (
+        validate_translation_provider as validate,
+    )
+
+    # Ako nije dat provider, vrati sve dostupne
+    if not provider:
+        # Vrati listu svih providera sa statusom
+        results = []
+        for prov in translation_service._clients.keys():
+            client = translation_service._clients.get(prov)
+            if client:
+                api_key = getattr(client, "api_key", None)
+                model = getattr(client, "model", None)
+                validation = validate(prov, api_key=api_key, model=model)
+                results.append(
+                    {
+                        "provider": prov,
+                        "status": validation.status,
+                        "user_message": validation.user_message,
+                        "is_ok": validation.is_ok,
+                    }
+                )
+
+        return {
+            "providers": results,
+            "message": "Svi dostupni provideri",
+        }
+
+    # Validiraj specificiran provider
+    if provider.lower() not in translation_service._clients:
+        return {
+            "provider": provider,
+            "status": "error",
+            "user_message": f"Provider '{provider}' nije podržan.",
+            "is_ok": False,
+        }
+
+    client = translation_service._clients[provider.lower()]
+    api_key = getattr(client, "api_key", None)
+    model = getattr(client, "model", None)
+
+    validation = validate(provider, api_key=api_key, model=model)
+
+    return {
+        "provider": provider,
+        "status": validation.status,
+        "user_message": validation.user_message,
+        "details": validation.details,
+        "is_ok": validation.is_ok,
     }
 
 

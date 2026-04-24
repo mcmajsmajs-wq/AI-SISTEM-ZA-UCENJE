@@ -89,14 +89,52 @@ export default function DocumentsPage() {
   })
 
   const translateMutation = useMutation({
-    mutationFn: ({ id, provider }: { id: string; provider: string }) => 
-      documentsApi.translate(id, provider),
+    mutationFn: async ({ id }: { id: string }) => {
+      // Validiraj SVE dostupne provajdere prvo
+      try {
+        const validation = await documentsApi.validateTranslationProvider()
+        const validationData = validation.data
+        
+        let hasValid = false
+        let errorMessages: string[] = []
+        
+        if (validationData.providers) {
+          // Proveri bar jedan dostupan
+          for (const p of validationData.providers) {
+            if (p.is_ok) {
+              hasValid = true
+              break
+            }
+            if (p.user_message) {
+              errorMessages.push(p.user_message)
+            }
+          }
+          
+          if (!hasValid) {
+            // Nijedan nije dostupan - prikazi sve greške
+            throw new Error(errorMessages.join('; ') || 'Nijedan prevod provider nije dostupan')
+          }
+        }
+      } catch (validationError: any) {
+        const message = validationError.response?.data?.user_message || 
+                       validationError.message || 
+                       'Neuspešna validacija'
+        toast.error(message)
+        throw validationError
+      }
+      
+      // Pusti backend da izabere najbolji dostupan provider (bez eksplicitnog provider parametra!)
+      return documentsApi.translate(id, undefined)
+    },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['documents'] })
       toast.success('Započeto prevođenje dokumenta')
       setShowTranslateModal(null)
     },
-    onError: () => toast.error('Greška pri prevođenju'),
+    onError: (error: any) => {
+      const message = error.response?.data?.user_message || error.message || 'Greška pri prevođenju'
+      toast.error(message)
+    },
   })
 
   const deleteMutation = useMutation({
@@ -481,7 +519,8 @@ export default function DocumentsPage() {
                   key={provider.id}
                   onClick={() => {
                     setSelectedProvider(provider.id)
-                    translateMutation.mutate({ id: showTranslateModal, provider: provider.id })
+                    // Bez eksplicitnog providera - backend auto-bira najbolji
+                    translateMutation.mutate({ id: showTranslateModal })
                   }}
                   disabled={translateMutation.isPending}
                   className={clsx(

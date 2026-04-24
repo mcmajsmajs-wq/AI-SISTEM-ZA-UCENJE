@@ -43,7 +43,33 @@ export default function QuizzesPage() {
   })
 
   const createMutation = useMutation({
-    mutationFn: () => quizzesApi.create(selectedDocId, numQuestions, undefined, undefined, shuffleQuestions),
+    mutationFn: async () => {
+      // First validate all quiz providers to check if any is available
+      try {
+        const validation = await quizzesApi.validateProvider()
+        const validationData = validation.data
+        
+        if (validationData.providers) {
+          // Check if at least one provider is OK
+          const hasValidProvider = validationData.providers.some((p: any) => p.is_ok)
+          if (!hasValidProvider) {
+            const messages = validationData.providers
+              .filter((p: any) => !p.is_ok)
+              .map((p: any) => p.user_message)
+              .join('; ')
+            throw new Error(messages || 'Nijedan quiz provider nije dostupan')
+          }
+        }
+      } catch (validationError: any) {
+        const message = validationError.response?.data?.user_message || 
+                       validationError.message || 
+                       'Neuspešna validacija provajdera'
+        throw new Error(message)
+      }
+      
+      // If validation passes, proceed with quiz creation
+      return quizzesApi.create(selectedDocId, numQuestions, undefined, undefined, shuffleQuestions)
+    },
     onSuccess: () => {
       toast.success('Generisanje kviza pokrenuto!')
       queryClient.invalidateQueries({ queryKey: ['quizzes'] })
@@ -51,7 +77,10 @@ export default function QuizzesPage() {
       setSelectedDocId('')
       setShuffleQuestions(false)
     },
-    onError: () => toast.error('Greška pri kreiranju kviza'),
+    onError: (error: any) => {
+      const message = error.response?.data?.user_message || error.message || 'Greška pri kreiranju kviza'
+      toast.error(message)
+    },
   })
 
   const deleteMutation = useMutation({

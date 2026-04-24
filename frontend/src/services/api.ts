@@ -229,11 +229,17 @@ export const documentsApi = {
 
   getQuizAvailability: (id: string) =>
     api.get(`/documents/${id}/quiz-availability`),
+
+  validateTranslationProvider: (provider?: string) =>
+    api.get(`/documents/translation/validate${provider ? `?provider=${provider}` : ''}`),
 }
 
 export const quizzesApi = {
   create: (documentId: string, numQuestions = 5, timeLimit?: number, passingScore = 60, shuffleQuestions = false) =>
     api.post('/quizzes', { document_id: documentId, num_questions: numQuestions, time_limit: timeLimit, passing_score: passingScore, shuffle_questions: shuffleQuestions }),
+
+  validateProvider: (provider?: string) =>
+    api.get(`/quizzes/validate${provider ? `?provider=${provider}` : ''}`),
 
   list: (skip = 0, limit = 20, documentId?: string) => {
     const params = new URLSearchParams({ skip: String(skip), limit: String(limit) })

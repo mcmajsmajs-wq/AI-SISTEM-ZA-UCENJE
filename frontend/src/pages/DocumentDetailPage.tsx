@@ -58,14 +58,49 @@ export default function DocumentDetailPage() {
   })
 
   const translateMutation = useMutation({
-    mutationFn: ({ docId, provider }: { docId: string; provider?: string }) => 
-      documentsApi.translate(docId, provider),
+    mutationFn: async ({ docId }: { docId: string }) => {
+      // Validiraj SVE provajdere prvo
+      try {
+        const validation = await documentsApi.validateTranslationProvider()
+        const validationData = validation.data
+        
+        let hasValid = false
+        let errorMessages: string[] = []
+        
+        if (validationData.providers) {
+          for (const p of validationData.providers) {
+            if (p.is_ok) {
+              hasValid = true
+              break
+            }
+            if (p.user_message) {
+              errorMessages.push(p.user_message)
+            }
+          }
+          
+          if (!hasValid) {
+            throw new Error(errorMessages.join('; ') || 'Nijedan prevod provider nije dostupan')
+          }
+        }
+      } catch (validationError: any) {
+        const message = validationError.response?.data?.user_message || 
+                       validationError.message || 
+                       'Neuspešna validacija'
+        throw new Error(message)
+      }
+      
+      // Pusti backend da izabere najbolji
+      return documentsApi.translate(docId, undefined)
+    },
     onSuccess: () => {
       toast.success('Prevođenje nastavljeno')
       queryClient.invalidateQueries({ queryKey: ['document', docId] })
       queryClient.invalidateQueries({ queryKey: ['document-progress', docId] })
     },
-    onError: () => toast.error('Greška pri nastavku prevođenja'),
+    onError: (error: any) => {
+      const message = error.response?.data?.user_message || error.message || 'Greška pri nastavku prevođenja'
+      toast.error(message)
+    },
   })
 
   const handleTranslate = () => {
