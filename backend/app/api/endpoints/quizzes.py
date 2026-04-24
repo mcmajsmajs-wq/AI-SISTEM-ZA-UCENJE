@@ -273,9 +273,12 @@ async def create_quiz(
         user_groq_key,
         user_mistral_key,
         user_deepseek_key,
+        data.source_content,
     )
 
-    logger.info(f"Kviz {quiz.id} kreiran, generisanje pokrenuto")
+    logger.info(
+        f"Kviz {quiz.id} kreiran, generisanje pokrenuto, source={data.source_content or 'auto'}"
+    )
 
     posthog_client.capture(
         "quiz created",

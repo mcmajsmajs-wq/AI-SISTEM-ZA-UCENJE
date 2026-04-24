@@ -488,8 +488,13 @@ class QuizService:
         user_groq_key: Optional[str] = None,
         user_mistral_key: Optional[str] = None,
         user_deepseek_key: Optional[str] = None,
+        source_content: Optional[str] = None,
     ) -> Tuple[bool, str]:
-        """Generiše pitanja za kviz."""
+        """Generiše pitanja za kviz.
+
+        Args:
+            source_content: 'translated' za srpski, 'original' za engleski, None za auto
+        """
         quiz = db.query(Quiz).filter(Quiz.id == quiz_id).first()
         if not quiz:
             return False, "Kviz nije pronađen"
@@ -506,10 +511,32 @@ class QuizService:
         if not selected_chunks:
             return False, "Nema validnih chunk-ova"
 
-        total_chars = sum(len(c.content or "") for c in selected_chunks)
-        text = "\n\n".join(
-            c.content or c.translated_content or "" for c in selected_chunks
-        )
+        from app.services.quiz.helpers import _get_content
+
+        # Determine which content to use based on source_content
+        total_chars = 0
+        text_parts = []
+        for c in selected_chunks:
+            if source_content == "original":
+                # Use only original content (English)
+                content = getattr(c, "content", "") or ""
+            elif source_content == "translated" or (
+                source_content is None and getattr(c, "translated_content", "")
+            ):
+                # Use translated content if exists (Serbian), or original if not
+                content = (
+                    getattr(c, "translated_content", "")
+                    or getattr(c, "content", "")
+                    or ""
+                )
+            else:
+                content = getattr(c, "content", "") or ""
+
+            if content:
+                text_parts.append(content)
+                total_chars += len(content)
+
+        text = "\n\n".join(text_parts)
 
         num_to_generate = _auto_num_questions(len(selected_chunks), num_questions)
 

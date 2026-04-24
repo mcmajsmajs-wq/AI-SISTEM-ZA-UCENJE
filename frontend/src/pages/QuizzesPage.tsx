@@ -27,6 +27,7 @@ export default function QuizzesPage() {
   const [numQuestions, setNumQuestions] = useState(0)
   const [showCreateForm, setShowCreateForm] = useState(false)
   const [shuffleQuestions, setShuffleQuestions] = useState(false)
+  const [sourceContent, setSourceContent] = useState<'original' | 'translated'>('translated')
 
   const { data: quizzesData, isLoading } = useQuery({
     queryKey: ['quizzes'],
@@ -68,7 +69,7 @@ export default function QuizzesPage() {
       }
       
       // If validation passes, proceed with quiz creation
-      return quizzesApi.create(selectedDocId, numQuestions, undefined, undefined, shuffleQuestions)
+      return quizzesApi.create(selectedDocId, numQuestions, undefined, undefined, shuffleQuestions, sourceContent)
     },
     onSuccess: () => {
       toast.success('Generisanje kviza pokrenuto!')
@@ -164,6 +165,34 @@ export default function QuizzesPage() {
             />
             Nasumičan redosled pitanja
           </label>
+          
+          {/* Source content selection */}
+          <div>
+            <label className="text-sm font-medium text-gray-700 mb-2 block">Jezik kviza</label>
+            <div className="flex gap-4">
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="radio"
+                  name="sourceContent"
+                  checked={sourceContent === 'translated'}
+                  onChange={() => setSourceContent('translated')}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                />
+                Srpski (iz prevoda)
+              </label>
+              <label className="flex items-center gap-2 text-sm text-gray-600 cursor-pointer">
+                <input
+                  type="radio"
+                  name="sourceContent"
+                  checked={sourceContent === 'original'}
+                  onChange={() => setSourceContent('original')}
+                  className="w-4 h-4 text-indigo-600 border-gray-300 focus:ring-indigo-500"
+                />
+                Engleski (original)
+              </label>
+            </div>
+          </div>
+          
           <div className="flex gap-3">
             <button
               onClick={() => createMutation.mutate()}

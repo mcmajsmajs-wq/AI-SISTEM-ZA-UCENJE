@@ -95,6 +95,10 @@ class QuizCreate(BaseModel):
     provider: Optional[str] = Field(
         None, description="AI provajder: ollama|openai|claude (None=auto)"
     )
+    source_content: Optional[str] = Field(
+        None,
+        description="Izvor teksta za kviz: 'translated' (srpski) ili 'original' (engleski). None = auto (koristi prevedeno ako postoji)",
+    )
 
 
 class QuizResponse(BaseModel):

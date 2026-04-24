@@ -35,7 +35,16 @@ def _get_attr(obj: Any, attr: str, default: Any = None) -> Any:
 
 
 def _get_content(chunk: Any) -> str:
-    """Get content from chunk (supports dict with 'text' key or object with 'content' attr)."""
+    """Get content from chunk (supports dict with 'text' key or object with 'content' attr).
+
+    Prefers translated_content if available (for Serbian quiz from translated documents).
+    """
+    # Try translated_content first (Serbian quiz from translated English documents)
+    translated = _get_attr(chunk, "translated_content", "")
+    if translated:
+        return translated
+
+    # Fall back to original content
     return _get_attr(chunk, "content", "") or _get_attr(chunk, "text", "")
 
 

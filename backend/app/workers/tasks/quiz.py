@@ -51,6 +51,7 @@ def generate_quiz_task(
     user_groq_key: Optional[str] = None,
     user_mistral_key: Optional[str] = None,
     user_deepseek_key: Optional[str] = None,
+    source_content: Optional[str] = None,
 ):
     """
     Task za generisanje kviza iz dokumenta.
@@ -62,10 +63,11 @@ def generate_quiz_task(
         provider: Preferovani AI provajder ('ollama'|'openai'|'claude'|None=auto)
         user_openai_key: Korisnički OpenAI API ključ (override)
         user_claude_key: Korisnički Claude API ključ (override)
+        source_content: 'translated' za srpski, 'original' za engleski, None za auto
     """
     logger.info(
         f"Generisanje kviza {quiz_id} za dokument {document_id} "
-        f"({num_questions} pitanja, provider={provider or 'auto'})"
+        f"({num_questions} pitanja, provider={provider or 'auto'}, source={source_content or 'auto'})"
     )
 
     db = get_db_session()
@@ -83,6 +85,7 @@ def generate_quiz_task(
             user_groq_key=user_groq_key,
             user_mistral_key=user_mistral_key,
             user_deepseek_key=user_deepseek_key,
+            source_content=source_content,
         )
 
         if success:

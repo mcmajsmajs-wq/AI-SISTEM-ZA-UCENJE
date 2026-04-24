@@ -235,8 +235,15 @@ export const documentsApi = {
 }
 
 export const quizzesApi = {
-  create: (documentId: string, numQuestions = 5, timeLimit?: number, passingScore = 60, shuffleQuestions = false) =>
-    api.post('/quizzes', { document_id: documentId, num_questions: numQuestions, time_limit: timeLimit, passing_score: passingScore, shuffle_questions: shuffleQuestions }),
+  create: (documentId: string, numQuestions = 5, timeLimit?: number, passingScore = 60, shuffleQuestions = false, sourceContent?: string) =>
+    api.post('/quizzes', { 
+      document_id: documentId, 
+      num_questions: numQuestions, 
+      time_limit: timeLimit, 
+      passing_score: passingScore, 
+      shuffle_questions: shuffleQuestions,
+      source_content: sourceContent,
+    }),
 
   validateProvider: (provider?: string) =>
     api.get(`/quizzes/validate${provider ? `?provider=${provider}` : ''}`),
