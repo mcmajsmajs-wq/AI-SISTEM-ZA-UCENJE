@@ -1,0 +1,14 @@
+[Unit]
+Description=AI Security Guardian
+After=network.target docker.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/dju/mojAiProjekat/New folder/scripts
+ExecStart=/usr/bin/python3 /home/dju/mojAiProjekat/New folder/scripts/security_guardian.py
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target

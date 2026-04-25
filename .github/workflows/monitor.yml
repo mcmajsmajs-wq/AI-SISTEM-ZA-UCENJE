@@ -1,22 +1,22 @@
 # ================================================================================
-# GITHUB MONITORING WORKFLOW
+# GITHUB MONITORING WORKFLOW - SECURE VERSION
 # ================================================================================
 # Automatski prati CI/CD status i issues
-# Radi na schedule ili ručno
+# Security-first pristup
 #
-# Podešavanje:
-# 1. Dodaj GITHUB_TOKEN u repository secrets
-# 2. Workflow se aktivira automatski
+# SECURITY PRINCIPLES:
+# 1. Minimalne permissions
+# 2. Read-only za većinu
+# 3. Write samo kada je neophodno
+# 4. Svi tokeni u secrets
 # ================================================================================
 
 name: GitHub Monitor
 
 on:
-  # Pokreni dnevno u 8:00
   schedule:
-    - cron: '0 8 * * *'
+    - cron: '0 8 * * *'  # Dnevno u 8:00
   
-  # Ručno pokretanje
   workflow_dispatch:
     inputs:
       check_type:
@@ -30,11 +30,20 @@ on:
           - issues
           - prs
 
-  # Posle svakog push-a
   push:
     branches: [main]
 
+# MINIMALNE PERMISSIONS - Principle of Least Privilege
+permissions:
+  contents: read       # Čitaj kod
+  issues: read       # Čitaj issues (write samo u specificnim jobovima)
+  pull-requests: read
+  actions: read       # Čitaj workflow status
+
 jobs:
+  # ============================================================================
+  # READ-ONLY CHECKS
+  # ============================================================================
   check-status:
     runs-on: ubuntu-latest
     permissions:
@@ -46,92 +55,134 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github/workflows
       
-      - name: Check CI/CD Runs
+      - name: Check CI Runs
         if: github.event_name == 'workflow_dispatch' && (github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'runs')
         run: |
-          echo "=== CI/CD Runs ==="
-          curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=5" | \
-            jq '.workflow_runs[] | "\(.name): \(.status) - \(.conclusion // "running")"'
+          echo "=== CI/CD Status ==="
+          RESPONSE=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=3")
+          
+          # Parse and display
+          echo "$RESPONSE" | jq -r '.workflow_runs[] | 
+            "Workflow: \(.name) | Status: \(.status) | Conclusion: \(.conclusion // "in_progress") | \(.html_url)"'
       
       - name: Check Issues
         if: github.event_name == 'workflow_dispatch' && (github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'issues')
         run: |
           echo "=== Issues ==="
           ISSUES=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/issues?state=open")
+            "https://api.github.com/repos/${{ github.repository }}/issues?state=open&per_page=5")
           COUNT=$(echo "$ISSUES" | jq 'length')
-          echo "Otvorenih issues: $COUNT"
-          if [ "$COUNT" -gt 0 ]; then
-            echo "$ISSUES" | jq -r '.[] | "  #\(.number): \(.title) - \(.html_url)"'
-          fi
+          echo "Otvorenih: $COUNT"
+          echo "$ISSUES" | jq -r '.[] | "  #\(.number): \(.title)"'
       
       - name: Check PRs
         if: github.event_name == 'workflow_dispatch' && (github.event.inputs.check_type == 'all' || github.event.inputs.check_type == 'prs')
         run: |
           echo "=== Pull Requests ==="
           PRS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/pulls?state=open")
+            "https://api.github.com/repos/${{ github.repository }}/pulls?state=open&per_page=5")
           COUNT=$(echo "$PRS" | jq 'length')
-          echo "Otvorenih PR-ova: $COUNT"
-          if [ "$COUNT" -gt 0 ]; then
-            echo "$PRS" | jq -r '.[] | "  #\(.number): \(.title) - \(.html_url)"'
-          fi
-      
-      - name: Check Latest CI Status
-        if: github.event_name == 'push'
-        run: |
-          echo "=== Latest CI Status ==="
-          RUN=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
-            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=1" | \
-            jq '.workflow_runs[0]')
-          STATUS=$(echo "$RUN" | jq -r '.status')
-          CONCLUSION=$(echo "$RUN" | jq -r '.conclusion // "running"')
-          echo "Status: $STATUS - $CONCLUSION"
-          if [ "$CONCLUSION" = "failure" ]; then
-            echo "❌ CI FAILED!"
-            echo "URL: $(echo "$RUN" | jq -r '.html_url')"
-            exit 1
-          elif [ "$CONCLUSION" = "success" ]; then
-            echo "✅ CI Passed!"
-          fi
-      
-      - name: Notify on Failure
-        if: failure() && github.event_name == 'push'
-        run: |
-          echo "CI Failed! Sending notification..."
-          # Ovde možeš dodati Discord/Slack webhook
-          # curl -X POST "${{ secrets.DISCORD_WEBHOOK }}" -d "content=CI Failed!"
+          echo "Otvorenih: $COUNT"
+          echo "$PRS" | jq -r '.[] | "  #\(.number): \(.title) (\(.mergeable_state))"'
 
-  # Self-healing: Auto-fix common issues
-  auto-fix:
+  # ============================================================================
+  # POST-PUSH CHECK (READ-ONLY)
+  # ============================================================================
+  ci-status:
     runs-on: ubuntu-latest
     if: github.event_name == 'push'
-    needs: check-status
+    permissions:
+      contents: read
+      actions: read
     
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-      
-      - name: Check for lint issues
+      - name: Get latest run status
+        id: status
         run: |
-          # Proveri da li je problem u flake8/lint
-          echo "Checking for auto-fixable issues..."
+          RUN=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs?per_page=1")
           
-          # Možeš dodati logiku za auto-fix
-          # npx prettier --write
-          # black .
-          # autoflake .
+          CONCLUSION=$(echo "$RUN" | jq -r '.workflow_runs[0].conclusion // "running"')
+          STATUS=$(echo "$RUN" | jq -r '.workflow_runs[0].status')
+          URL=$(echo "$RUN" | jq -r '.workflow_runs[0].html_url')
+          
+          echo "conclusion=$CONCLUSION" >> $GITHUB_OUTPUT
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "url=$URL" >> $GITHUB_OUTPUT
+          
+          echo "Latest CI: $CONCLUSION ($STATUS)"
+          echo "URL: $URL"
       
-      - name: Create issue on failure
-        if: failure()
+      - name: Report failure
+        if: steps.status.outputs.conclusion == 'failure'
         run: |
+          echo "❌ CI Failed!"
+          echo "Running additional diagnostics..."
+          
+          # Get failed job details
+          JOBS=$(curl -s -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
+            "https://api.github.com/repos/${{ github.repository }}/actions/runs/${{ steps.status.outputs.run_id }}/jobs")
+          
+          echo "Failed jobs:"
+          echo "$JOBS" | jq -r '.jobs[] | select(.conclusion == "failure") | "  - \(.name)"'
+
+  # ============================================================================
+  # ISSUE CREATION (WRITE - samo kada je neophodno)
+  # ============================================================================
+  create-issue:
+    runs-on: ubuntu-latest
+    needs: ci-status
+    if: failure() && github.event_name == 'push'
+    # Više permissions za kreiranje issue-a
+    permissions:
+      contents: read
+      issues: write
+    
+    steps:
+      - name: Create issue on CI failure
+        run: |
+          ISSUE_TITLE="CI Failed - $(date '+%Y-%m-%d')"
+          ISSUE_BODY=$(cat << 'EOF'
+          ## CI Failure Detected
+          
+          **Repository:** ${{ github.repository }}
+          **Workflow:** ${{ github.workflow }}
+          **Run:** ${{ github.run_id }}
+          
+          ### Problem
+          CI workflow failed. Please investigate.
+          
+          ### Akcija
+          1. Proverite logs
+          2. Fix-ujte problem
+          3. Push-ujte fix
+          
+          _Automatski kreirano_
+          EOF
+          
           curl -X POST -H "Authorization: token ${{ secrets.GITHUB_TOKEN }}" \
             -H "Accept: application/vnd.github.v3+json" \
             "https://api.github.com/repos/${{ github.repository }}/issues" \
-            -d '{
-              "title": "CI Failed - Auto-investigation",
-              "body": "CI workflow failed. Please check the logs.",
-              "labels": ["bug", "ci"]
-            }'
+            -d "{
+              \"title\": \"$ISSUE_TITLE\",
+              \"body\": \"$ISSUE_BODY\",
+              \"labels\": [\"bug\", \"ci\", \"auto-generated\"]
+            }"
+          
+          echo "✅ Issue created"
+
+  # ============================================================================
+  # SELF-HEALING (OPICIONO)
+  # ============================================================================
+  # Ovo je opciono - samo ako želiš auto-fix
+  # Pažljivo! Možeš lock-ovati sebi pristup!
+  # ============================================================================
+  # DEPRECATED - Previše riskantno za sada
+  # auto-fix:
+  #   runs-on: ubuntu-latest
+  #   if: false  # Disable-ovano za sada
