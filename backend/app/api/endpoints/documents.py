@@ -5,7 +5,7 @@ DOCUMENTS ENDPOINTS
 ================================================================================
 Endpoint-i za upravljanje dokumentima i njihovom obradom.
 
-Verzija: 1.2.0
+Verzija: 1.2.1 - Stop translation + resume
 ================================================================================
 """
 
@@ -15,6 +15,7 @@ from sqlalchemy import and_
 from typing import List, Optional
 import uuid
 import logging
+from datetime import datetime
 
 from app.db.session import get_db
 from app.db.models.file import File
@@ -812,6 +813,98 @@ async def resume_translation(
         "remaining_chunks": total_chunks - translated_chunks,
         "provider": provider or "auto",
         "message": f"Translation resume started from chunk {translated_chunks}",
+    }
+
+
+@router.delete("/{document_id}/translation")
+async def stop_translation(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ================================================================================
+    STOP TRANSLATION
+    ================================================================================
+    Zaustavlja aktivnu translaciju i cuva checkpoint.
+
+    Args:
+        document_id: ID dokumenta
+        current_user: Trenutni korisnik
+        db: Database session
+
+    Returns:
+        Status poruka
+    ================================================================================
+    """
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
+        )
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    # Get current progress before cancelling
+    translated_chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == document.id, Chunk.is_translated == 1)
+        .count()
+    )
+
+    total_chunks = db.query(Chunk).filter(Chunk.document_id == document.id).count()
+
+    # Mark document as partial (allows resume)
+    document.status = "partial"
+
+    # Save checkpoint for resume
+    document.file_metadata = document.file_metadata or {}
+    document.file_metadata["translation_checkpoint"] = {
+        "last_chunk_index": translated_chunks,
+        "last_translated_count": translated_chunks,
+        "stopped_by_user": True,
+        "stopped_at": datetime.utcnow().isoformat() + "Z",
+    }
+    document.file_metadata["translation_progress"] = {
+        "translated_chunks": translated_chunks,
+        "total_chunks": total_chunks,
+        "status": "stopped_by_user",
+        "last_activity_at": datetime.utcnow().isoformat() + "Z",
+    }
+    db.commit()
+
+    # Try to revoke any pending/active Celery tasks for this document
+    try:
+        from celery import Celery
+        from app.core.config import settings
+
+        # Create a new Celery instance to connect to Redis
+        celery = Celery("ai_learning_system")
+        celery.config_from_object(settings.CELERY_CONFIG)
+
+        # Revoke all tasks (terminate=True kills active ones too)
+        celery.control.revoke(terminate=True)
+        logger.info(f"Translation tasks revoked for document {document_id}")
+    except Exception as e:
+        logger.warning(f"Could not revoke Celery tasks: {e}")
+
+    return {
+        "document_id": document_id,
+        "status": "stopped",
+        "translated_chunks": translated_chunks,
+        "total_chunks": total_chunks,
+        "can_resume": translated_chunks < total_chunks,
+        "message": f"Translation stopped. {translated_chunks}/{total_chunks} chunks translated. Možete ponovo pokrenuti kad želite.",
     }
 
 
@@ -1665,6 +1758,195 @@ async def export_document_pdf(
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{document_id}/export/docx")
+async def export_document_docx(
+    document_id: str,
+    include_original: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generiše i preuzima Word dokument od prevedenih chunkova.
+    """
+    from fastapi.responses import Response
+    from app.services.docx_export_service import docx_export_service
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.user_id == str(current_user.id),
+        )
+        .first()
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Dokument nije pronađen")
+
+    chunks = (
+        db.query(Chunk)
+        .filter(
+            Chunk.document_id == document_id,
+            Chunk.translated_content.isnot(None),
+        )
+        .order_by(Chunk.sequence_number)
+        .all()
+    )
+
+    if not chunks:
+        raise HTTPException(
+            status_code=422,
+            detail="Dokument nema prevedenih segmenata. Pokrenite prevod pre eksporta.",
+        )
+
+    chunk_dicts = [
+        {"original_text": c.content, "translated_text": c.translated_content}
+        for c in chunks
+    ]
+
+    docx_bytes = docx_export_service.generate(
+        title=document.title,
+        chunks=chunk_dicts,
+        include_original=include_original,
+    )
+
+    safe_title = "".join(
+        c if c.isalnum() or c in "-_ " else "_" for c in document.title
+    )[:60]
+    filename = f"{safe_title}_prevod.docx"
+
+    return Response(
+        content=docx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{document_id}/export/xlsx")
+async def export_document_xlsx(
+    document_id: str,
+    include_original: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generiše i preuzima Excel dokument od prevedenih chunkova.
+    """
+    from fastapi.responses import Response
+    from app.services.xlsx_export_service import xlsx_export_service
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.user_id == str(current_user.id),
+        )
+        .first()
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Dokument nije pronađen")
+
+    chunks = (
+        db.query(Chunk)
+        .filter(
+            Chunk.document_id == document_id,
+            Chunk.translated_content.isnot(None),
+        )
+        .order_by(Chunk.sequence_number)
+        .all()
+    )
+
+    if not chunks:
+        raise HTTPException(
+            status_code=422,
+            detail="Dokument nema prevedenih segmenata. Pokrenite prevod pre eksporta.",
+        )
+
+    chunk_dicts = [
+        {"original_text": c.content, "translated_text": c.translated_content}
+        for c in chunks
+    ]
+
+    xlsx_bytes = xlsx_export_service.generate(
+        title=document.title,
+        chunks=chunk_dicts,
+        include_original=include_original,
+    )
+
+    safe_title = "".join(
+        c if c.isalnum() or c in "-_ " else "_" for c in document.title
+    )[:60]
+    filename = f"{safe_title}_prevod.xlsx"
+
+    return Response(
+        content=xlsx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@router.get("/{document_id}/export/pptx")
+async def export_document_pptx(
+    document_id: str,
+    include_original: bool = False,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Generiše i preuzima PowerPoint prezentaciju od prevedenih chunkova.
+    """
+    from fastapi.responses import Response
+    from app.services.pptx_export_service import pptx_export_service
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.user_id == str(current_user.id),
+        )
+        .first()
+    )
+    if not document:
+        raise HTTPException(status_code=404, detail="Dokument nije pronađen")
+
+    chunks = (
+        db.query(Chunk)
+        .filter(
+            Chunk.document_id == document_id,
+            Chunk.translated_content.isnot(None),
+        )
+        .order_by(Chunk.sequence_number)
+        .all()
+    )
+
+    if not chunks:
+        raise HTTPException(
+            status_code=422,
+            detail="Dokument nema prevedenih segmenata. Pokrenite prevod pre eksporta.",
+        )
+
+    chunk_dicts = [
+        {"original_text": c.content, "translated_text": c.translated_content}
+        for c in chunks
+    ]
+
+    pptx_bytes = pptx_export_service.generate(
+        title=document.title,
+        chunks=chunk_dicts,
+        include_original=include_original,
+    )
+
+    safe_title = "".join(
+        c if c.isalnum() or c in "-_ " else "_" for c in document.title
+    )[:60]
+    filename = f"{safe_title}_prevod.pptx"
+
+    return Response(
+        content=pptx_bytes,
+        media_type="application/vnd.openxmlformats-officedocument.presentationml.presentation",
         headers={"Content-Disposition": f'attachment; filename="{filename}"'},
     )
 

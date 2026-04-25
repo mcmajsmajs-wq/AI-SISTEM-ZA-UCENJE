@@ -3191,6 +3191,669 @@ async def generate_quiz(params: GenerateQuizInput) -> str:
 
 
 # =============================================================================
+# PDF DOWNLOAD SKILL (Anthropic Pattern)
+# =============================================================================
+
+
+class DownloadPdfInput(BaseModel):
+    """Input model for download_pdf_skill tool."""
+
+    document_id: str = Field(..., description="Document ID to download as PDF")
+    include_original: bool = Field(
+        default=False, description="Include original language content"
+    )
+    token: Optional[str] = Field(
+        default=None, description="Bearer token for authentication"
+    )
+
+
+@mcp.tool(
+    name="download_pdf_skill",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def download_pdf_skill(params: DownloadPdfInput) -> str:
+    """
+    Download document as formatted PDF file.
+
+    This skill creates a nicely formatted PDF from translated document chunks.
+    Uses the Anthropic skill pattern for consistent output.
+
+    The skill ensures:
+    - Proper headers and page numbers
+    - Table of contents
+    - Consistent formatting
+    - Professional layout
+
+    Args:
+        params (DownloadPdfInput):
+            - document_id (str): ID of the document to convert to PDF
+            - include_original (bool): Include original language (default: false)
+            - token (Optional[str]): Bearer token
+
+    Returns:
+        PDF file as base64 or download URL
+
+    Examples:
+        - "Download document as PDF"
+        - "Create PDF from translated document"
+        - "Export to PDF format"
+
+    Note:
+        Document must have translated chunks first.
+    """
+    headers = {"Content-Type": "application/json"}
+    if params.token:
+        headers["Authorization"] = f"Bearer {params.token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            # First get the export endpoint to get PDF
+            response = await client.get(
+                f"{API_BASE_URL}/api/v1/documents/{params.document_id}/export/pdf",
+                headers=headers,
+                params={"include_original": params.include_original},
+            )
+
+            if response.status_code == 200:
+                # Return PDF as base64 or URL
+                content_type = response.headers.get("content-type", "")
+                if "pdf" in content_type:
+                    import base64
+
+                    b64 = base64.b64encode(response.content).decode()
+                    return json.dumps(
+                        {
+                            "status": "ok",
+                            "format": "base64",
+                            "content_type": "application/pdf",
+                            "data": b64[:1000] + "...",  # Truncate for display
+                            "size_bytes": len(response.content),
+                            "message": "PDF generated successfully. Use data field for full content.",
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+            elif response.status_code == 422:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": "Document has no translated chunks. Run translation first.",
+                        "code": "NO_TRANSLATION",
+                    },
+                    indent=2,
+                )
+            else:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": f"HTTP {response.status_code}: {response.text[:200]}",
+                    },
+                    indent=2,
+                )
+
+    except Exception as e:
+        return json.dumps({"status": "error", "message": str(e)}, indent=2)
+
+
+@mcp.tool(
+    name="get_pdf_skill_info",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def get_pdf_skill_info() -> str:
+    """
+    Get information about PDF export skill.
+
+    Returns:
+        JSON with skill description, parameters, and usage examples
+    """
+    return json.dumps(
+        {
+            "skill": "pdf_export",
+            "name": "PDF Export Skill",
+            "description": "Convert translated documents to professionally formatted PDF",
+            "version": "1.0.0",
+            "parameters": {
+                "document_id": {
+                    "type": "string",
+                    "required": True,
+                    "description": "UUID of the document",
+                },
+                "include_original": {
+                    "type": "boolean",
+                    "required": False,
+                    "default": False,
+                    "description": "Include original language content",
+                },
+            },
+            "features": [
+                "Proper headers and footers",
+                "Page numbers",
+                "Table of contents",
+                "Consistent typography",
+                "Professional layout",
+                "Both original and translated content (optional)",
+            ],
+            "requirements": [
+                "Document must have translated chunks",
+                "Authentication token required",
+            ],
+            "example": {
+                "tool": "download_pdf_skill",
+                "params": {
+                    "document_id": "12345678-1234-1234-1234-123456789012",
+                    "include_original": True,
+                },
+            },
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+# =============================================================================
+# DOCX DOWNLOAD SKILL (Anthropic Pattern)
+# =============================================================================
+
+
+class DownloadDocxInput(BaseModel):
+    """Input model for download_docx_skill tool."""
+
+    document_id: str = Field(..., description="Document ID to download as DOCX")
+    include_original: bool = Field(
+        default=False, description="Include original language content"
+    )
+    token: Optional[str] = Field(
+        default=None, description="Bearer token for authentication"
+    )
+
+
+@mcp.tool(
+    name="download_docx_skill",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def download_docx_skill(params: DownloadDocxInput) -> str:
+    """
+    Download document as formatted DOCX (Word) file.
+
+    This skill creates a nicely formatted Word document from translated document chunks.
+    Uses the Anthropic skill pattern for consistent output.
+
+    The skill ensures:
+    - Proper heading styles (Heading 1, 2, 3)
+    - Table of contents
+    - Consistent formatting
+    - Page numbers
+    - Professional layout
+
+    Args:
+        params (DownloadDocxInput):
+            - document_id (str): ID of the document to convert to DOCX
+            - include_original (bool): Include original language (default: false)
+            - token (Optional[str]): Bearer token
+
+    Returns:
+        DOCX file as base64 or download URL
+
+    Examples:
+        - "Download document as Word"
+        - "Create DOCX from translated document"
+        - "Export to Word format"
+
+    Note:
+        Document must have translated chunks first.
+    """
+    headers = {"Content-Type": "application/json"}
+    if params.token:
+        headers["Authorization"] = f"Bearer {params.token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.get(
+                f"{API_BASE_URL}/api/v1/documents/{params.document_id}/export/docx",
+                headers=headers,
+                params={"include_original": params.include_original},
+            )
+
+            if response.status_code == 200:
+                content_type = response.headers.get("content-type", "")
+                if "word" in content_type or "officedocument" in content_type:
+                    import base64
+
+                    b64 = base64.b64encode(response.content).decode()
+                    return json.dumps(
+                        {
+                            "status": "ok",
+                            "format": "base64",
+                            "content_type": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                            "data": b64[:1000] + "...",
+                            "size_bytes": len(response.content),
+                            "message": "DOCX generated successfully.",
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+            elif response.status_code == 422:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": "Document has no translated chunks. Run translation first.",
+                        "code": "NO_TRANSLATION",
+                    },
+                    indent=2,
+                )
+            else:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": f"HTTP {response.status_code}: {response.text[:200]}",
+                    },
+                    indent=2,
+                )
+
+    except Exception as e:
+        return json.dumps({"status": "error", "message": str(e)}, indent=2)
+
+
+@mcp.tool(
+    name="get_docx_skill_info",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def get_docx_skill_info() -> str:
+    """
+    Get information about DOCX export skill.
+    """
+    return json.dumps(
+        {
+            "skill": "docx_export",
+            "name": "DOCX Export Skill",
+            "description": "Convert translated documents to professionally formatted Word documents",
+            "version": "1.0.0",
+            "parameters": {
+                "document_id": {
+                    "type": "string",
+                    "required": True,
+                    "description": "UUID of the document",
+                },
+                "include_original": {
+                    "type": "boolean",
+                    "required": False,
+                    "default": False,
+                    "description": "Include original language content",
+                },
+            },
+            "features": [
+                "Heading styles (H1, H2, H3)",
+                "Table of contents",
+                "Page numbers",
+                "Consistent typography",
+                "Professional layout",
+                "Both original and translated content (optional)",
+            ],
+            "requirements": [
+                "Document must have translated chunks",
+                "Authentication token required",
+            ],
+            "example": {
+                "tool": "download_docx_skill",
+                "params": {
+                    "document_id": "12345678-1234-1234-1234-123456789012",
+                    "include_original": True,
+                },
+            },
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+# =============================================================================
+# XLSX DOWNLOAD SKILL (Anthropic Pattern)
+# =============================================================================
+
+
+class DownloadXlsxInput(BaseModel):
+    """Input model for download_xlsx_skill tool."""
+
+    document_id: str = Field(..., description="Document ID to download as XLSX")
+    include_original: bool = Field(
+        default=False, description="Include original language content"
+    )
+    token: Optional[str] = Field(
+        default=None, description="Bearer token for authentication"
+    )
+
+
+@mcp.tool(
+    name="download_xlsx_skill",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def download_xlsx_skill(params: DownloadXlsxInput) -> str:
+    """
+    Download document as formatted XLSX (Excel) file.
+
+    This skill creates a nicely formatted Excel spreadsheet from translated document chunks.
+    Uses the Anthropic skill pattern for consistent output.
+
+    The skill ensures:
+    - Proper column headers
+    - Data in table format
+    - Consistent formatting
+    - Professional layout
+
+    Args:
+        params (DownloadXlsxInput):
+            - document_id (str): ID of the document to convert to XLSX
+            - include_original (bool): Include original language (default: false)
+            - token (Optional[str]): Bearer token
+
+    Returns:
+        XLSX file as base64 or download URL
+
+    Examples:
+        - "Download document as Excel"
+        - "Create XLSX from translated document"
+        - "Export to Excel format"
+
+    Note:
+        Document must have translated chunks first.
+    """
+    headers = {"Content-Type": "application/json"}
+    if params.token:
+        headers["Authorization"] = f"Bearer {params.token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.get(
+                f"{API_BASE_URL}/api/v1/documents/{params.document_id}/export/xlsx",
+                headers=headers,
+                params={"include_original": params.include_original},
+            )
+
+            if response.status_code == 200:
+                content_type = response.headers.get("content-type", "")
+                if "excel" in content_type or "spreadsheet" in content_type:
+                    import base64
+
+                    b64 = base64.b64encode(response.content).decode()
+                    return json.dumps(
+                        {
+                            "status": "ok",
+                            "format": "base64",
+                            "content_type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                            "data": b64[:1000] + "...",
+                            "size_bytes": len(response.content),
+                            "message": "XLSX generated successfully.",
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+            elif response.status_code == 422:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": "Document has no translated chunks. Run translation first.",
+                        "code": "NO_TRANSLATION",
+                    },
+                    indent=2,
+                )
+            else:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": f"HTTP {response.status_code}: {response.text[:200]}",
+                    },
+                    indent=2,
+                )
+
+    except Exception as e:
+        return json.dumps({"status": "error", "message": str(e)}, indent=2)
+
+
+@mcp.tool(
+    name="get_xlsx_skill_info",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def get_xlsx_skill_info() -> str:
+    """
+    Get information about XLSX export skill.
+    """
+    return json.dumps(
+        {
+            "skill": "xlsx_export",
+            "name": "XLSX Export Skill",
+            "description": "Convert translated documents to formatted Excel spreadsheets",
+            "version": "1.0.0",
+            "parameters": {
+                "document_id": {
+                    "type": "string",
+                    "required": True,
+                    "description": "UUID of the document",
+                },
+                "include_original": {
+                    "type": "boolean",
+                    "required": False,
+                    "default": False,
+                    "description": "Include original language content",
+                },
+            },
+            "features": [
+                "Table format",
+                "Column headers",
+                "Consistent formatting",
+                "Professional layout",
+            ],
+            "requirements": [
+                "Document must have translated chunks",
+                "Authentication token required",
+            ],
+            "example": {
+                "tool": "download_xlsx_skill",
+                "params": {
+                    "document_id": "12345678-1234-1234-1234-123456789012",
+                    "include_original": True,
+                },
+            },
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+# =============================================================================
+# PPTX DOWNLOAD SKILL (Anthropic Pattern)
+# =============================================================================
+
+
+class DownloadPptxInput(BaseModel):
+    """Input model for download_pptx_skill tool."""
+
+    document_id: str = Field(..., description="Document ID to download as PPTX")
+    include_original: bool = Field(
+        default=False, description="Include original language content"
+    )
+    token: Optional[str] = Field(
+        default=None, description="Bearer token for authentication"
+    )
+
+
+@mcp.tool(
+    name="download_pptx_skill",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def download_pptx_skill(params: DownloadPptxInput) -> str:
+    """
+    Download document as formatted PPTX (PowerPoint) file.
+
+    This skill creates a nicely formatted PowerPoint presentation from translated document chunks.
+    Uses the Anthropic skill pattern for consistent output.
+
+    The skill ensures:
+    - One slide per chunk/section
+    - Proper heading styles
+    - Consistent formatting
+    - Professional layout
+    - Notes for presenter
+
+    Args:
+        params (DownloadPptxInput):
+            - document_id (str): ID of the document to convert to PPTX
+            - include_original (bool): Include original language (default: false)
+            - token (Optional[str]): Bearer token
+
+    Returns:
+        PPTX file as base64 or download URL
+
+    Examples:
+        - "Download document as PowerPoint"
+        - "Create PPTX from translated document"
+        - "Export to presentation format"
+
+    Note:
+        Document must have translated chunks first.
+    """
+    headers = {"Content-Type": "application/json"}
+    if params.token:
+        headers["Authorization"] = f"Bearer {params.token}"
+
+    try:
+        async with httpx.AsyncClient(timeout=120.0) as client:
+            response = await client.get(
+                f"{API_BASE_URL}/api/v1/documents/{params.document_id}/export/pptx",
+                headers=headers,
+                params={"include_original": params.include_original},
+            )
+
+            if response.status_code == 200:
+                content_type = response.headers.get("content-type", "")
+                if "powerpoint" in content_type or "presentation" in content_type:
+                    import base64
+
+                    b64 = base64.b64encode(response.content).decode()
+                    return json.dumps(
+                        {
+                            "status": "ok",
+                            "format": "base64",
+                            "content_type": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+                            "data": b64[:1000] + "...",
+                            "size_bytes": len(response.content),
+                            "message": "PPTX generated successfully.",
+                        },
+                        indent=2,
+                        ensure_ascii=False,
+                    )
+            elif response.status_code == 422:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": "Document has no translated chunks. Run translation first.",
+                        "code": "NO_TRANSLATION",
+                    },
+                    indent=2,
+                )
+            else:
+                return json.dumps(
+                    {
+                        "status": "error",
+                        "message": f"HTTP {response.status_code}: {response.text[:200]}",
+                    },
+                    indent=2,
+                )
+
+    except Exception as e:
+        return json.dumps({"status": "error", "message": str(e)}, indent=2)
+
+
+@mcp.tool(
+    name="get_pptx_skill_info",
+    annotations={
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False,
+    },
+)
+async def get_pptx_skill_info() -> str:
+    """
+    Get information about PPTX export skill.
+    """
+    return json.dumps(
+        {
+            "skill": "pptx_export",
+            "name": "PPTX Export Skill",
+            "description": "Convert translated documents to formatted PowerPoint presentations",
+            "version": "1.0.0",
+            "parameters": {
+                "document_id": {
+                    "type": "string",
+                    "required": True,
+                    "description": "UUID of the document",
+                },
+                "include_original": {
+                    "type": "boolean",
+                    "required": False,
+                    "default": False,
+                    "description": "Include original language content",
+                },
+            },
+            "features": [
+                "One slide per section",
+                "Heading styles",
+                "Consistent formatting",
+                "Professional layout",
+            ],
+            "requirements": [
+                "Document must have translated chunks",
+                "Authentication token required",
+            ],
+            "example": {
+                "tool": "download_pptx_skill",
+                "params": {
+                    "document_id": "12345678-1234-1234-1234-123456789012",
+                    "include_original": True,
+                },
+            },
+        },
+        indent=2,
+        ensure_ascii=False,
+    )
+
+
+# =============================================================================
 # MAIN ENTRY POINT
 # =============================================================================
 
@@ -3198,6 +3861,6 @@ if __name__ == "__main__":
     import sys
 
     if len(sys.argv) > 1 and sys.argv[1] == "--version":
-        print("ai_learning_mcp v2.0.0 (FastMCP)")
+        print("ai_learning_mcp v2.1.0 (FastMCP)")
     else:
         mcp.run()

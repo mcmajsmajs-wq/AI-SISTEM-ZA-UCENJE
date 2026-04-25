@@ -6,9 +6,6 @@ Unit and integration tests for backup/restore functionality
 import pytest
 import os
 import subprocess
-from datetime import datetime, timedelta
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
 
 
 # Test configuration
@@ -252,13 +249,13 @@ class TestBackupCronSchedule:
 """
 
         # Check cron format
-        lines = [
-            l
-            for l in cron_content.strip().split("\n")
-            if l.strip() and not l.strip().startswith("#")
+        cron_lines = [
+            line
+            for line in cron_content.strip().split("\n")
+            if line.strip() and not line.strip().startswith("#")
         ]
 
-        for line in lines:
+        for line in cron_lines:
             parts = line.split()
             # Should have: minute hour day month day-of-week command
             assert len(parts) >= 5, f"Invalid cron line: {line}"
