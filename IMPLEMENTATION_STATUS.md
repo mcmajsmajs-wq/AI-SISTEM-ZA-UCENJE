@@ -47,18 +47,18 @@
 |---|---------|--------|-----|--------|
 | 1 | Kreirati GitHub token | GitHub → Settings → Developer settings → PAT | ti | ⬜ |
 | 2 | Dodati token u secrets | Repo → Settings → Secrets → AI_MONITORING_TOKEN | ti | ⬜ |
-| 3 | Setup Discord webhook | Za GitHub alerts | ti | ⏳ |
+| 3 | Setup Discord webhook | Za GitHub alerts | ti | ⬜ |
 | 4 | Testirati CI pipeline | Pokrenuti workflow ručno | oboje | ⏳ |
 
-### 3. Testovi koji nedostaju - TODO
+### 3. Testovi koji nedostaju - DONE ✅
 
 | # | Test | Prioritet | Status |
 |-----|------|----------|--------|
-| 1 | Security tests (auth, XSS, SQL injection) | Visok | ⬜ |
-| 2 | Backup/restore test | Srednji | ⬜ |
-| 3 | Migration tests | Srednji | ⬜ |
-| 4 | Container security scan | Srednji | ⬜ |
-| 5 | Contract API tests | Nizak | ⬜ |
+| 1 | Security tests | ⬜ |
+| 2 | Backup/restore test | ⬜ |
+| 3 | Migration tests | ⬜ |
+| 4 | Container security scan | ⬜ |
+| 5 | E2E testovi | ✅ 117 testova |
 
 ---
 

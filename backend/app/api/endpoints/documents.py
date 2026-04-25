@@ -650,6 +650,171 @@ async def translate_document(
     }
 
 
+@router.get("/{document_id}/translation/progress")
+async def get_translation_progress(
+    document_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ================================================================================
+    GET TRANSLATION PROGRESS
+    ================================================================================
+    Vraća progress translacije u realnom vremenu.
+    Ovo uključuje checkpoint informacije za resume.
+
+    Args:
+        document_id: ID dokumenta
+        current_user: Trenutni korisnik
+        db: Database session
+
+    Returns:
+        Progress object sa translated/total chunk-ova i checkpoint
+    ================================================================================
+    """
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
+        )
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    # Calculate progress
+    total_chunks = db.query(Chunk).filter(Chunk.document_id == document.id).count()
+
+    translated_chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == document.id, Chunk.is_translated == 1)
+        .count()
+    )
+
+    percent = (
+        round((translated_chunks / total_chunks * 100), 1) if total_chunks > 0 else 0
+    )
+
+    # Get checkpoint data
+    checkpoint = (
+        document.file_metadata.get("translation_checkpoint", {})
+        if document.file_metadata
+        else {}
+    )
+
+    return {
+        "document_id": document_id,
+        "status": document.status,
+        "translated_chunks": translated_chunks,
+        "total_chunks": total_chunks,
+        "percentage": percent,
+        "can_resume": document.status == "partial" and translated_chunks < total_chunks,
+        "checkpoint": {
+            "last_chunk_index": checkpoint.get("last_chunk_index", 0),
+            "last_translated_count": checkpoint.get(
+                "last_translated_count", translated_chunks
+            ),
+            "last_updated": checkpoint.get("last_updated", None),
+        }
+        if checkpoint
+        else None,
+        "progress": document.file_metadata.get("translation_progress", {})
+        if document.file_metadata
+        else None,
+    }
+
+
+@router.post("/{document_id}/translation/resume")
+async def resume_translation(
+    document_id: str,
+    provider: Optional[str] = None,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    ================================================================================
+    RESUME TRANSLATION
+    ================================================================================
+    Nastavlja prekinutu translaciju od checkpoint-a.
+
+    Args:
+        document_id: ID dokumenta
+        provider: Provajder za prevod (optional)
+        current_user: Trenutni korisnik
+        db: Database session
+
+    Returns:
+        Task ID za praćenje
+    ================================================================================
+    """
+    try:
+        doc_uuid = uuid.UUID(document_id)
+    except ValueError:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid document ID format"
+        )
+
+    document = (
+        db.query(Document)
+        .filter(and_(Document.id == doc_uuid, Document.user_id == current_user.id))
+        .first()
+    )
+
+    if not document:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Document not found"
+        )
+
+    # Check if document is in valid state for resume
+    if document.status not in ["completed", "translating", "partial"]:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Document must be processed first",
+        )
+
+    # Check translation progress
+    translated_chunks = (
+        db.query(Chunk)
+        .filter(Chunk.document_id == document.id, Chunk.is_translated == 1)
+        .count()
+    )
+
+    total_chunks = db.query(Chunk).filter(Chunk.document_id == document.id).count()
+
+    if translated_chunks >= total_chunks:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Svi chunk-ovi su vec prevedeni",
+        )
+
+    # Clear old checkpoint to force fresh start
+    if document.file_metadata:
+        document.file_metadata.pop("translation_checkpoint", None)
+
+    # Start translation task (will resume from checkpoint)
+    from app.workers.tasks import translate_document_task
+
+    task = translate_document_task.delay(str(document.id), provider)
+
+    return {
+        "document_id": document_id,
+        "task_id": task.id,
+        "status": "resuming",
+        "translated_chunks": translated_chunks,
+        "remaining_chunks": total_chunks - translated_chunks,
+        "provider": provider or "auto",
+        "message": f"Translation resume started from chunk {translated_chunks}",
+    }
+
+
 @router.get("/translation/providers")
 async def get_translation_providers():
     """

@@ -143,6 +143,8 @@ services:
       - CLOUD_STORAGE_BUCKET_NAME=ai-learning-uploads
       - CLOUD_STORAGE_USE_SSL=false
       - MINIO_PUBLIC_URL=http://localhost:8090/minio
+      - CELERY_TASK_TIME_LIMIT=7200
+      - CELERY_TASK_SOFT_TIME_LIMIT=6800
     volumes:
       - ../logs:/app/logs
       - uploads-data:/app/uploads
