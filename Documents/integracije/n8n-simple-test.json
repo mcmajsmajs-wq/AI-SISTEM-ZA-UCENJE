@@ -1,0 +1,34 @@
+{
+  "name": "MCP Test",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mcp/test",
+        "responseMode": "responseNode"
+      },
+      "id": "webhook-test",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [250, 300]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsCode": "const body = $input.item.json.body || $input.item.json;\n\nreturn [{ json: {\n  success: true,\n  message: 'Webhook radi!',\n  command: body.command || 'N/A',\n  timestamp: new Date().toISOString()\n} }];"
+      },
+      "id": "respond",
+      "name": "Respond",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [500, 300]
+    }
+  ],
+  "connections": {
+    "Webhook": {
+      "main": [[{ "node": "Respond", "type": "main", "index": 0 }]]
+    }
+  },
+  "settings": {}
+}

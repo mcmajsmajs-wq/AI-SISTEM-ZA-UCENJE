@@ -1,0 +1,256 @@
+---
+# Ansible Playbook: OneView Firmware Update
+# Description: Updates firmware on OneView server hardware
+# Author: MCP_HpOneView Extended
+# Version: 1.0
+
+- name: "OneView Firmware Update"
+  hosts: oneview_servers
+  gather_facts: no
+  serial: 1  # Process one server at a time
+  vars:
+    execution_timestamp: "{{ ansible_date_time.iso8601 }}"
+    server_name: "{{ server_name | required }}"
+    spp_version: "{{ spp_version | required }}"
+    update_mode: "{{ update_mode | default('FirmwareOnly') }}"
+    force_update: "{{ force_update | default(false) }}"
+    
+  pre_tasks:
+    - name: "Validate firmware update parameters"
+      assert:
+        that:
+          - server_name is defined
+          - spp_version is defined
+          - update_mode in ['FirmwareOnly', 'FirmwareAndDrivers']
+        fail_msg: "Required parameters missing for firmware update"
+        success_msg: "Firmware update parameters validated"
+    
+    - name: "Display firmware update information"
+      debug:
+        msg:
+          - "=========================================="
+          - "  ONEVIEW FIRMWARE UPDATE"
+          - "  Server: {{ server_name }}"
+          - "  SPP Version: {{ spp_version }}"
+          - "  Update Mode: {{ update_mode }}"
+          - "  Force Update: {{ force_update }}"
+          - "  Timestamp: {{ execution_timestamp }}"
+          - "=========================================="
+
+  tasks:
+    - name: "Initialize OneView connection"
+      uri:
+        url: "https://{{ oneview_hostname }}/rest/login-sessions"
+        method: POST
+        body_format: json
+        body:
+          userName: "{{ oneview_username }}"
+          password: "{{ oneview_password }}"
+        validate_certs: false
+        status_code: [200, 201]
+      register: oneview_session
+      
+    - name: "Extract session token"
+      set_fact:
+        oneview_session_token: "{{ oneview_session.json.sessionID }}"
+    
+    - name: "Get target server information"
+      uri:
+        url: "https://{{ oneview_hostname }}/rest/server-hardware"
+        method: GET
+        headers:
+          Auth: "{{ oneview_session_token }}"
+          X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+        validate_certs: false
+      register: all_servers
+    
+    - name: "Find target server"
+      set_fact:
+        target_server: "{{ all_servers.json.members | selectattr('name', 'equal', server_name) | first }}"
+      failed_when: target_server is not defined
+    
+    - name: "Display target server information"
+      debug:
+        msg:
+          - "Target Server: {{ target_server.name }}"
+          - "Model: {{ target_server.model }}"
+          - "Serial: {{ target_server.serialNumber }}"
+          - "Current Firmware: {{ target_server.firmware }}"
+          - "State: {{ target_server.state }}"
+    
+    - name: "Check if server is in appropriate state for firmware update"
+      assert:
+        that:
+          - target_server.state == "Configured"
+          - target_server.powerState == "On"
+        fail_msg: "Server is not in appropriate state for firmware update"
+        success_msg: "Server is ready for firmware update"
+    
+    - name: "Get available firmware bundles"
+      uri:
+        url: "https://{{ oneview_hostname }}/rest/firmware-bundles"
+        method: GET
+        headers:
+          Auth: "{{ oneview_session_token }}"
+          X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+        validate_certs: false
+      register: firmware_bundles
+    
+    - name: "Find target SPP bundle"
+      set_fact:
+        target_spp: "{{ firmware_bundles.json.members | selectattr('name', 'search', spp_version) | first }}"
+      failed_when: target_spp is not defined
+    
+    - name: "Display SPP bundle information"
+      debug:
+        msg:
+          - "Target SPP: {{ target_spp.name }}"
+          - "Version: {{ target_spp.version }}"
+          - "Size: {{ target_spp.size | human_readable_size }}"
+          - "Status: {{ target_spp.status }}"
+    
+    - name: "Check if firmware is already up to date"
+      uri:
+        url: "{{ target_server.uri }}/firmware"
+        method: GET
+        headers:
+          Auth: "{{ oneview_session_token }}"
+          X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+        validate_certs: false
+      register: current_firmware
+    
+    - name: "Compare firmware versions"
+      set_fact:
+        firmware_update_needed: "{{ current_firmware.json.firmwareVersion != target_spp.version }}"
+    
+    - name: "Skip firmware update if already up to date"
+      debug:
+        msg: "Firmware is already up to date. Skipping update."
+      when: not firmware_update_needed and not force_update
+    
+    - name: "Proceed with firmware update"
+      block:
+        - name: "Create firmware update task"
+          uri:
+            url: "{{ target_server.uri }}/firmware"
+            method: PUT
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            body_format: json
+            body:
+              firmware:
+                bundleUri: "{{ target_spp.uri }}"
+                updateMode: "{{ update_mode }}"
+                forceUpdate: "{{ force_update | lower }}"
+            validate_certs: false
+            status_code: [202, 204]
+          register: firmware_update_result
+        
+        - name: "Wait for firmware update to complete"
+          uri:
+            url: "{{ firmware_update_result.json.uri }}"
+            method: GET
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            validate_certs: false
+          register: update_status
+          until: update_status.json.taskState in ["Completed", "Error", "Warning"]
+          retries: 60
+          delay: 30
+        
+        - name: "Check firmware update result"
+          fail_msg: "Firmware update failed"
+          assert:
+            that:
+              - update_status.json.taskState == "Completed"
+          success_msg: "Firmware update completed successfully"
+        
+        - name: "Display firmware update completion"
+          debug:
+            msg:
+              - "Firmware update completed successfully"
+              - "Server: {{ target_server.name }}"
+              - "New Firmware: {{ target_spp.version }}"
+              - "Update Mode: {{ update_mode }}"
+              - "Task State: {{ update_status.json.taskState }}"
+              - "Message: {{ update_status.json.taskStatus }}"
+        
+        - name: "Verify firmware update"
+          uri:
+            url: "{{ target_server.uri }}/firmware"
+            method: GET
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            validate_certs: false
+          register: updated_firmware
+        
+        - name: "Display updated firmware information"
+          debug:
+            msg:
+              - "Updated Firmware: {{ updated_firmware.json.firmwareVersion }}"
+              - "Bundle Name: {{ updated_firmware.json.firmware.bundleName }}"
+              - "Update Status: {{ updated_firmware.json.firmware.updateStatus }}"
+              - "Last Updated: {{ updated_firmware.json.firmware.lastUpdated }}"
+        
+      when: firmware_update_needed or force_update
+    
+    - name: "Logout from OneView"
+      uri:
+        url: "https://{{ oneview_hostname }}/rest/login-sessions/{{ oneview_session_token }}"
+        method: DELETE
+        headers:
+          Auth: "{{ oneview_session_token }}"
+          X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+        validate_certs: false
+        status_code: [204, 404]
+      always: true
+      
+    - name: "Log firmware update completion"
+      debug:
+        msg:
+          - "=========================================="
+          - "  FIRMWARE UPDATE COMPLETED"
+          - "  Server: {{ server_name }}"
+          - "  SPP Version: {{ spp_version }}"
+          - "  Update Mode: {{ update_mode }}"
+          - "  Status: {{ 'Updated' if firmware_update_needed or force_update else 'Up to date' }}"
+          - "  Time: {{ ansible_date_time.time }}"
+          - "=========================================="
+
+  post_tasks:
+    - name: "Create firmware update report"
+      copy:
+        content: |
+          Firmware Update Report
+          ======================
+          Timestamp: {{ execution_timestamp }}
+          Server: {{ server_name }}
+          SPP Version: {{ spp_version }}
+          Update Mode: {{ update_mode }}
+          Force Update: {{ force_update }}
+          
+          Server Information:
+          - Name: {{ target_server.name }}
+          - Model: {{ target_server.model }}
+          - Serial: {{ target_server.serialNumber }}
+          
+          Firmware Information:
+          - Target SPP: {{ target_spp.name }}
+          - Target Version: {{ target_spp.version }}
+          - Previous Version: {{ current_firmware.json.firmwareVersion }}
+          - Updated Version: {{ updated_firmware.json.firmwareVersion if (firmware_update_needed or force_update) else current_firmware.json.firmwareVersion }}
+          - Update Status: {{ updated_firmware.json.firmware.updateStatus if (firmware_update_needed or force_update) else 'No update needed' }}
+          
+          Execution Status: {{ 'Success' if ansible_failed is not defined else 'Failed' }}
+          
+          {% if ansible_failed is defined %}
+          Failed Tasks:
+          {% for task in ansible_failed %}
+          - {{ task.name }}: {{ task.msg }}
+          {% endfor %}
+          {% endif %}
+        dest: "reports/firmware_update_{{ server_name }}_{{ ansible_date_time.date }}.txt"
+      delegate_to: localhost

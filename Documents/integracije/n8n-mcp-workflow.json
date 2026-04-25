@@ -1,0 +1,212 @@
+{
+  "name": "MCP Server Integration Hub",
+  "nodes": [
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mcp/execute",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-http",
+      "name": "1. HTTP Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 400]
+    },
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "field": "cron",
+              "hoursInterval": 1,
+              "minutesInterval": 30
+            }
+          ]
+        }
+      },
+      "id": "cron-trigger",
+      "name": "2. Cron Health Check",
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1,
+      "position": [100, 700]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mcp/ssh",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-ssh",
+      "name": "3. SSH Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 1000]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mcp/ssh-remote",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-ssh-remote",
+      "name": "4. SSH Remote Trigger",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [100, 1300]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsCode": "// Parse incoming HTTP request\nconst body = $input.item.json.body || $input.item.json;\n\nreturn [{ json: {\n  server: body.server || 'ai-learning',\n  tool: body.tool || 'health_check',\n  arguments: body.arguments || {},\n  trigger: 'http',\n  executionId: 'mcp-' + Date.now().toString(36),\n  startTime: new Date().toISOString()\n} }];"
+      },
+      "id": "parse-http",
+      "name": "Parse HTTP Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 400]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsCode": "// Parse SSH request - SSH connection to localhost:2222\nconst body = $input.item.json.body || $input.item.json;\n\nreturn [{ json: {\n  ssh: {\n    host: 'localhost',\n    port: 2222,\n    username: 'dju',\n    password: 'S@alakazu17'\n  },\n  command: body.command,\n  trigger: 'ssh',\n  executionId: 'ssh-' + Date.now().toString(36),\n  startTime: new Date().toISOString()\n} }];"
+      },
+      "id": "parse-ssh",
+      "name": "Parse SSH Request",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 1000]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsCode": "// Parse SSH Remote request - HTTP -> SSH -> Remote MCP\nconst body = $input.item.json.body || $input.item.json;\n\nconst server = body.server || 'ai-learning';\nconst tool = body.tool || 'health_check';\nconst args = body.arguments || {};\n\n// Server paths\nconst serverPaths = {\n  'ai-learning': 'cd /home/dju/mojAiProjekat/New\\ folder/mcp-server && python -m ai_learning_mcp',\n  'moj-ubuntu': 'cd /home/dju/mcp-servers/moj-ubuntu-server && node index.js',\n  'hpe-oneview': 'cd /home/dju/moji\\ projekti/MCP_HpOneView && python main.py'\n};\n\nconst mcpCmd = serverPaths[server] || serverPaths['ai-learning'];\n\n// Build JSON-RPC request\nconst jsonRpcRequest = JSON.stringify({\n  jsonrpc: '2.0',\n  id: 1,\n  method: 'tools/call',\n  params: {\n    name: tool,\n    arguments: args\n  }\n});\n\nreturn [{ json: {\n  ssh: {\n    host: 'localhost',\n    port: 2222,\n    username: 'dju',\n    password: 'S@alakazu17'\n  },\n  command: `printf '%s' '${jsonRpcRequest}' | ${mcpCmd}`,\n  server,\n  tool,\n  arguments: args,\n  trigger: 'ssh-remote',\n  executionId: 'mcp-' + Date.now().toString(36),\n  startTime: new Date().toISOString()\n} }];"
+      },
+      "id": "parse-ssh-remote",
+      "name": "Parse SSH Remote",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 1300]
+    },
+    {
+      "parameters": {
+        "mode": "raw",
+        "jsCode": "// Prepare health check commands for cron\nconst healthCommands = [\n  { server: 'ai-learning', tool: 'health_check', trigger: 'cron', command: 'cd /home/dju/mojAiProjekat/New folder/mcp-server && printf \\'{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"health_check\",\"arguments\":{}}}\\' | python -m ai_learning_mcp' },\n  { server: 'moj-ubuntu', tool: 'proveri_sistem', trigger: 'cron', command: 'cd /home/dju/mcp-servers/moj-ubuntu-server && printf \\'{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"proveri_sistem\",\"arguments\":{}}}\\' | node index.js' },\n  { server: 'hpe-oneview', tool: 'proveri_servere', trigger: 'cron', command: 'cd /home/dju/moji\\ projekti/MCP_HpOneView && printf \\'{\"jsonrpc\":\"2.0\",\"id\":1,\"method\":\"tools/call\",\"params\":{\"name\":\"proveri_servere\",\"arguments\":{}}}\\' | python main.py' }\n];\n\nreturn healthCommands.map((item, idx) => ({\n  json: {\n    ...item,\n    ssh: {\n      host: 'localhost',\n      port: 2222,\n      username: 'dju',\n      password: 'S@alakazu17'\n    },\n    executionId: 'cron-' + Date.now().toString(36) + '-' + idx,\n    startTime: new Date().toISOString()\n  }\n}));"
+      },
+      "id": "prep-cron",
+      "name": "Prepare Health Check",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [400, 700]
+    },
+    {
+      "parameters": {
+        "mode": "define",
+        "nodeCredentialType": "sshPassword",
+        "host": "={{ $json.ssh.host }}",
+        "port": "={{ $json.ssh.port }}",
+        "username": "={{ $json.ssh.username }}",
+        "password": "={{ $json.ssh.password }}",
+        "command": "={{ $json.command }}",
+        "options": {
+          "timeout": 120000
+        }
+      },
+      "id": "ssh-execute",
+      "name": "SSH Execute",
+      "type": "n8n-nodes-base.ssh",
+      "typeVersion": 1,
+      "position": [850, 600]
+    },
+    {
+      "parameters": {
+        "mode": "runOncePerItem",
+        "jsCode": "// Format response as TEXT REPORT\nconst item = $input.item.json;\nconst endTime = new Date();\nconst startTime = new Date(item.startTime || Date.now());\nconst executionTime = endTime - startTime;\n\nconst lines = [];\nlines.push('╔══════════════════════════════════════════════════════════════════════╗');\nlines.push('║                  MCP COMMAND EXECUTION REPORT                       ║');\nlines.push('╚══════════════════════════════════════════════════════════════════════╝');\nlines.push('');\nlines.push(`  Execution ID : ${item.executionId || 'N/A'}`);\nlines.push(`  Timestamp   : ${endTime.toLocaleString()}`);\nlines.push(`  Server      : ${item.server || 'local'}`);\nlines.push(`  Tool        : ${item.tool || 'custom'}`);\nlines.push(`  Status      : ${item.error ? '❌ FAILED' : '✅ SUCCESS'}`);\nlines.push(`  Duration    : ${executionTime}ms`);\nlines.push('');\nlines.push('────────────────────────────────────────────────────────────────────────');\nlines.push('                           COMMAND EXECUTED');\nlines.push('────────────────────────────────────────────────────────────────────────');\nlines.push('');\nlines.push('  ' + (item.command || 'N/A'));\nlines.push('');\nlines.push('────────────────────────────────────────────────────────────────────────');\nlines.push('                              OUTPUT');\nlines.push('────────────────────────────────────────────────────────────────────────');\nlines.push('');\n\nif (item.error) {\n  lines.push('  ❌ ERROR:');\n  lines.push('  ' + (item.error || 'Unknown error'));\n} else {\n  const result = item.output || item.response || '';\n  if (result) {\n    // Add indentation to each line\n    const indentedLines = result.split('\\n').map(line => '  ' + line);\n    lines.push(indentedLines.join('\\n'));\n  } else {\n    lines.push('  (No output)');\n  }\n}\n\nlines.push('');\nlines.push('────────────────────────────────────────────────────────────────────────');\nlines.push('                          END OF REPORT');\nlines.push('═══════════════════════════════════════════════════════════════════════════');\n\nconst report = lines.join('\\n');\n\nreturn [{\n  json: {\n    success: !item.error,\n    executionId: item.executionId,\n    server: item.server || 'local',\n    tool: item.tool || 'custom',\n    command: item.command,\n    result: report,\n    rawOutput: item.output || item.response || '',\n    error: item.error,\n    executionTime: executionTime,\n    timestamp: endTime.toISOString()\n  }\n}];"
+      },
+      "id": "format-response",
+      "name": "Format Response (Text)",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1200, 600]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "executionId": "={{ $json.executionId }}",
+          "status": "={{ $json.success ? 'SUCCESS' : 'FAILED' }}",
+          "server": "={{ $json.server }}",
+          "tool": "={{ $json.tool }}",
+          "command": "={{ $json.command }}",
+          "executionTime": "={{ $json.executionTime }}ms",
+          "timestamp": "={{ $json.timestamp }}",
+          "report": "={{ $json.result }}"
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1500, 500]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": {
+          "executionId": "={{ $json.executionId }}",
+          "status": "FAILED",
+          "error": "={{ $json.error }}",
+          "server": "={{ $json.server }}",
+          "tool": "={{ $json.tool }}",
+          "command": "={{ $json.command }}",
+          "timestamp": "={{ $json.timestamp }}"
+        }
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1,
+      "position": [1500, 800]
+    }
+  ],
+  "connections": {
+    "1. HTTP Trigger": {
+      "main": [[{ "node": "Parse HTTP Request", "type": "main", "index": 0 }]]
+    },
+    "2. Cron Health Check": {
+      "main": [[{ "node": "Prepare Health Check", "type": "main", "index": 0 }]]
+    },
+    "3. SSH Trigger": {
+      "main": [[{ "node": "Parse SSH Request", "type": "main", "index": 0 }]]
+    },
+    "4. SSH Remote Trigger": {
+      "main": [[{ "node": "Parse SSH Remote", "type": "main", "index": 0 }]]
+    },
+    "Parse HTTP Request": {
+      "main": [[{ "node": "SSH Execute", "type": "main", "index": 0 }]]
+    },
+    "Parse SSH Request": {
+      "main": [[{ "node": "SSH Execute", "type": "main", "index": 0 }]]
+    },
+    "Parse SSH Remote": {
+      "main": [[{ "node": "SSH Execute", "type": "main", "index": 0 }]]
+    },
+    "Prepare Health Check": {
+      "main": [[{ "node": "SSH Execute", "type": "main", "index": 0 }]]
+    },
+    "SSH Execute": {
+      "main": [[{ "node": "Format Response (Text)", "type": "main", "index": 0 }]]
+    },
+    "Format Response (Text)": {
+      "main": [[{ "node": "Respond Success", "type": "main", "index": 0 }]],
+      "error": [[{ "node": "Respond Error", "type": "main", "index": 0 }]]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1"
+  }
+}

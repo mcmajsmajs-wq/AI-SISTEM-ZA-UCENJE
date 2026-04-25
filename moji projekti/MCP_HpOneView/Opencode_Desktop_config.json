@@ -1,0 +1,19 @@
+json
+{
+  "mcpServers": {
+    "hpe-greenlake": {
+      "command": "uv",
+      "args": [
+        "--directory",
+        "C:/PUTANJA/DO/gl-mcp",
+        "run",
+        "hpe-gl-mcp"
+      ],
+      "env": {
+        "HPE_CLIENT_ID": "VAŠ_CLIENT_ID",
+        "HPE_CLIENT_SECRET": "VAŠ_CLIENT_SECRET",
+        "HPE_REGION": "vaš-region"
+      }
+    }
+  }
+}

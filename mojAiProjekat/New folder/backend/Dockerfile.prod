@@ -1,0 +1,79 @@
+# ================================================================================
+# DOCKERFILE - AI LEARNING SYSTEM (PRODUCTION)
+# ================================================================================
+# Optimizovan Python 3.11 image za produkciju
+# Koristi multi-stage build za manju veličinu
+# ================================================================================
+
+# ================================================================================
+# BUILD STAGE
+# ================================================================================
+FROM python:3.11-slim as builder
+
+WORKDIR /app
+
+# Instaliraj build dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    gcc \
+    g++ \
+    libc-dev \
+    libpq-dev \
+    && rm -rf /var/lib/apt/lists/*
+
+# Kopiraj i instaliraj requirements
+COPY requirements.txt .
+RUN pip install --user --no-cache-dir -r requirements.txt
+
+# ================================================================================
+# PRODUCTION STAGE
+# ================================================================================
+FROM python:3.11-slim
+
+# System dependencies (samo runtime)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
+    libsm6 \
+    libxext6 \
+    libxrender-dev \
+    libgomp1 \
+    tesseract-ocr \
+    tesseract-ocr-srp \
+    tesseract-ocr-srp-latn \
+    tesseract-ocr-eng \
+    curl \
+    && rm -rf /var/lib/apt/lists/* \
+    && apt-get clean
+
+# Environment variables
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PATH=/root/.local/bin:$PATH
+
+WORKDIR /app
+
+# Kopiraj instalirane pakete iz build stage-a
+COPY --from=builder /root/.local /root/.local
+
+# Kopiraj aplikaciju
+COPY ./app ./app
+COPY ./alembic ./alembic
+COPY alembic.ini .
+
+# Kreiraj logs direktorijum
+RUN mkdir -p /app/logs
+
+# Non-root user
+RUN useradd -m -u 1000 appuser && \
+    chown -R appuser:appuser /app
+USER appuser
+
+# Expose port
+EXPOSE 8000
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=40s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Production command with Gunicorn
+CMD ["gunicorn", "-w", "4", "-k", "uvicorn.workers.UvicornWorker", "app.main:app", "--bind", "0.0.0.0:8000"]

@@ -1,0 +1,26 @@
+{
+    "system": {
+        "version": "1.0.0",
+        "environment": "development",
+        "debugMode": true,
+        "simulationMode": true,
+        "logLevel": "DEBUG",
+        "timeoutMinutes": 90
+    },
+    "vCenter": {
+        "server": "vcenter-dev.domain.com",
+        "port": 443,
+        "protocol": "https",
+        "credentialTarget": "vcenter-admin-dev",
+        "clusterName": "Dev_Cluster",
+        "datacenterName": "Dev_Datacenter",
+        "defaultDatastore": "dev-datastore1"
+    },
+    "oneView": {
+        "appliance": "synergy-composer-dev.domain.com",
+        "apiVersion": "1200",
+        "credentialTarget": "oneview-admin-dev",
+        "defaultSPP": "Synergy Service Pack 2023.12",
+        "timeoutSeconds": 1800
+    }
+}

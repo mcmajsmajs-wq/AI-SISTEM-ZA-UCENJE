@@ -1,0 +1,65 @@
+oneview-mcp
+├── config.py         # Podaci za pristup (IP, kredencijali)
+├── connection.py     # Inicijalizacija OneView klijenta
+├── tools_compute.py  # Funkcije za servere i profile
+├── tools_storage.py  # (Opciono) Funkcije za diskove
+└── main.py           # Glavni fajl koji pokreće MCP
+
+
+Testiranje konekcije
+
+python -c "from connection import get_ov_client; print(get_ov_client().server_hardware.get_all()[0]['name'])"
+
+
+
+
+
+1. Arhitektura rešenja (Šta smo uradili)
+Napravili smo modularni most koji omogućava lokalnom AI agentu (Claude Desktop) da bezbedno komunicira sa vašim fizičkim serverima u data centru bez korišćenja Cloud-a.
+Protokol: Model Context Protocol (MCP) – univerzalni standard za AI alate.
+Jezik: Python sa fastmcp SDK-om.
+Integracija: hpOneView Python biblioteka za direktne API pozive.
+2. Struktura fajlova na vašem računaru
+Sve skripte treba da budu u jednom folderu (npr. C:\MCP-OneView\):
+config.py: Čuva vaše osetljive podatke (IP, User, Pass). Ovde jedino menjate pristupne podatke.
+connection.py: Kreira "tunel" ka OneView-u. Ne menja se često.
+tools_compute.py: Srce sistema. Ovde pišete logiku (šta želite da AI vidi).
+main.py: Glavni pokretač. Ovde registrujete nove alate kako bi ih AI prepoznao.
+3. Kako se koriste i pokreću skripte?
+U VS Code-u: Koristite terminal za instalaciju zavisnosti (pip install mcp hpOneView httpx).
+Testiranje (Lokalno): Pokrenite test_local.py (koji smo kreirali) da vidite da li dobijate tabelu servera u konzoli.
+Aktivacija AI-a: Claude Desktop automatski pokreće main.py čim ga otvorite, pod uslovom da je putanja u claude_desktop_config.json ispravna.
+Upotreba: U Claude-u kucate: "Izlistaj mi servere" ili "Uporedi profil X sa templateom". AI će sam prepoznati koju funkciju iz main.py treba da pozove.
+4. Kako ažurirati i dodavati nove mogućnosti?
+Kada želite da AI nauči nešto novo (npr. da upravlja mrežnim switch-evima):
+Napišite logiku: U tools_compute.py (ili novom fajlu tools_network.py) dodajte funkciju koja povlači podatke sa API-ja.
+Formatirajte izlaz: Koristite Markdown tabele (kao što smo uradili u prethodnom koraku) da bi AI lepše prikazao podatke.
+Registrujte alat: U main.py dodajte @mcp.tool() dekorator iznad nove funkcije.
+Restart: Uvek restartujte Claude Desktop nakon svake promene u Python kodu da bi AI osvežio listu dostupnih alata.
+5. Cheat Sheet za održavanje
+Akcija	Fajl koji menjaš	Šta raditi?
+Promena lozinke/IP-a	config.py	Samo ažurirajte stringove.
+Novi prikaz (npr. Diskove)	tools_storage.py	Dodajte novu Python funkciju sa API pozivom.
+Promena imena komande	main.py	Promenite naziv funkcije ispod @mcp.tool().
+Debug greške	Terminal	Pokrenite python main.py i gledajte ispis grešaka.
+
+Prequistes
+
+Potrebno je da imaš instalirano sledeće:
+Python 3.10 ili noviji: Proveri verziju komandom python --version.
+Biblioteke (Dependencies): Instaliraj ih sve odjednom:
+bash
+pip install mcp hpOneView httpx
+Use code with caution.
+
+Claude Desktop: Najnovija verzija instalirana na tvojoj mašini.
+3. Konfiguracioni preduslovi (Putanja)
+Fajl struktura: Svi tvoji .py fajlovi koje smo kreirali (main.py, config.py, connection.py, tools_compute.py) moraju biti u istom folderu.
+JSON Config: Tvoja putanja u %APPDATA%\Claude\claude_desktop_config.json mora biti apsolutna (npr. C:/Projekat/main.py).
+4. Eksterna provera (Checklist pre klika)
+Pre nego što otvoriš Claude, proveri ove dve stvari u terminalu:
+Da li Python vidi biblioteke?
+Kucaj: python -c "import hpOneView; import mcp; print('Sve je OK')"
+Da li skripta prolazi kroz OneView zaštitu?
+Pokreni svoj test_local.py.
+Pro tip: Ako koristiš Virtual Environment (venv), u claude_desktop_config.json pod command nemoj staviti samo python, već punu putanju do python.exe fajla unutar tvog venv/Scripts/ foldera.

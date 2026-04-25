@@ -1,0 +1,70 @@
+{
+    "system": {
+        "version": "1.0.0",
+        "environment": "production",
+        "debugMode": false,
+        "simulationMode": true,
+        "logLevel": "INFO",
+        "timeoutMinutes": 90
+    },
+    "vCenter": {
+        "server": "vcenter.domain.com",
+        "port": 443,
+        "protocol": "https",
+        "credentialTarget": "vcenter-admin",
+        "clusterName": "Production_Cluster",
+        "datacenterName": "Datacenter",
+        "defaultDatastore": "datastore1"
+    },
+    "oneView": {
+        "appliance": "synergy-composer.domain.com",
+        "apiVersion": "1200",
+        "credentialTarget": "oneview-admin",
+        "defaultSPP": "Synergy Service Pack 2023.12",
+        "timeoutSeconds": 1800
+    },
+    "execution": {
+        "parallelHosts": 1,
+        "maintenanceModeTimeout": 30,
+        "vMotionTimeout": 60,
+        "firmwareUpdateTimeout": 90,
+        "rebootTimeout": 30,
+        "postRebootWait": 5
+    },
+    "safety": {
+        "enableHeartbeat": true,
+        "heartbeatFailureThreshold": 2,
+        "enableRollback": true,
+        "rollbackTimeout": 20,
+        "requireNMinusOneCapacity": true,
+        "maxConcurrentOperations": 1
+    },
+    "notifications": {
+        "email": {
+            "enabled": false,
+            "smtpServer": "smtp.domain.com",
+            "smtpPort": 587,
+            "useSSL": true,
+            "from": "automation@domain.com",
+            "to": ["admin@domain.com"],
+            "credentialTarget": "smtp-auth"
+        },
+        "teams": {
+            "enabled": false,
+            "webhookUrl": "https://domain.webhook.office.com/webhookb2/..."
+        }
+    },
+    "paths": {
+        "logs": "logs",
+        "backups": "backups",
+        "reports": "reports",
+        "temp": "temp"
+    },
+    "logging": {
+        "format": "json",
+        "retentionDays": 30,
+        "maxFileSizeMB": 100,
+        "enableConsole": true,
+        "enableFile": true
+    }
+}
