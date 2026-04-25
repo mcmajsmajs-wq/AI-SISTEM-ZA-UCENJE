@@ -1,0 +1,26 @@
+{
+    "system": {
+        "version": "1.0.0",
+        "environment": "staging",
+        "debugMode": false,
+        "simulationMode": true,
+        "logLevel": "INFO",
+        "timeoutMinutes": 90
+    },
+    "vCenter": {
+        "server": "vcenter-staging.domain.com",
+        "port": 443,
+        "protocol": "https",
+        "credentialTarget": "vcenter-admin-staging",
+        "clusterName": "Staging_Cluster",
+        "datacenterName": "Staging_Datacenter",
+        "defaultDatastore": "staging-datastore1"
+    },
+    "oneView": {
+        "appliance": "synergy-composer-staging.domain.com",
+        "apiVersion": "1200",
+        "credentialTarget": "oneview-admin-staging",
+        "defaultSPP": "Synergy Service Pack 2023.12",
+        "timeoutSeconds": 1800
+    }
+}

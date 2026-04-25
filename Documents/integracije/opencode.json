@@ -1,0 +1,81 @@
+{
+  "$schema": "https://opencode.ai",
+  "mcp": {
+    "moj-ubuntu": {
+      "type": "local",
+      "command": ["node", "$HOME/MCP_Servers/servers/javascript/ubuntu-server/index.js"],
+      "enabled": true
+    },
+    "awesome-copilot": {
+      "type": "local",
+      "command": ["/bin/bash", "$HOME/Scripts/system/run_awesome.sh"],
+      "enabled": true
+    },
+    "github": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-github"],
+      "environment": {
+        "GITHUB_PERSONAL_ACCESS_TOKEN": "YOUR_GITHUB_TOKEN_HERE"
+      },
+      "enabled": true
+    },
+    "playwright": {
+      "type": "local",
+      "command": ["npx", "-y", "@playwright/mcp"],
+      "enabled": true
+    },
+    "brave-search": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-brave-search"],
+      "environment": {
+        "BRAVE_API_KEY": "YOUR_BRAVE_API_KEY_HERE"
+      },
+      "enabled": true
+    },
+    "docker": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-docker-server"],
+      "enabled": true
+    },
+    "firecrawl": {
+      "type": "local",
+      "command": ["npx", "-y", "firecrawl-mcp"],
+      "environment": {
+        "FIRECRAWL_API_KEY": "fc-0dcd31ee79b144ecbf066be6ecb56001"
+      },
+      "enabled": true
+    },
+    "sequential-thinking": {
+      "type": "local",
+      "command": ["npx", "-y", "@modelcontextprotocol/server-sequential-thinking"],
+      "enabled": true
+    },
+    "gmail": {
+      "type": "local",
+      "command": ["npx", "-y", "@gongrzhe/server-gmail-autoauth-mcp"],
+      "environment": {
+        "GMAIL_CLIENT_ID": "YOUR_GMAIL_CLIENT_ID_HERE",
+        "GMAIL_CLIENT_SECRET": "YOUR_GMAIL_CLIENT_SECRET_HERE"
+      },
+      "enabled": true
+    },
+    "markdownify": {
+      "type": "local",
+      "command": ["npx", "-y", "mcp-markdownify-server"],
+      "environment": {
+        "OPENAI_API_KEY": "YOUR_OPENAI_API_KEY_HERE"
+      },
+      "enabled": true
+    },
+    "n8n": {
+      "type": "local",
+      "command": ["npx", "-y", "n8n-mcp"],
+      "environment": {
+        "N8N_URL": "http://localhost:5678",
+        "N8N_API_KEY": "YOUR_N8N_API_KEY_HERE"
+      },
+      "enabled": true
+    }
+  }
+}
+

@@ -1,0 +1,342 @@
+---
+# Ansible Playbook: Daily Scan - VMware i HP OneView
+# Opis: Dnevno skeniranje infrastrukture sa generisanjem izvestaja
+# Verzija: 1.0
+# Autor: BrankoRF
+
+- name: "Dnevno Skeniranje - VMware vCenter i HP OneView"
+  hosts: localhost
+  gather_facts: yes
+  vars:
+    scan_timestamp: "{{ ansible_date_time.iso8601 }}"
+    scan_date: "{{ ansible_date_time.date }}"
+    scan_time: "{{ ansible_date_time.time }}"
+    
+  pre_tasks:
+    - name: "Inicijalizacija logging-a"
+      ansible.builtin.set_fact:
+        scan_results:
+          timestamp: "{{ scan_timestamp }}"
+          vmware: {}
+          oneview: {}
+          changes: []
+          errors: []
+      
+    - name: "Kreiranje direktorijuma za izvestaje"
+      ansible.builtin.file:
+        path: "{{ reporting.path }}/{{ scan_date }}"
+        state: directory
+        mode: '0755'
+      
+    - name: "Log - Pocetak skeniranja"
+      ansible.builtin.debug:
+        msg: 
+          - "=========================================="
+          - "  DNEVNO SKENIRANJE INFRASTRUKTURE"
+          - "  Datum: {{ scan_date }} {{ scan_time }}"
+          - "=========================================="
+
+  tasks:
+    # ==========================================
+    # FAZA 1: INICIJALIZACIJA I PROVERA PRISTUPA
+    # ==========================================
+    - name: "FAZA 1: Inicijalizacija"
+      block:
+        - name: "Provera pristupa vCenter-u"
+          community.vmware.vmware_about_info:
+            hostname: "{{ vmware.vcenter.hostname }}"
+            username: "{{ vmware.vcenter.username }}"
+            password: "{{ vmware.vcenter.password }}"
+            validate_certs: "{{ vmware.vcenter.validate_certs }}"
+          register: vcenter_info
+          ignore_errors: yes
+          
+        - name: "Log - vCenter info"
+          ansible.builtin.debug:
+            msg: "vCenter: {{ vcenter_info.about_info.fullName | default('N/A') }}"
+          when: vcenter_info is succeeded
+          
+      rescue:
+        - name: "Error - Ne mogu se povezati na vCenter"
+          ansible.builtin.set_fact:
+            scan_results: "{{ scan_results | combine({'errors': scan_results.errors + ['Ne mogu se povezati na vCenter']}) }}"
+          
+        - name: "Fail - Prekidam skeniranje"
+          ansible.builtin.fail:
+            msg: "Kritična greška: Ne mogu se povezati na vCenter"
+
+    # ==========================================
+    # FAZA 2: VMWARE SKENIRANJE
+    # ==========================================
+    - name: "FAZA 2: VMware Skeniranje"
+      when: vcenter_info is succeeded
+      block:
+        # 2.1 Skeniranje Virtualnih Masina
+        - name: "Sakupljanje informacija o VM-ovima"
+          community.vmware.vmware_vm_info:
+            hostname: "{{ vmware.vcenter.hostname }}"
+            username: "{{ vmware.vcenter.username }}"
+            password: "{{ vmware.vcenter.password }}"
+            validate_certs: "{{ vmware.vcenter.validate_certs }}"
+          register: vm_info
+          
+        - name: "Analiza VM stanja"
+          ansible.builtin.set_fact:
+            vm_total: "{{ vm_info.virtual_machines | length }}"
+            vm_powered_on: "{{ vm_info.virtual_machines | selectattr('powered_on', 'equalto', true) | list | length }}"
+            vm_powered_off: "{{ vm_info.virtual_machines | selectattr('powered_on', 'equalto', false) | list | length }}"
+          
+        - name: "Log - VM statistika"
+          ansible.builtin.debug:
+            msg:
+              - "VM-ova ukupno: {{ vm_total }}"
+              - "  Ukljucene: {{ vm_powered_on }}"
+              - "  Iskljucene: {{ vm_powered_off }}"
+        
+        # 2.2 Skeniranje Hostova
+        - name: "Sakupljanje informacija o hostovima"
+          community.vmware.vmware_host_facts:
+            hostname: "{{ vmware.vcenter.hostname }}"
+            username: "{{ vmware.vcenter.username }}"
+            password: "{{ vmware.vcenter.password }}"
+            validate_certs: "{{ vmware.vcenter.validate_certs }}"
+          register: host_facts
+          
+        - name: "Log - Host statistika"
+          ansible.builtin.debug:
+            msg: "Hostova pronadjeno: {{ host_facts.ansible_facts.hosts | length }}"
+        
+        # 2.3 Skeniranje Datastore-ova
+        - name: "Sakupljanje informacija o datastore-ovima"
+          community.vmware.vmware_datastore_info:
+            hostname: "{{ vmware.vcenter.hostname }}"
+            username: "{{ vmware.vcenter.username }}"
+            password: "{{ vmware.vcenter.password }}"
+            validate_certs: "{{ vmware.vcenter.validate_certs }}"
+          register: datastore_info
+          
+        - name: "Analiza Datastore-ova"
+          ansible.builtin.set_fact:
+            critical_datastores: "{{ datastore_info.datastores | selectattr('free_space_gb', 'lt', 15) | list }}"
+          
+        - name: "Log - Datastore upozorenja"
+          ansible.builtin.debug:
+            msg: "⚠️ Critical Datastore-ova (< 15% free): {{ critical_datastores | length }}"
+          when: critical_datastores | length > 0
+          
+        # 2.4 Skeniranje Klastera
+        - name: "Sakupljanje informacija o klasterima"
+          community.vmware.vmware_cluster_info:
+            hostname: "{{ vmware.vcenter.hostname }}"
+            username: "{{ vmware.vcenter.username }}"
+            password: "{{ vmware.vcenter.password }}"
+            validate_certs: "{{ vmware.vcenter.validate_certs }}"
+          register: cluster_info
+          
+        # 2.5 Provera Alarma
+        - name: "Sakupljanje aktivnih alarma"
+          community.vmware.vmware_alarm_info:
+            hostname: "{{ vmware.vcenter.hostname }}"
+            username: "{{ vmware.vcenter.username }}"
+            password: "{{ vmware.vcenter.password }}"
+            validate_certs: "{{ vmware.vcenter.validate_certs }}"
+          register: alarm_info
+          
+        - name: "Log - Alarmi"
+          ansible.builtin.debug:
+            msg:
+              - "Aktivnih alarma: {{ alarm_info.alarms | length }}"
+              - "  Critical: {{ alarm_info.alarms | selectattr('overall_status', 'equalto', 'red') | list | length }}"
+              - "  Warning: {{ alarm_info.alarms | selectattr('overall_status', 'equalto', 'yellow') | list | length }}"
+        
+        # Cuvanje VMware rezultata
+        - name: "Cuvanje VMware rezultata"
+          ansible.builtin.set_fact:
+            vmware_results:
+              vms:
+                total: "{{ vm_total }}"
+                powered_on: "{{ vm_powered_on }}"
+                powered_off: "{{ vm_powered_off }}"
+              hosts: "{{ host_facts.ansible_facts.hosts | default([]) }}"
+              datastores: "{{ datastore_info.datastores | default([]) }}"
+              clusters: "{{ cluster_info.clusters | default([]) }}"
+              alarms: "{{ alarm_info.alarms | default([]) }}"
+              critical_datastores: "{{ critical_datastores | default([]) }}"
+        
+        - name: "Update scan results"
+          ansible.builtin.set_fact:
+            scan_results: "{{ scan_results | combine({'vmware': vmware_results}) }}"
+          
+      rescue:
+        - name: "Error - VMware skeniranje nije uspelo"
+          ansible.builtin.set_fact:
+            scan_results: "{{ scan_results | combine({'errors': scan_results.errors + ['VMware skeniranje nije uspelo']}) }}"
+
+    # ==========================================
+    # FAZA 3: HP ONEVIEW SKENIRANJE
+    # ==========================================
+    - name: "FAZA 3: HP OneView Skeniranje"
+      block:
+        - name: "Provera dostupnosti OneView-a"
+          ansible.builtin.uri:
+            url: "https://{{ oneview.hostname }}/rest/login-sessions"
+            method: POST
+            body_format: json
+            body:
+              userName: "{{ oneview.username }}"
+              password: "{{ oneview.password }}"
+            validate_certs: "{{ oneview.validate_certs }}"
+            status_code: 200,201
+          register: oneview_session
+          ignore_errors: yes
+          
+        - name: "Skeniranje ako je OneView dostupan"
+          when: oneview_session is succeeded
+          block:
+            # 3.1 Skeniranje Enclosures
+            - name: "Sakupljanje informacija o enclosures"
+              ansible.builtin.uri:
+                url: "https://{{ oneview.hostname }}/rest/enclosures"
+                method: GET
+                headers:
+                  X-API-Version: "{{ oneview.api_version }}"
+                  Auth: "{{ oneview_session.json.sessionID }}"
+                validate_certs: "{{ oneview.validate_certs }}"
+              register: oneview_enclosures
+              ignore_errors: yes
+              
+            # 3.2 Skeniranje Server Hardware
+            - name: "Sakupljanje informacija o serverima"
+              ansible.builtin.uri:
+                url: "https://{{ oneview.hostname }}/rest/server-hardware"
+                method: GET
+                headers:
+                  X-API-Version: "{{ oneview.api_version }}"
+                  Auth: "{{ oneview_session.json.sessionID }}"
+                validate_certs: "{{ oneview.validate_certs }}"
+              register: oneview_servers
+              ignore_errors: yes
+              
+            # 3.3 Skeniranje Alarma
+            - name: "Sakupljanje alarma iz OneView-a"
+              ansible.builtin.uri:
+                url: "https://{{ oneview.hostname }}/rest/alerts?filter=\"alertState='Active'\""
+                method: GET
+                headers:
+                  X-API-Version: "{{ oneview.api_version }}"
+                  Auth: "{{ oneview_session.json.sessionID }}"
+                validate_certs: "{{ oneview.validate_certs }}"
+              register: oneview_alerts
+              ignore_errors: yes
+              
+            # Cuvanje OneView rezultata
+            - name: "Cuvanje OneView rezultata"
+              ansible.builtin.set_fact:
+                oneview_results:
+                  enclosures: "{{ oneview_enclosures.json.members | default([]) }}"
+                  servers: "{{ oneview_servers.json.members | default([]) }}"
+                  alerts: "{{ oneview_alerts.json.members | default([]) }}"
+            
+            - name: "Update scan results with OneView"
+              ansible.builtin.set_fact:
+                scan_results: "{{ scan_results | combine({'oneview': oneview_results}) }}"
+                
+            - name: "Log - OneView statistika"
+              ansible.builtin.debug:
+                msg:
+                  - "Enclosures: {{ oneview_enclosures.json.members | default([]) | length }}"
+                  - "Servera: {{ oneview_servers.json.members | default([]) | length }}"
+                  - "Alarma: {{ oneview_alerts.json.members | default([]) | length }}"
+                  
+      rescue:
+        - name: "Warning - OneView skeniranje nije uspelo"
+          ansible.builtin.set_fact:
+            scan_results: "{{ scan_results | combine({'errors': scan_results.errors + ['OneView skeniranje nije uspelo']}) }}"
+          
+        - name: "Log - OneView nedostupan"
+          ansible.builtin.debug:
+            msg: "⚠️ HP OneView nije dostupan ili je konfiguracija neispravna"
+
+    # ==========================================
+    # FAZA 4: ANALIZA I UPOREDJIVANJE
+    # ==========================================
+    - name: "FAZA 4: Analiza i Upoređivanje"
+      block:
+        - name: "Učitavanje prethodnog skeniranja"
+          ansible.builtin.slurp:
+            src: "{{ reporting.path }}/latest_scan.json"
+          register: previous_scan_file
+          ignore_errors: yes
+          
+        - name: "Upoređivanje sa prethodnim danom"
+          when: previous_scan_file is succeeded
+          block:
+            - name: "Dekodiranje prethodnog skeniranja"
+              ansible.builtin.set_fact:
+                previous_scan: "{{ previous_scan_file.content | b64decode | from_json }}"
+              
+            - name: "Detekcija promena - set changes list"
+              ansible.builtin.set_fact:
+                detected_changes: []
+              
+            - name: "Detekcija promena u VM-ovima"
+              ansible.builtin.set_fact:
+                detected_changes: "{{ detected_changes + ['Detektovane promene u VM-ovima'] }}"
+              when: 
+                - scan_results.vmware.vms is defined
+                - previous_scan.vmware.vms is defined
+                - scan_results.vmware.vms.total != previous_scan.vmware.vms.total | default(0)
+            
+            - name: "Dodavanje promena u rezultate"
+              ansible.builtin.set_fact:
+                scan_results: "{{ scan_results | combine({'changes': detected_changes}) }}"
+              when: detected_changes | length > 0
+              
+      rescue:
+        - name: "Info - Nema prethodnog skeniranja"
+          ansible.builtin.debug:
+            msg: "ℹ️ Prvo skeniranje ili prethodno nije sačuvano"
+
+    # ==========================================
+    # FAZA 5: GENERISANJE IZVESTAJA
+    # ==========================================
+    - name: "FAZA 5: Generisanje Izvestaja"
+      block:
+        # 5.1 Cuvanje JSON rezultata
+        - name: "Cuvanje rezultata u JSON formatu"
+          ansible.builtin.copy:
+            content: "{{ scan_results | to_nice_json }}"
+            dest: "{{ reporting.path }}/{{ scan_date }}/DailyScan_{{ scan_date }}.json"
+            mode: '0644'
+          
+        - name: "Ažuriranje linka na poslednje skeniranje"
+          ansible.builtin.file:
+            src: "{{ reporting.path }}/{{ scan_date }}/DailyScan_{{ scan_date }}.json"
+            dest: "{{ reporting.path }}/latest_scan.json"
+            state: link
+            force: yes
+          ignore_errors: yes
+          
+        - name: "Log - Izvestaj generisan"
+          ansible.builtin.debug:
+            msg:
+              - "JSON izvestaj: {{ reporting.path }}/{{ scan_date }}/DailyScan_{{ scan_date }}.json"
+              
+      rescue:
+        - name: "Error - Generisanje izvestaja nije uspelo"
+          ansible.builtin.set_fact:
+            scan_results: "{{ scan_results | combine({'errors': scan_results.errors + ['Generisanje izvestaja nije uspelo']}) }}"
+
+  post_tasks:
+    - name: "Završna faza - Rezime"
+      ansible.builtin.debug:
+        msg:
+          - ""
+          - "=========================================="
+          - "  DNEVNO SKENIRANJE ZAVRŠENO"
+          - "=========================================="
+          - "  VM-ova: {{ scan_results.vmware.vms.total | default('N/A') }}"
+          - "  Hostova: {{ scan_results.vmware.hosts | length | default('N/A') }}"
+          - "  Alarma: {{ scan_results.vmware.alarms | length | default('N/A') }}"
+          - "  Grešaka: {{ scan_results.errors | length }}"
+          - "=========================================="

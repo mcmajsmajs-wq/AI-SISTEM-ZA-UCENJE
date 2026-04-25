@@ -1,0 +1,152 @@
+# Group Variables za VMware Infrastrukturu
+# Definise sve parametre za VMware operacije
+
+---
+# Globalne Backup Postavke
+# Napomena: Backup appliance-a se SAMO proverava (check_only), ne kreira automatski
+# jer je to dnevna aktivnost koja se radi odvojeno
+backup_check_only: true
+backup_host_path: "{{ backup_host_path | default('/backups/hosts') }}"
+backup_vcenter_path: "{{ backup_vcenter_path | default('/backups/vcenter') }}"
+
+# VMware vCenter Konfiguracija
+vmware:
+  vcenter:
+    hostname: "{{ vcenter_server | default('vcenter.local') }}"
+    username: "{{ vcenter_username | default('administrator@vsphere.local') }}"
+    password: "{{ vcenter_password }}"
+    port: "{{ vcenter_port | default(443) }}"
+    validate_certs: "{{ vcenter_validate_certs | default(false) }}"
+  
+  # Host Konfiguracija
+  hosts:
+    backup:
+      enabled: true
+      check_only: true  # Samo proveri da li postoji backup, ne kreiraj automatski
+      path: "{{ backup_host_path | default('/backups/hosts') }}"
+      retention_days: "{{ backup_retention_days | default(30) }}"
+    
+    snapshots:
+      enabled: true
+      name: "Pre-Patching-Backup"
+      description: "Automatski kreiran pre patching-a {{ ansible_date_time.iso8601 }}"
+      memory: true
+      quiesce: false
+  
+  # Patching Konfiguracija
+  patching:
+    baseline:
+      name: "{{ baseline_name | default('Critical Patches') }}"
+      description: "Kriticne bezbednosne zakrpe"
+    
+    phases:
+      pre_checks:
+        enabled: true
+        checks:
+          - backup_status
+          - resource_availability
+          - vcenter_version
+          - storage_accessibility
+          - iso_unmount
+      
+      lifecycle_manager:
+        enabled: true
+        sync_updates: true
+        create_baseline: true
+      
+      compliance_check:
+        enabled: true
+        skip_if_compliant: true
+      
+      staging:
+        enabled: true
+        pre_remediation_check: true
+      
+      remediation:
+        enabled: true
+        maintenance_mode_timeout: "{{ maintenance_mode_timeout | default(600) }}"
+        remediation_timeout: "{{ remediation_timeout | default(1800) }}"
+        auto_accept_eula: true
+      
+      post_verification:
+        enabled: true
+        compliance_recheck: true
+        build_verification: true
+        vmotion_test: true
+        vmware_tools_check: true
+
+# HP OneView Konfiguracija
+oneview:
+  hostname: "{{ oneview_server | default('oneview.local') }}"
+  username: "{{ oneview_username | default('Administrator') }}"
+  password: "{{ oneview_password }}"
+  api_version: "{{ oneview_api_version | default(4000) }}"
+  validate_certs: "{{ oneview_validate_certs | default(false) }}"
+  
+  # Firmware Update Konfiguracija
+  firmware:
+    spp_version: "2023.09.0"
+    update_policy: "FirmwareOnly"  # Options: FirmwareOnly, FirmwareAndDrivers
+    force_install: false
+  
+  # Scanning Configuration
+  scanning:
+    items:
+      - appliance
+      - enclosures
+      - server_hardware
+      - logical_interconnects
+      - server_profiles
+      - storage_systems
+      - logical_drives
+      - alerts
+
+# Izvjestavanje
+reporting:
+  enabled: true
+  format: html
+  path: "{{ report_path | default('/reports/ansible') }}"
+  retention_days: 90
+  
+  # Email Notifications (opciono)
+  email:
+    enabled: false
+    smtp_server: "smtp.company.com"
+    smtp_port: 587
+    from: "ansible@company.com"
+    to:
+      - "admin@company.com"
+    subject: "Ansible Automation Report - {{ ansible_date_time.date }}"
+
+# Logging
+logging:
+  enabled: true
+  level: INFO  # DEBUG, INFO, WARNING, ERROR
+  path: "{{ log_path | default('/logs/ansible') }}"
+  max_size: 100MB
+  backup_count: 10
+
+# Execution Mode
+# simulate - samo simulira, ne pravi promene
+# test - proverava ali ne izvrsava
+# production - stvarne promene
+execution:
+  mode: "{{ execution_mode | default('simulate') }}"
+  
+  # Confirmation Settings
+  confirmations:
+    production_required: true
+    critical_actions_double_confirm: true
+    backup_skip_confirm: true
+
+# Retry Configuration
+retry:
+  max_attempts: 3
+  delay: 30
+  backoff: 2
+
+# Timeout Configuration
+timeouts:
+  connection: 60
+  operation: 300
+  long_operation: 1800

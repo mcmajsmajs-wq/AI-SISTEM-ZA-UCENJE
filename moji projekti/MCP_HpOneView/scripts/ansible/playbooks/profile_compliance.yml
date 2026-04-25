@@ -1,0 +1,365 @@
+---
+# Ansible Playbook: OneView Profile Compliance
+# Description: Checks and remediates OneView server profile compliance
+# Author: MCP_HpOneView Extended
+# Version: 1.0
+
+- name: "OneView Profile Compliance"
+  hosts: oneview_servers
+  gather_facts: no
+  vars:
+    execution_timestamp: "{{ ansible_date_time.iso8601 }}"
+    profile_name: "{{ profile_name | required }}"
+    compliance_type: "{{ compliance_type | default('full') }}"
+    remediate: "{{ remediate | default(false) }}"
+    
+  pre_tasks:
+    - name: "Validate profile compliance parameters"
+      assert:
+        that:
+          - profile_name is defined
+          - compliance_type in ['full', 'basic', 'firmware', 'network']
+        fail_msg: "Required parameters missing for profile compliance check"
+        success_msg: "Profile compliance parameters validated"
+    
+    - name: "Display profile compliance information"
+      debug:
+        msg:
+          - "=========================================="
+          - "  ONEVIEW PROFILE COMPLIANCE"
+          - "  Profile: {{ profile_name }}"
+          - "  Type: {{ compliance_type }}"
+          - "  Remediate: {{ remediate }}"
+          - "  Timestamp: {{ execution_timestamp }}"
+          - "=========================================="
+
+  tasks:
+    - name: "Initialize OneView connection"
+      uri:
+        url: "https://{{ oneview_hostname }}/rest/login-sessions"
+        method: POST
+        body_format: json
+        body:
+          userName: "{{ oneview_username }}"
+          password: "{{ oneview_password }}"
+        validate_certs: false
+        status_code: [200, 201]
+      register: oneview_session
+      
+    - name: "Extract session token"
+      set_fact:
+        oneview_session_token: "{{ oneview_session.json.sessionID }}"
+    
+    - name: "Get server profile information"
+      uri:
+        url: "https://{{ oneview_hostname }}/rest/server-profiles"
+        method: GET
+        headers:
+          Auth: "{{ oneview_session_token }}"
+          X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+        validate_certs: false
+      register: all_profiles
+    
+    - name: "Find target profile"
+      set_fact:
+        target_profile: "{{ all_profiles.json.members | selectattr('name', 'equal', profile_name) | first }}"
+      failed_when: target_profile is not defined
+    
+    - name: "Display target profile information"
+      debug:
+        msg:
+          - "Target Profile: {{ target_profile.name }}"
+          - "Description: {{ target_profile.description }}"
+          - "Template: {{ target_profile.templateUri | default('No template') }}"
+          - "Server: {{ target_profile.serverHardwareUri }}"
+          - "State: {{ target_profile.status }}"
+    
+    - name: "Get profile template information"
+      uri:
+        url: "{{ target_profile.templateUri }}"
+        method: GET
+        headers:
+          Auth: "{{ oneview_session_token }}"
+          X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+        validate_certs: false
+      register: profile_template
+      when: target_profile.templateUri is defined
+    
+    - name: "Perform basic compliance check"
+      block:
+        - name: "Check profile status"
+          debug:
+            msg:
+              - "Profile Status: {{ target_profile.status }}"
+              - "Compliance: {{ 'Compliant' if target_profile.status == 'Normal' else 'Non-compliant' }}"
+        
+        - name: "Check profile consistency"
+          uri:
+            url: "{{ target_profile.uri }}/consistency"
+            method: GET
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            validate_certs: false
+          register: consistency_check
+          when: compliance_type in ['full', 'basic']
+        
+        - name: "Display consistency check results"
+          debug:
+            msg:
+              - "Consistency Status: {{ consistency_check.json.consistencyStatus }}"
+              - "Inconsistent Items: {{ consistency_check.json.inconsistentItems | length }}"
+              - "Message: {{ consistency_check.json.message | default('No consistency issues') }}"
+          when: compliance_type in ['full', 'basic']
+          
+      when: compliance_type in ['full', 'basic']
+    
+    - name: "Perform firmware compliance check"
+      block:
+        - name: "Get server hardware firmware information"
+          uri:
+            url: "{{ target_profile.serverHardwareUri }}/firmware"
+            method: GET
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            validate_certs: false
+          register: server_firmware
+        
+        - name: "Get template firmware information"
+          uri:
+            url: "{{ profile_template.json.firmware.uri }}"
+            method: GET
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            validate_certs: false
+          register: template_firmware
+        
+        - name: "Compare firmware versions"
+          set_fact:
+            firmware_compliant: "{{ server_firmware.json.firmwareVersion == template_firmware.json.firmwareVersion }}"
+        
+        - name: "Display firmware compliance results"
+          debug:
+            msg:
+              - "Server Firmware: {{ server_firmware.json.firmwareVersion }}"
+              - "Template Firmware: {{ template_firmware.json.firmwareVersion }}"
+              - "Firmware Compliance: {{ 'Compliant' if firmware_compliant else 'Non-compliant' }}"
+              - "Message: {{ 'Firmware versions match' if firmware_compliant else 'Firmware version mismatch' }}"
+          
+      when: compliance_type in ['full', 'firmware']
+    
+    - name: "Perform network compliance check"
+      block:
+        - name: "Get profile network information"
+          uri:
+            url: "{{ target_profile.uri }}/connections"
+            method: GET
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            validate_certs: false
+          register: profile_connections
+        
+        - name: "Get template network information"
+          uri:
+            url: "{{ profile_template.json.connections.uri }}"
+            method: GET
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            validate_certs: false
+          register: template_connections
+        
+        - name: "Compare network configurations"
+          set_fact:
+            network_compliant: "{{ profile_connections.json.connections == template_connections.json.connections }}"
+        
+        - name: "Display network compliance results"
+          debug:
+            msg:
+              - "Profile Connections: {{ profile_connections.json.connections | length }}"
+              - "Template Connections: {{ template_connections.json.connections | length }}"
+              - "Network Compliance: {{ 'Compliant' if network_compliant else 'Non-compliant' }}"
+              - "Message: {{ 'Network configurations match' if network_compliant else 'Network configuration mismatch' }}"
+          
+      when: compliance_type in ['full', 'network']
+    
+    - name: "Calculate overall compliance status"
+      set_fact:
+        overall_compliance: >
+          {%- if compliance_type == 'full' -%}
+          {{ 
+            (target_profile.status == 'Normal') and 
+            (consistency_check.json.consistencyStatus == 'Consistent') and 
+            firmware_compliant and 
+            network_compliant
+          }}
+          {%- elif compliance_type == 'basic' -%}
+          {{ 
+            (target_profile.status == 'Normal') and 
+            (consistency_check.json.consistencyStatus == 'Consistent')
+          }}
+          {%- elif compliance_type == 'firmware' -%}
+          {{ firmware_compliant }}
+          {%- elif compliance_type == 'network' -%}
+          {{ network_compliant }}
+          {%- endif -%}
+    
+    - name: "Display overall compliance results"
+      debug:
+        msg:
+          - "Overall Compliance: {{ 'Compliant' if overall_compliance else 'Non-compliant' }}"
+          - "Compliance Type: {{ compliance_type }}"
+          - "Remediation Required: {{ not overall_compliance and not remediate }}"
+    
+    - name: "Generate compliance report"
+      copy:
+        content: |
+          Profile Compliance Report
+          ========================
+          Timestamp: {{ execution_timestamp }}
+          Profile: {{ profile_name }}
+          Type: {{ compliance_type }}
+          Overall Status: {{ 'Compliant' if overall_compliance else 'Non-compliant' }}
+          
+          Profile Information:
+          - Name: {{ target_profile.name }}
+          - Description: {{ target_profile.description }}
+          - Status: {{ target_profile.status }}
+          - Server: {{ target_profile.serverHardwareUri }}
+          
+          {% if compliance_type in ['full', 'basic'] %}
+          Consistency Check:
+          - Status: {{ consistency_check.json.consistencyStatus }}
+          - Inconsistent Items: {{ consistency_check.json.inconsistentItems | length }}
+          - Message: {{ consistency_check.json.message | default('No consistency issues') }}
+          {% endif %}
+          
+          {% if compliance_type in ['full', 'firmware'] %}
+          Firmware Compliance:
+          - Server Firmware: {{ server_firmware.json.firmwareVersion }}
+          - Template Firmware: {{ template_firmware.json.firmwareVersion }}
+          - Status: {{ 'Compliant' if firmware_compliant else 'Non-compliant' }}
+          {% endif %}
+          
+          {% if compliance_type in ['full', 'network'] %}
+          Network Compliance:
+          - Profile Connections: {{ profile_connections.json.connections | length }}
+          - Template Connections: {{ template_connections.json.connections | length }}
+          - Status: {{ 'Compliant' if network_compliant else 'Non-compliant' }}
+          {% endif %}
+          
+          {% if not overall_compliance and not remediate %}
+          Remediation Required:
+          - Profile needs to be updated to match template
+          - Run with remediate=true to apply changes
+          {% endif %}
+        dest: "reports/profile_compliance_{{ profile_name }}_{{ ansible_date_time.date }}.txt"
+      delegate_to: localhost
+    
+    - name: "Perform remediation if required"
+      block:
+        - name: "Update profile from template"
+          uri:
+            url: "{{ target_profile.uri }}"
+            method: PUT
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            body_format: json
+            body:
+              templateUri: "{{ target_profile.templateUri }}"
+            validate_certs: false
+            status_code: [200, 202]
+          register: remediation_result
+        
+        - name: "Wait for remediation to complete"
+          uri:
+            url: "{{ remediation_result.json.uri }}"
+            method: GET
+            headers:
+              Auth: "{{ oneview_session_token }}"
+              X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+            validate_certs: false
+          register: remediation_status
+          until: remediation_status.json.taskState in ["Completed", "Error", "Warning"]
+          retries: 30
+          delay: 30
+        
+        - name: "Check remediation result"
+          fail_msg: "Profile remediation failed"
+          assert:
+            that:
+              - remediation_status.json.taskState == "Completed"
+          success_msg: "Profile remediation completed successfully"
+        
+        - name: "Display remediation completion"
+          debug:
+            msg:
+              - "Profile remediation completed successfully"
+              - "Profile: {{ profile_name }}"
+              - "Template: {{ target_profile.templateUri }}"
+              - "Task State: {{ remediation_status.json.taskState }}"
+              - "Message: {{ remediation_status.json.taskStatus }}"
+        
+      when: not overall_compliance and remediate
+    
+    - name: "Logout from OneView"
+      uri:
+        url: "https://{{ oneview_hostname }}/rest/login-sessions/{{ oneview_session_token }}"
+        method: DELETE
+        headers:
+          Auth: "{{ oneview_session_token }}"
+          X-Api-Version: "{{ oneview_api_version | default('3000') }}"
+        validate_certs: false
+        status_code: [204, 404]
+      always: true
+      
+    - name: "Log profile compliance completion"
+      debug:
+        msg:
+          - "=========================================="
+          - "  PROFILE COMPLIANCE COMPLETED"
+          - "  Profile: {{ profile_name }}"
+          - "  Type: {{ compliance_type }}"
+          - "  Status: {{ 'Compliant' if overall_compliance else 'Non-compliant' }}"
+          - "  Remediated: {{ 'Yes' if (not overall_compliance and remediate) else 'No' }}"
+          - "  Time: {{ ansible_date_time.time }}"
+          - "=========================================="
+
+  post_tasks:
+    - name: "Create compliance summary report"
+      copy:
+        content: |
+          Profile Compliance Summary
+          =======================
+          Timestamp: {{ execution_timestamp }}
+          Profile: {{ profile_name }}
+          Type: {{ compliance_type }}
+          Overall Status: {{ 'Compliant' if overall_compliance else 'Non-compliant' }}
+          Remediated: {{ 'Yes' if (not overall_compliance and remediate) else 'No' }}
+          
+          {% if compliance_type in ['full', 'basic'] %}
+          Consistency Status: {{ consistency_check.json.consistencyStatus }}
+          {% endif %}
+          
+          {% if compliance_type in ['full', 'firmware'] %}
+          Firmware Status: {{ 'Compliant' if firmware_compliant else 'Non-compliant' }}
+          {% endif %}
+          
+          {% if compliance_type in ['full', 'network'] %}
+          Network Status: {{ 'Compliant' if network_compliant else 'Non-compliant' }}
+          {% endif %}
+          
+          Execution Status: {{ 'Success' if ansible_failed is not defined else 'Failed' }}
+          
+          {% if ansible_failed is defined %}
+          Failed Tasks:
+          {% for task in ansible_failed %}
+          - {{ task.name }}: {{ task.msg }}
+          {% endfor %}
+          {% endif %}
+        dest: "reports/profile_compliance_summary_{{ profile_name }}_{{ ansible_date_time.date }}.txt"
+      delegate_to: localhost
