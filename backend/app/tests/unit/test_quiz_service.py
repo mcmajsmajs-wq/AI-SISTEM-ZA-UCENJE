@@ -285,3 +285,160 @@ class TestCheckAnswerLogic:
             "checkbox", "Option A,Option B,Option C", "Option A,Option C"
         )
         assert result is False
+
+
+class TestValidateQuestionsInvalidTypes:
+    """Testovi za _validate_questions() — nepoznati i granicni tipovi."""
+
+    def _validate(self, data):
+        from app.services.quiz import _validate_questions
+
+        return _validate_questions(data)
+
+    def test_unknown_type_filtered_out(self):
+        """question_type koji ne postoji u DB enumu se preskace."""
+        questions = [
+            {
+                "question_text": "Q1",
+                "question_type": "unknown_type",
+                "correct_answer": "X",
+            },
+        ]
+        result = self._validate(questions)
+        assert len(result) == 0
+
+    def test_text_input_mapped_to_fill_blank(self):
+        """text_input se mapira u fill_blank za DB kompatibilnost."""
+        questions = [
+            {
+                "question_text": "Q1",
+                "question_type": "text_input",
+                "correct_answer": "42",
+                "options": [],
+            },
+        ]
+        result = self._validate(questions)
+        assert len(result) == 1
+        assert result[0]["question_type"] == "fill_blank"
+
+    def test_text_aliases_mapped_to_fill_blank(self):
+        """Slicni tipovi (short_answer, essay) se mapiraju u fill_blank."""
+        for alias in ("text", "short_answer", "long_answer", "essay"):
+            questions = [
+                {
+                    "question_text": "Q1",
+                    "question_type": alias,
+                    "correct_answer": "X",
+                    "options": [],
+                },
+            ]
+            result = self._validate(questions)
+            assert len(result) == 1, f"{alias} nije mapiran u fill_blank"
+            assert result[0]["question_type"] == "fill_blank"
+
+    def test_empty_question_type_filtered(self):
+        """Prazan question_type se preskace."""
+        questions = [
+            {"question_text": "Q1", "question_type": "", "correct_answer": "X"},
+        ]
+        result = self._validate(questions)
+        assert len(result) == 0
+
+    def test_none_question_type_filtered(self):
+        """None kao question_type se preskace."""
+        questions = [
+            {"question_text": "Q1", "question_type": None, "correct_answer": "X"},
+        ]
+        result = self._validate(questions)
+        assert len(result) == 0
+
+
+class TestParseQuestions:
+    """Testovi za _parse_questions() — parsiranje AI odgovora."""
+
+    def _parse(self, raw):
+        from app.services.quiz import _parse_questions
+
+        return _parse_questions(raw)
+
+    def test_string_json_array(self):
+        """String sa JSON nizom se parsira ispravno."""
+        raw = json.dumps(
+            [
+                {
+                    "question_text": "Q1",
+                    "question_type": "multiple_choice",
+                    "options": ["Option A", "Option B"],
+                    "correct_answer": "Option A",
+                },
+            ]
+        )
+        result = self._parse(raw)
+        assert len(result) == 1
+        assert result[0]["question_text"] == "Q1"
+
+    def test_already_parsed_list(self):
+        """Vec parsiran list (iz AI klijenta) se obradjuje direktno."""
+        data = [
+            {
+                "question_text": "Q1",
+                "question_type": "multiple_choice",
+                "options": ["Option A", "Option B"],
+                "correct_answer": "Option A",
+            },
+        ]
+        result = self._parse(data)
+        assert len(result) == 1
+        assert result[0]["question_text"] == "Q1"
+
+    def test_already_parsed_dict(self):
+        """Vec parsiran dict sa listom u values se obradjuje."""
+        data = {
+            "questions": [
+                {
+                    "question_text": "Q1",
+                    "question_type": "multiple_choice",
+                    "options": ["Option A", "Option B"],
+                    "correct_answer": "Option A",
+                },
+            ]
+        }
+        result = self._parse(data)
+        assert len(result) == 1
+        assert result[0]["question_text"] == "Q1"
+
+    def test_empty_list(self):
+        """Prazan list vraca prazan rezultat."""
+        result = self._parse([])
+        assert result == []
+
+    def test_empty_dict(self):
+        """Prazan dict vraca prazan rezultat."""
+        result = self._parse({})
+        assert result == []
+
+    def test_invalid_type_number(self):
+        """int se ne parsira i vraca prazno."""
+        result = self._parse(123)
+        assert result == []
+
+    def test_malformed_json(self):
+        """Neispravan JSON vraca prazno."""
+        result = self._parse("ovo nije json {{{")
+        assert result == []
+
+    def test_json_with_text_input_mapped(self):
+        """text_input u JSON stringu se mapira u fill_blank kroz _validate_questions."""
+        raw = json.dumps(
+            [
+                {
+                    "question_text": "Q1",
+                    "question_type": "text_input",
+                    "options": [],
+                    "correct_answer": "42",
+                },
+            ]
+        )
+        result = self._parse(raw)
+        assert len(result) == 1
+        assert result[0]["question_type"] == "fill_blank"

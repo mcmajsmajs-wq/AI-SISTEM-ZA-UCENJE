@@ -1,4 +1,4 @@
-import { useState, useCallback } from 'react'
+import { useState, useCallback, useRef, useEffect } from 'react'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { documentsApi, filesApi } from '@/services/api'
 import { useDropzone } from 'react-dropzone'
@@ -200,6 +200,19 @@ export default function DocumentsPage() {
 
   const totalDocs = documents?.data?.items?.length || 0
   const completedDocs = documents?.data?.items?.filter((d: any) => d.status === 'completed').length || 0
+
+  // Notify when any document finishes processing
+  const prevStatusesRef = useRef<Record<string, string>>({})
+  useEffect(() => {
+    const docs = documents?.data?.items || []
+    for (const doc of docs) {
+      const prev = prevStatusesRef.current[doc.id]
+      if (prev === 'processing' && doc.status === 'completed') {
+        toast.success(`"${doc.title}" — obrada završena!`, { duration: 5000 })
+      }
+      prevStatusesRef.current[doc.id] = doc.status
+    }
+  }, [documents?.data?.items])
 
   return (
     <div className="space-y-6 animate-fade-in">

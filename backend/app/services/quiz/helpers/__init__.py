@@ -61,16 +61,30 @@ def _is_used_for_quiz(chunk: Any) -> bool:
     return bool(val)
 
 
-def _parse_questions(raw: str) -> List[dict]:
+def _parse_questions(raw: Union[str, list, dict]) -> List[dict]:
     """
     Parsira JSON array iz AI odgovora.
 
     Args:
-        raw: Raw string odgovor od AI providera
+        raw: Raw string odgovor od AI providera (ili vec parsirani list/dict)
 
     Returns:
         List[dict]: Lista parsiranih pitanja
     """
+    if isinstance(raw, list):
+        return _validate_questions(raw)
+    if isinstance(raw, dict):
+        for v in raw.values():
+            if isinstance(v, list):
+                return _validate_questions(v)
+        logger.warning("Dict nema listu u vrednostima, vracam prazno")
+        return []
+    if not isinstance(raw, str):
+        logger.warning(
+            f"_parse_questions ocekuje string/list/dict, dobijen {type(raw).__name__}"
+        )
+        return []
+
     try:
         data = json.loads(raw.strip())
         if isinstance(data, list):
@@ -108,11 +122,34 @@ def _validate_questions(data: list) -> List[dict]:
     """
     valid = []
 
+    ALLOWED_DB_TYPES = {
+        "multiple_choice",
+        "checkbox",
+        "true_false",
+        "fill_blank",
+        "calculation",
+        "step_by_step",
+        "chemical_equation",
+        "sequencing",
+        "categorization",
+        "matching",
+        "hotspot",
+        "odd_one_out",
+        "estimation",
+        "matrix",
+        "text_input",
+    }
+    TEXT_INPUT_MAP = {"text_input", "text", "short_answer", "long_answer", "essay"}
+
     for i, q in enumerate(data):
         if not isinstance(q, dict):
             continue
 
         q_type = q.get("question_type", "")
+
+        if q_type in TEXT_INPUT_MAP and q_type != "fill_blank":
+            q["question_type"] = "fill_blank"
+            q_type = "fill_blank"
 
         # Validacija za različite tipove pitanja
         if q_type in ("multiple_choice", "checkbox", "true_false"):
@@ -133,6 +170,16 @@ def _validate_questions(data: list) -> List[dict]:
                     )
                     continue
 
+        elif q_type in ("text_input", "fill_blank"):
+            # Tekstualni tipovi - zahtevaju question_text i correct_answer
+            if not all(
+                k in q for k in ("question_text", "question_type", "correct_answer")
+            ):
+                logger.warning(
+                    f"Pitanje {i} tipa {q_type} nema question_text ili correct_answer, preskačem"
+                )
+                continue
+
         elif q_type in (
             "sequencing",
             "categorization",
@@ -152,9 +199,10 @@ def _validate_questions(data: list) -> List[dict]:
                 )
                 continue
 
-        else:
-            # Nepoznat tip - preskoči
-            logger.warning(f"Pitanje {i} ima nepoznati tip: {q_type}, preskačem")
+        elif q_type not in ALLOWED_DB_TYPES:
+            logger.warning(
+                f"Pitanje {i} ima tip '{q_type}' koji ne postoji u DB enumu, preskacem"
+            )
             continue
 
         # Postavljanje podrazumevanih vrednosti

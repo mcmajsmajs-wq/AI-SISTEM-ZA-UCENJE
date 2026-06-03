@@ -29,6 +29,72 @@ from pathlib import Path
 logger = logging.getLogger(__name__)
 
 
+def _generate_extractive_summary(text: str, max_sentences: int = 3) -> str:
+    """Generates extractive summary — takes first max_sentences sentences."""
+    sentences = re.split(r"(?<=[.!?])\s+", text.strip())
+    if len(sentences) > 1:
+        return " ".join(sentences[:max_sentences]).strip()
+    return text[:200] if text else ""
+
+
+def _detect_sections(text: str) -> list[dict]:
+    """
+    Detects sections from raw text using heading heuristics.
+
+    Returns list of dicts:
+        { title: str, heading_level: int, content_lines: list[str] }
+    """
+    lines = text.split("\n")
+    sections = []
+    current_section = {"title": "Uvod", "heading_level": 1, "content_lines": []}
+
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            current_section["content_lines"].append("")
+            continue
+
+        if stripped.startswith("### "):
+            if current_section["content_lines"]:
+                sections.append(current_section)
+            current_section = {
+                "title": stripped[4:].strip(),
+                "heading_level": 3,
+                "content_lines": [],
+            }
+        elif stripped.startswith("## "):
+            if current_section["content_lines"]:
+                sections.append(current_section)
+            current_section = {
+                "title": stripped[3:].strip(),
+                "heading_level": 2,
+                "content_lines": [],
+            }
+        elif stripped.startswith("# "):
+            if current_section["content_lines"]:
+                sections.append(current_section)
+            current_section = {
+                "title": stripped[2:].strip(),
+                "heading_level": 1,
+                "content_lines": [],
+            }
+        elif stripped.isupper() and len(stripped) > 3 and len(stripped) < 100:
+            if current_section["content_lines"]:
+                sections.append(current_section)
+            current_section = {
+                "title": stripped,
+                "heading_level": 2,
+                "content_lines": [],
+            }
+        else:
+            current_section["content_lines"].append(stripped)
+
+    if current_section["content_lines"]:
+        sections.append(current_section)
+
+    return sections
+
+
 def extract_text_from_pdf(file_path: str) -> str:
     try:
         import fitz  # PyMuPDF
@@ -188,4 +254,113 @@ def ingest_source(db, source_id: str, source_type: str, content: str, name: str)
             {"id": source_id},
         )
         db.commit()
+        return 0
+
+
+def ingest_source_with_tiers(
+    db, source_id: str, source_type: str, content: str, name: str
+) -> int:
+    """
+    Tiered version of ingest_source.
+
+    1. Detects sections from content
+    2. Chunks each section independently with section_index
+    3. Saves L2 (chunks), L1 (section summaries), L0 (document summary)
+    4. Updates source status
+
+    Returns: number of L2 chunks saved
+    """
+    from app.services.rag import (
+        chunk_text,
+        save_tiered_chunks_to_db,
+        save_section_summary,
+        save_document_summary,
+    )
+    from sqlalchemy import text
+
+    if not content or not content.strip():
+        logger.warning(f"Prazan sadržaj za izvor {name}")
+        db.execute(
+            text(
+                "UPDATE knowledge_sources SET status = 'error', updated_at = NOW() WHERE id = :id"
+            ),
+            {"id": source_id},
+        )
+        db.commit()
+        return 0
+
+    try:
+        sections = _detect_sections(content)
+        logger.info(f"Izvor '{name}': {len(sections)} sekcija detektovano")
+
+        all_chunks = []
+        total_token_count = 0
+
+        for sec_idx, section in enumerate(sections):
+            section_text = "\n".join(section["content_lines"]).strip()
+            if not section_text:
+                continue
+
+            section_chunks = chunk_text(section_text, chunk_size=500, overlap=50)
+
+            for chunk_content in section_chunks:
+                all_chunks.append(
+                    {
+                        "content": chunk_content,
+                        "section_index": sec_idx,
+                        "section_title": section["title"],
+                        "heading_level": section["heading_level"],
+                    }
+                )
+
+            summary = _generate_extractive_summary(section_text)
+            token_count = len(section_text.split())
+
+            save_section_summary(
+                db,
+                source_id,
+                sec_idx,
+                section["title"],
+                section["heading_level"],
+                section_text,
+                summary,
+                len(section_chunks),
+                token_count,
+            )
+            total_token_count += token_count
+
+        saved = save_tiered_chunks_to_db(db, source_id, all_chunks)
+
+        doc_summary = _generate_extractive_summary(content, max_sentences=5)
+        save_document_summary(
+            db, source_id, name, doc_summary, saved, total_token_count
+        )
+
+        db.execute(
+            text("""
+            UPDATE knowledge_sources
+            SET status = 'indexed', total_chunks = :chunks, last_indexed = NOW(), updated_at = NOW()
+            WHERE id = :id
+            """),
+            {"chunks": saved, "id": source_id},
+        )
+        db.commit()
+
+        logger.info(
+            f"Izvor '{name}' uspešno indeksiran (tiered): "
+            f"{saved} chunk-ova, {len(sections)} sekcija"
+        )
+        return saved
+    except Exception as e:
+        logger.error(f"Greška pri tiered indeksiranju {name}: {e}")
+        try:
+            db.execute(
+                text(
+                    "UPDATE knowledge_sources SET status = 'error', updated_at = NOW() WHERE id = :id"
+                ),
+                {"id": source_id},
+            )
+            db.commit()
+        except Exception:
+            db.rollback()
         return 0

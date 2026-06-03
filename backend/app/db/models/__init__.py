@@ -11,3 +11,11 @@ try:
     from app.services.skills.models import Skill, SkillTemplate, DocumentType  # noqa: F401
 except ImportError:
     pass  # Skills module not available
+
+# Knowledge / RAG models
+from app.db.models.knowledge import (
+    KnowledgeSource,
+    KnowledgeChunk,
+    KnowledgeSectionSummary,
+    KnowledgeDocumentSummary,
+)  # noqa: F401

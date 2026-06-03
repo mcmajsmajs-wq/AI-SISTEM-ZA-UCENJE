@@ -61,6 +61,23 @@ class SourceResponse(BaseModel):
     created_at: str
 
 
+class TieredQueryRequest(BaseModel):
+    query: str
+    top_k: int = 5
+    source_type: Optional[str] = None
+    provider: Optional[str] = None
+
+
+class TieredQueryResponse(BaseModel):
+    answer: str
+    sources: List[dict]
+    chunks_used: int
+    l0_used: int = 0
+    l1_used: int = 0
+    provider: Optional[str] = None
+    has_context: bool = False
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -96,6 +113,41 @@ async def query_knowledge(
     )
 
     return QueryResponse(**result)
+
+
+@router.post("/query/tiered", response_model=TieredQueryResponse)
+async def query_knowledge_tiered(
+    body: TieredQueryRequest,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """L0/L1/L2 tiered RAG upit — hijerarhijska pretraga sa sumarima dokumenata i sekcija."""
+    if not body.query.strip():
+        raise HTTPException(status_code=400, detail="Upit ne može biti prazan")
+
+    from app.services.rag import tiered_rag_query
+
+    result = await tiered_rag_query(
+        db,
+        body.query,
+        user=current_user,
+        top_k=body.top_k,
+        provider_override=body.provider,
+    )
+
+    posthog_client.capture(
+        "knowledge tiered query",
+        distinct_id=str(current_user.id),
+        properties={
+            "chunks_used": result.get("chunks_used", 0),
+            "l0_used": result.get("l0_used", 0),
+            "l1_used": result.get("l1_used", 0),
+            "top_k": body.top_k,
+            "query_length": len(body.query),
+        },
+    )
+
+    return TieredQueryResponse(**result)
 
 
 @router.get("/sources", response_model=List[SourceResponse])

@@ -16,12 +16,13 @@ from datetime import datetime
 
 from openpyxl import Workbook
 from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-from openpyxl.utils import get_column_letter
+
+from app.services.base_export_service import BaseExportService
 
 logger = logging.getLogger(__name__)
 
 
-class XLSXExportService:
+class XLSXExportService(BaseExportService):
     """Service za export dokumenta u XLSX format."""
 
     def generate(
@@ -41,6 +42,7 @@ class XLSXExportService:
         Returns:
             XLSX bytes
         """
+        self._report_progress(0, 100, "Priprema XLSX generisanja...")
         wb = Workbook()
 
         # Remove default sheet
@@ -86,6 +88,8 @@ class XLSXExportService:
             cell.alignment = header_alignment
             cell.border = thin_border
 
+        self._report_progress(10, 100, "Dodavanje podataka...")
+
         # Data rows
         row_num = 4
         for idx, chunk in enumerate(chunks, 1):
@@ -96,13 +100,7 @@ class XLSXExportService:
             heading = chunk.get("parent_heading") or chunk.get("heading_level", "")
             ws.cell(row=row_num, column=2, value=str(heading)).border = thin_border
 
-            # Content (translated or original)
-            if chunk.get("translated_content"):
-                content = chunk["translated_content"]
-            elif chunk.get("content"):
-                content = chunk["content"]
-            else:
-                content = ""
+            content = self._get_content(chunk)
 
             # Truncate if too long
             if len(content) > 500:
@@ -124,6 +122,11 @@ class XLSXExportService:
                 ws.cell(row=row_num, column=5, value=original).border = thin_border
 
             row_num += 1
+
+            # Progress update
+            if idx % 500 == 0:
+                progress = 10 + int((idx / len(chunks)) * 80)
+                self._report_progress(progress, 100, f"Podaci: {idx}/{len(chunks)}...")
 
         # Adjust column widths
         ws.column_dimensions["A"].width = 8
@@ -151,11 +154,14 @@ class XLSXExportService:
         ws_summary.column_dimensions["A"].width = 20
         ws_summary.column_dimensions["B"].width = 40
 
+        self._report_progress(95, 100, "Finalizacija XLSX-a...")
+
         # Save to bytes
         xlsx_bytes = io.BytesIO()
         wb.save(xlsx_bytes)
         xlsx_bytes.seek(0)
 
+        self._report_progress(100, 100, "XLSX generisanje završeno!")
         return xlsx_bytes.getvalue()
 
 

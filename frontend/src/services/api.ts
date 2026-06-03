@@ -189,6 +189,14 @@ export const documentsApi = {
   
   translate: (id: string, provider?: string) =>
     api.post(`/documents/${id}/translate`, { provider }),
+
+  // Prekini prevod i sačuvaj checkpoint
+  stopTranslation: (id: string) =>
+    api.delete(`/documents/${id}/translation`),
+  
+  // Nastavi prevod od checkpoint-a
+  resumeTranslation: (id: string) =>
+    api.post(`/documents/${id}/translation/resume`),
   
   getProgress: (id: string) =>
     api.get(`/documents/${id}/progress`),
@@ -223,7 +231,34 @@ export const documentsApi = {
     api.get('/documents/pipeline/providers'),
 
   exportPdf: (id: string, includeOriginal = false) =>
-    api.get(`/documents/${id}/export/pdf?include_original=${includeOriginal}`, {
+    api.post(`/documents/${id}/export-pdf?include_original=${includeOriginal}`),
+
+  exportPdfStatus: (taskId: string) =>
+    api.get(`/documents/pdf-status/${taskId}`),
+
+  exportPdfDownload: (id: string, taskId: string) =>
+    api.get(`/documents/${id}/pdf-download?task_id=${taskId}`, {
+      responseType: 'blob',
+    }),
+
+  exportDocx: (id: string, includeOriginal = false) =>
+    api.post(`/documents/${id}/export-docx?include_original=${includeOriginal}`),
+
+  exportDocxStatus: (taskId: string) =>
+    api.get(`/documents/docx-status/${taskId}`),
+
+  exportDocxDownload: (id: string, taskId: string) =>
+    api.get(`/documents/${id}/docx-download?task_id=${taskId}`, {
+      responseType: 'blob',
+    }),
+
+  exportXlsx: (id: string) =>
+    api.get(`/documents/${id}/export/xlsx`, {
+      responseType: 'blob',
+    }),
+
+  exportPptx: (id: string) =>
+    api.get(`/documents/${id}/export/pptx`, {
       responseType: 'blob',
     }),
 

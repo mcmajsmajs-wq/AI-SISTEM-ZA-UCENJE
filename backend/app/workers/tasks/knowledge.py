@@ -24,6 +24,7 @@ from urllib.parse import urljoin, urlparse
 from app.db.session import SessionLocal
 from app.services.knowledge_ingestion import (
     ingest_source,
+    ingest_source_with_tiers,
     extract_text_from_markdown,
     extract_text_from_url,
 )
@@ -43,7 +44,8 @@ def index_document_task(self, document_id: str, file_path: str, source_name: str
     try:
         rows = db.execute(
             text(
-                "SELECT content FROM chunks WHERE document_id = :doc_id ORDER BY sequence_number"
+                "SELECT content, heading_level, parent_heading FROM chunks "
+                "WHERE document_id = :doc_id ORDER BY sequence_number"
             ),
             {"doc_id": document_id},
         ).fetchall()
@@ -52,7 +54,20 @@ def index_document_task(self, document_id: str, file_path: str, source_name: str
             logger.warning(f"Nema chunk-ova za dokument {document_id}")
             return {"status": "empty", "chunks": 0}
 
-        text_content = "\n\n".join(row.content for row in rows if row.content)
+        # Build section-aware text with heading markers for tiered detection
+        section_lines = []
+        last_heading = None
+        for row in rows:
+            heading = row.parent_heading
+            if heading and heading != last_heading:
+                level = row.heading_level or 2
+                prefix = "#" * level
+                section_lines.append(f"{prefix} {heading}")
+                last_heading = heading
+            if row.content:
+                section_lines.append(row.content)
+
+        text_content = "\n\n".join(section_lines)
 
         existing = db.execute(
             text("SELECT id FROM knowledge_sources WHERE file_path = :fp"),
@@ -73,7 +88,9 @@ def index_document_task(self, document_id: str, file_path: str, source_name: str
             db.commit()
             source_id = str(result.fetchone().id)
 
-        chunks = ingest_source(db, source_id, "pdf", text_content, source_name)
+        chunks = ingest_source_with_tiers(
+            db, source_id, "pdf", text_content, source_name
+        )
         return {"status": "ok", "chunks": chunks, "source_id": source_id}
     except Exception as exc:
         logger.error(f"Greška pri indeksiranju dokumenta {source_name}: {exc}")

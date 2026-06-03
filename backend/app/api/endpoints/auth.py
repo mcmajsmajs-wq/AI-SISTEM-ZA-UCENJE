@@ -9,8 +9,7 @@ Verzija: 1.0.0
 ================================================================================
 """
 
-from fastapi import APIRouter, Depends, HTTPException, status, Request
-from fastapi.security import OAuth2PasswordRequestForm
+from fastapi import APIRouter, Depends, HTTPException, status, Request, Form
 from sqlalchemy.orm import Session
 from typing import Optional
 import logging
@@ -68,15 +67,20 @@ async def register(user_data: UserRegister, db: Session = Depends(get_db)):
 
 
 @router.post("/login", response_model=Token)
-async def login(user_data: UserLogin, db: Session = Depends(get_db)):
+async def login(
+    username: str = Form(),  # OAuth2 standard - username sadrži email
+    password: str = Form(),
+    db: Session = Depends(get_db),
+):
     """
-    ================================================================================
+    ===============================================================================
     LOGIN KORISNIKA
-    ================================================================================
-    Autentikuje korisnika i vraća JWT token.
+    ===============================================================================
+    Autentifikuje korisnika i vraća JWT token.
 
     Args:
-        user_data: UserLogin sa email i password
+        username: Korisnikov email (OAuth2 standard)
+        password: Korisnikov password
         db: Database session
 
     Returns:
@@ -84,13 +88,11 @@ async def login(user_data: UserLogin, db: Session = Depends(get_db)):
 
     Raises:
         HTTPException 401: Ako su kredencijali netačni
-    ================================================================================
+    ===============================================================================
     """
-    logger.info(f"Login attempt for user: {user_data.email}")
+    logger.info(f"Login attempt for user: {username}")
 
-    user = AuthService.authenticate_user(
-        db=db, email=user_data.email, password=user_data.password
-    )
+    user = AuthService.authenticate_user(db=db, email=username, password=password)
 
     if not user:
         raise HTTPException(

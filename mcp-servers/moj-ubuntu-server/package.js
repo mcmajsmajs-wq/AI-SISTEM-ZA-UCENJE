@@ -1,9 +1,0 @@
-{
-  "name": "moj-ubuntu-server",
-  "version": "1.0.0",
-  "type": "module",
-  "main": "index.js",
-  "dependencies": {
-    "@modelcontextprotocol/sdk": "^1.0.0"
-  }
-}

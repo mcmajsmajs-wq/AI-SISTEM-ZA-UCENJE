@@ -224,12 +224,19 @@ def auto_pipeline_task(
         # Step 2: Translation (optional)
         if not skip_translation:
             logger.info("[PIPELINE] Korak 2: Prevod dokumenta")
-            from app.workers.tasks.translation import translate_document_task  # noqa: F401
+            from app.workers.tasks.translation import run_document_translation
 
-            # This would run as separate task in production
-            # For now, we just set status
             document.status = "translating"
             db.commit()
+            result = run_document_translation(
+                db,
+                str(document.id),
+                provider=translation_provider,
+            )
+            logger.info(
+                f"[PIPELINE] Prevod završen: "
+                f"{result.get('translated_chunks', 0)} chunkova"
+            )
 
         # Step 3: Generate Quiz
         logger.info("[PIPELINE] Korak 3: Generisanje kviza")
@@ -246,10 +253,22 @@ def auto_pipeline_task(
         db.add(quiz)
         db.commit()
 
-        # NOTE: In production, this would be a separate Celery task
-        # from app.workers.tasks.quiz import generate_quiz_task
-        quiz.status = "ready"
-        db.commit()
+        from app.services.quiz.service import QuizService
+
+        quiz_service = QuizService()
+        source = "translated" if not skip_translation else "original"
+        success, used_provider = quiz_service.generate_quiz_questions(
+            db=db,
+            quiz_id=str(quiz.id),
+            num_questions=num_questions,
+            source_content=source,
+        )
+        if success:
+            logger.info(f"[PIPELINE] Kviz generisan ({used_provider})")
+        else:
+            logger.warning(f"[PIPELINE] Kviz nije uspeo: {used_provider}")
+            quiz.status = "failed"
+            db.commit()
 
         logger.info(f"[PIPELINE] Završen za dokument {document_id}")
 

@@ -11,7 +11,7 @@ Verzija: 1.0.0
 
 import re
 import logging
-from typing import List, Dict, Optional, Tuple
+from typing import List, Dict, Optional, Tuple, Union
 from dataclasses import dataclass, field
 
 import fitz
@@ -50,6 +50,7 @@ class ChunkData:
     heading_level: int = 0
     parent_heading: Optional[str] = None
     page_number: Optional[int] = None
+    layout_data: Optional[dict] = None
 
 
 @dataclass
@@ -199,22 +200,30 @@ class PDFService:
             is_scanned=is_scanned,
         )
 
-    def extract_text_from_page(self, page: fitz.Page) -> str:
+    def extract_text_from_page(
+        self, page: fitz.Page, include_font_info: bool = False
+    ) -> Union[str, List[dict]]:
         """
         Ekstrahuje tekst sa jedne stranice.
 
         Args:
             page: PyMuPDF page objekat
+            include_font_info: Ako True, vraća listu sa font info umesto stringa
 
         Returns:
-            Ekstrahovan tekst
+            Ekstrahovan tekst kao string, ili listu diktova sa font info
         """
         try:
-            text = page.get_text("text", sort=True)
-            return text.strip()
+            if include_font_info:
+                blocks = page.get_text("dict")["blocks"]
+                paragraphs = self._merge_lines_by_font(blocks)
+                return paragraphs
+            else:
+                text = page.get_text("text", sort=True)
+                return text.strip()
         except Exception as e:
             logger.error(f"Error extracting text from page: {e}")
-            return ""
+            return "" if not include_font_info else []
 
     def perform_ocr(
         self, pdf_bytes: bytes, page_numbers: List[int] = None, progress_callback=None
@@ -309,12 +318,118 @@ class PDFService:
 
         return "\n".join(cleaned_lines)
 
-    def detect_heading(self, text: str) -> Tuple[int, Optional[str]]:
+    def _detect_font_heading(
+        self, font: str, size: float, text: str
+    ) -> Tuple[int, Optional[str]]:
+        """
+        Detektuje heading na osnovu font informacija (veličina, bold).
+
+        Args:
+            font: Ime fonta
+            size: Veličina fonta
+            text: Tekst段落
+
+        Returns:
+            Tuple (heading_level, heading_text)
+        """
+        stripped = text.strip()
+        if not stripped or len(stripped) < 3:
+            return 0, None
+
+        # Skip very short lines or single characters
+        if len(stripped) < 3:
+            return 0, None
+
+        # Skip lines with too many special characters (code blocks, etc)
+        special_ratio = sum(1 for c in stripped if c in "{}[]|\\") / len(stripped)
+        if special_ratio > 0.2:
+            return 0, None
+
+        # Font-based heading detection
+        is_bold = "bold" in font.lower() or "Bold" in font
+        font_size = size
+
+        # Major headings: Bold + Size >= 14
+        if is_bold and font_size >= 14:
+            return 1, stripped
+
+        # Section headings: Bold + Size >= 11
+        if is_bold and font_size >= 11:
+            return 2, stripped
+
+        # Minor headings: Bold + Size >= 9
+        if is_bold and font_size >= 9:
+            return 3, stripped
+
+        return 0, None
+
+    def _merge_lines_by_font(self, blocks: List[dict]) -> List[dict]:
+        """
+        Merge lines into paragraphs based on font consistency.
+        Returns list of {'text': str, 'font': str, 'size': float, 'is_bold': bool}
+        """
+        paragraphs = []
+        current_para = {"text": "", "font": "", "size": 0, "is_bold": False}
+
+        for block in blocks:
+            if "lines" not in block:
+                continue
+
+            for line in block["lines"]:
+                para_text = " ".join(
+                    span["text"].strip()
+                    for span in line["spans"]
+                    if span["text"].strip()
+                )
+                if not para_text:
+                    continue
+
+                # Get font info from first span
+                if line["spans"]:
+                    span = line["spans"][0]
+                    font = span.get("font", "ArialMT")
+                    size = span.get("size", 10)
+                    flags = span.get("flags", 0)
+                    is_bold = flags & 1 or "bold" in font.lower()
+
+                    # If font changes significantly, start new paragraph
+                    if current_para["text"]:
+                        size_diff = abs(size - current_para["size"])
+                        font_changed = font != current_para["font"]
+
+                        if size_diff > 4 or (
+                            font_changed and (is_bold != current_para["is_bold"])
+                        ):
+                            paragraphs.append(current_para)
+                            current_para = {
+                                "text": "",
+                                "font": "",
+                                "size": 0,
+                                "is_bold": False,
+                            }
+
+                    current_para["text"] = (
+                        current_para["text"] + " " + para_text
+                    ).strip()
+                    current_para["font"] = font
+                    current_para["size"] = max(current_para["size"], size)
+                    current_para["is_bold"] = current_para["is_bold"] or is_bold
+
+        if current_para["text"]:
+            paragraphs.append(current_para)
+
+        return paragraphs
+
+    def detect_heading(
+        self, text: str, font: str = None, size: float = None
+    ) -> Tuple[int, Optional[str]]:
         """
         Detektuje da li je tekst heading i vraća nivo.
 
         Args:
             text: Tekst za analizu
+            font: Ime fonta (opciono)
+            size: Veličina fonta (opciono)
 
         Returns:
             Tuple (level, heading_text)
@@ -324,6 +439,13 @@ class PDFService:
         if not stripped:
             return 0, None
 
+        # Prvo probaj font-based detection
+        if font and size:
+            level, heading = self._detect_font_heading(font, size, stripped)
+            if level > 0:
+                return level, heading
+
+        # Onda probaj text pattern detection
         for pattern in self.HEADING_PATTERNS:
             match = pattern.match(stripped)
             if match:
@@ -359,6 +481,9 @@ class PDFService:
         current_heading_level = 0
         current_parent_heading = None
 
+        def _base_layout():
+            return {"page_number": page_number} if page_number else None
+
         for para in paragraphs:
             para = para.strip()
             if not para:
@@ -376,11 +501,25 @@ class PDFService:
                             heading_level=current_heading_level,
                             parent_heading=current_parent_heading,
                             page_number=page_number,
+                            layout_data=_base_layout(),
                         )
                     )
                     sequence += 1
                     current_chunk_text = ""
                     current_tokens = 0
+
+                chunks.append(
+                    ChunkData(
+                        sequence_number=sequence,
+                        content=heading_text,
+                        token_count=self.count_tokens(heading_text),
+                        heading_level=heading_level,
+                        parent_heading=current_parent_heading,
+                        page_number=page_number,
+                        layout_data=_base_layout(),
+                    )
+                )
+                sequence += 1
 
                 current_heading_level = heading_level
                 current_parent_heading = heading_text
@@ -397,6 +536,7 @@ class PDFService:
                         heading_level=current_heading_level,
                         parent_heading=current_parent_heading,
                         page_number=page_number,
+                        layout_data=_base_layout(),
                     )
                 )
                 sequence += 1
@@ -424,6 +564,141 @@ class PDFService:
                     heading_level=current_heading_level,
                     parent_heading=current_parent_heading,
                     page_number=page_number,
+                    layout_data=_base_layout(),
+                )
+            )
+
+        return chunks
+
+    def smart_chunk_with_fonts(
+        self, paragraphs: List[dict], page_number: Optional[int] = None
+    ) -> List[ChunkData]:
+        """
+        Vrši pametno chunkovanje teksta koristeći font informacije za detekciju naslova.
+
+        Args:
+            paragraphs: Lista diktova sa 'text', 'font', 'size', 'is_bold' poljima
+            page_number: Broj stranice (opcionalno)
+
+        Returns:
+            Lista ChunkData objekata sa layout_data
+        """
+        if not paragraphs:
+            return []
+
+        chunks = []
+        current_chunk_text = ""
+        current_tokens = 0
+        current_layout_items = []  # layout podaci za svaki pasus u trenutnom chunk-u
+        sequence = 0
+        current_heading_level = 0
+        current_parent_heading = None
+
+        def _flush_chunk():
+            """Flushuje trenutni chunk u listu."""
+            nonlocal sequence, current_chunk_text, current_tokens, current_layout_items
+            if not current_chunk_text.strip():
+                return
+            chunks.append(
+                ChunkData(
+                    sequence_number=sequence,
+                    content=current_chunk_text.strip(),
+                    token_count=current_tokens,
+                    heading_level=current_heading_level,
+                    parent_heading=current_parent_heading,
+                    page_number=page_number,
+                    layout_data={
+                        "paragraphs": list(current_layout_items),
+                        "page_number": page_number,
+                    }
+                    if current_layout_items
+                    else None,
+                )
+            )
+            sequence += 1
+            current_chunk_text = ""
+            current_tokens = 0
+            current_layout_items = []
+
+        for para in paragraphs:
+            text = para.get("text", "").strip()
+            if not text:
+                continue
+
+            font = para.get("font", "")
+            size = para.get("size", 10)
+            is_bold = para.get("is_bold", False)
+
+            para_layout = {
+                "font": font,
+                "size": float(size) if size is not None else 10.0,
+                "is_bold": bool(is_bold),
+            }
+
+            # Detektuj heading koristeći font info prvo
+            heading_level, heading_text = self.detect_heading(text, font, size)
+
+            if heading_level > 0:
+                _flush_chunk()
+
+                # Sačuvaj naslov kao poseban chunk sa layout_data
+                chunks.append(
+                    ChunkData(
+                        sequence_number=sequence,
+                        content=heading_text,
+                        token_count=self.count_tokens(heading_text),
+                        heading_level=heading_level,
+                        parent_heading=current_parent_heading,
+                        page_number=page_number,
+                        layout_data={
+                            "paragraphs": [para_layout],
+                            "page_number": page_number,
+                        },
+                    )
+                )
+                sequence += 1
+
+                current_heading_level = heading_level
+                current_parent_heading = heading_text
+                continue
+
+            para_tokens = self.count_tokens(text)
+
+            if current_tokens + para_tokens > self.chunk_size and current_chunk_text:
+                _flush_chunk()
+
+                if self.chunk_overlap > 0 and current_tokens > self.chunk_overlap:
+                    overlap_text = self._get_overlap_text(current_chunk_text)
+                    current_chunk_text = overlap_text + "\n\n" + text
+                    current_tokens = self.count_tokens(current_chunk_text)
+                    current_layout_items = [para_layout]
+                else:
+                    current_chunk_text = text
+                    current_tokens = para_tokens
+                    current_layout_items = [para_layout]
+            else:
+                if current_chunk_text:
+                    current_chunk_text += "\n\n" + text
+                else:
+                    current_chunk_text = text
+                current_tokens += para_tokens
+                current_layout_items.append(para_layout)
+
+        if current_chunk_text.strip():
+            chunks.append(
+                ChunkData(
+                    sequence_number=sequence,
+                    content=current_chunk_text.strip(),
+                    token_count=current_tokens,
+                    heading_level=current_heading_level,
+                    parent_heading=current_parent_heading,
+                    page_number=page_number,
+                    layout_data={
+                        "paragraphs": list(current_layout_items),
+                        "page_number": page_number,
+                    }
+                    if current_layout_items
+                    else None,
                 )
             )
 
@@ -504,19 +779,41 @@ class PDFService:
                 page = pdf_document[page_num]
 
                 if page_num in ocr_results and ocr_results[page_num]:
-                    text = ocr_results[page_num]
+                    paragraphs = [
+                        {
+                            "text": ocr_results[page_num],
+                            "font": "ArialMT",
+                            "size": 10,
+                            "is_bold": False,
+                        }
+                    ]
                 else:
-                    text = self.extract_text_from_page(page)
+                    paragraphs = self.extract_text_from_page(
+                        page, include_font_info=True
+                    )
 
-                if not text and self.use_ocr and page_num not in ocr_results:
+                if not paragraphs and self.use_ocr and page_num not in ocr_results:
                     logger.info(f"No text on page {page_num}, trying OCR")
                     ocr_page = self.perform_ocr(pdf_bytes, [page_num])
                     text = ocr_page.get(page_num, "")
+                    if text:
+                        paragraphs = [
+                            {
+                                "text": text,
+                                "font": "ArialMT",
+                                "size": 10,
+                                "is_bold": False,
+                            }
+                        ]
 
+                # Build text from paragraphs for denoising
+                text = "\n\n".join(p["text"] for p in paragraphs if p.get("text"))
                 text = self.denoise_text(text)
                 pages_text.append(text)
 
-                page_chunks = self.smart_chunk(text, page_number=page_num + 1)
+                page_chunks = self.smart_chunk_with_fonts(
+                    paragraphs, page_number=page_num + 1
+                )
 
                 for chunk in page_chunks:
                     chunk.sequence_number = global_sequence

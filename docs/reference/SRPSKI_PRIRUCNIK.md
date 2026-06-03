@@ -1,0 +1,1 @@
+/home/dju/mojAiProjekat/agent-skills/SRPSKI_PRIRUCNIK.md

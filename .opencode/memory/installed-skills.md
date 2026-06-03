@@ -51,3 +51,28 @@
 - Svi skill-ovi su sa https://agentskill.sh/@obra/
 - Autor: obra (github.com/obra/superpowers)
 - Quality score: 67-100/100
+
+---
+
+## Instalacija: addyosmani/agent-skills (2026-05-23)
+
+### 23 Production-Grade Engineering Skill-ova
+
+**Izvor:** https://github.com/addyosmani/agent-skills (45k ⭐, MIT license, Addy Osmani)
+
+**Instalacija:**
+- Repo kloniran: `/home/dju/mojAiProjekat/agent-skills`
+- Symlinkovani u `~/.config/opencode/skills/` (svih 23)
+
+**Skill-ovi:**
+| Kategorija | Skill-ovi |
+|------------|-----------|
+| DEFINE | interview-me, idea-refine, spec-driven-development |
+| PLAN | planning-and-task-breakdown |
+| BUILD | incremental-implementation, tdd, context-engineering, source-driven-development, doubt-driven-development, frontend-ui-engineering, api-and-interface-design |
+| VERIFY | browser-testing-with-devtools, debugging-and-error-recovery |
+| REVIEW | code-review-and-quality, code-simplification, security-and-hardening, performance-optimization |
+| SHIP | git-workflow-and-versioning, ci-cd-and-automation, deprecation-and-migration, documentation-and-adrs, shipping-and-launch |
+| META | using-agent-skills |
+
+**Ponašanje:** Agent automatski bira skill na osnovu zadatka (nema ručnih komandi).

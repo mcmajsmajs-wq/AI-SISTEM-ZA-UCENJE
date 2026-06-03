@@ -33,7 +33,10 @@ import {
   AlertCircle,
   Activity,
   Trash2,
-  RotateCcw
+  RotateCcw,
+  Square,
+  X,
+  FileDown
 } from 'lucide-react'
 import clsx from 'clsx'
 import PipelineModal from '@/components/PipelineModal'
@@ -45,7 +48,43 @@ export default function DocumentDetailPage() {
   const queryClient = useQueryClient()
   const [showPipeline, setShowPipeline] = useState(false)
   const [downloadingPdf, setDownloadingPdf] = useState(false)
+  const [downloadingDocx, setDownloadingDocx] = useState(false)
+  const [downloadingXlsx, setDownloadingXlsx] = useState(false)
+  const [downloadingPptx, setDownloadingPptx] = useState(false)
+  const [pdfTaskId, setPdfTaskId] = useState<string | null>(null)
+  const [docxTaskId, setDocxTaskId] = useState<string | null>(null)
+  
+  // Export progress states
+  const [exportProgress, setExportProgress] = useState<{current: number, total: number, status: string} | null>(null)
+  const [showExportModal, setShowExportModal] = useState(false)
+  const [exportType, setExportType] = useState<'pdf' | 'docx' | 'xlsx' | 'pptx' | null>(null)
+  
+  // Export status persisted for page navigation
+  const [pdfExportStatus, setPdfExportStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle')
+  const [docxExportStatus, setDocxExportStatus] = useState<'idle' | 'processing' | 'completed' | 'failed'>('idle')
+  
   const docId = id || ''
+
+  // Load persisted export status on mount
+  useEffect(() => {
+    if (docId) {
+      const saved = localStorage.getItem(`export_status_${docId}`)
+      if (saved) {
+        try {
+          const parsed = JSON.parse(saved)
+          if (parsed.pdf) setPdfExportStatus(parsed.pdf as any)
+          if (parsed.docx) setDocxExportStatus(parsed.docx as any)
+        } catch (e) {}
+      }
+    }
+  }, [docId])
+  
+  // Save export status to localStorage
+  const saveExportStatus = (pdf: string, docx: string) => {
+    if (docId) {
+      localStorage.setItem(`export_status_${docId}`, JSON.stringify({ pdf, docx }))
+    }
+  }
 
   const deleteMutation = useMutation({
     mutationFn: () => documentsApi.delete(docId),
@@ -93,12 +132,25 @@ export default function DocumentDetailPage() {
       return documentsApi.translate(docId, undefined)
     },
     onSuccess: () => {
-      toast.success('Prevođenje nastavljeno')
+      toast.success('Prevođenje pokrenuto')
       queryClient.invalidateQueries({ queryKey: ['document', docId] })
       queryClient.invalidateQueries({ queryKey: ['document-progress', docId] })
     },
     onError: (error: any) => {
-      const message = error.response?.data?.user_message || error.message || 'Greška pri nastavku prevođenja'
+      const message = error.response?.data?.user_message || error.message || 'Greška pri pokretanju prevođenja'
+      toast.error(message)
+    },
+  })
+
+  const stopMutation = useMutation({
+    mutationFn: () => documentsApi.stopTranslation(docId),
+    onSuccess: () => {
+      toast.success('Prevođenje zaustavljeno. Možete nastaviti kasnije.')
+      queryClient.invalidateQueries({ queryKey: ['document', docId] })
+      queryClient.invalidateQueries({ queryKey: ['document-progress', docId] })
+    },
+    onError: (error: any) => {
+      const message = error.response?.data?.user_message || error.message || 'Greška pri zaustavljanju'
       toast.error(message)
     },
   })
@@ -108,20 +160,191 @@ export default function DocumentDetailPage() {
   }
 
   const handleExportPdf = async () => {
-    if (!docId) return
+    console.log('[DEBUG] handleExportPdf called')
+    console.log('[DEBUG] docId:', docId)
+    console.log('[DEBUG] doc?.status:', doc?.status)
+    console.log('[DEBUG] downloadingPdf before:', downloadingPdf)
+    console.log('[DEBUG] document title:', doc?.title)
+    
+    if (!docId) {
+      console.log('[DEBUG] No docId, returning')
+      return
+    }
+    
+    console.log('[DEBUG] Setting state...')
     setDownloadingPdf(true)
+    setPdfTaskId(null)
+    setExportType('pdf')
+    setExportProgress({ current: 0, total: 100, status: 'Priprema...' })
+    setShowExportModal(true)
+    setPdfExportStatus('processing')
+    saveExportStatus('processing', docxExportStatus)
+    console.log('[DEBUG] State set, calling API...')
+    
     try {
+      console.log('[DEBUG] Calling documentsApi.exportPdf')
       const res = await documentsApi.exportPdf(docId)
-      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/pdf' }))
+      console.log('[DEBUG] exportPdf response:', res.data)
+      const taskId = res.data.task_id
+      setPdfTaskId(taskId)
+      
+      const poll = async () => {
+        console.log('[DEBUG] Polling PDF status...')
+        const statusRes = await documentsApi.exportPdfStatus(taskId)
+        const status = statusRes.data.status
+        console.log('[DEBUG] Task status:', status)
+        console.log('[DEBUG] Full response:', statusRes.data)
+        
+        // Celery PROGRESS state has result field with progress info
+        const info = statusRes.data.result || {}
+        console.log('[DEBUG] Progress info:', info)
+        
+        // Update progress
+        if (info.current !== undefined) {
+          const progress = {
+            current: info.current,
+            total: info.total || 100,
+            status: info.status || 'Procesiranje...'
+          }
+          console.log('[DEBUG] Setting export progress:', progress)
+          setExportProgress(progress)
+        }
+        
+        if (status === 'SUCCESS') {
+          setExportProgress({ current: 100, total: 100, status: 'Preuzimanje...' })
+          const downloadRes = await documentsApi.exportPdfDownload(docId, taskId)
+          const url = window.URL.createObjectURL(new Blob([downloadRes.data], { type: 'application/pdf' }))
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${doc?.title ?? 'dokument'}_prevod.pdf`
+          a.click()
+          window.URL.revokeObjectURL(url)
+          toast.success('PDF uspešno generisan')
+          setShowExportModal(false)
+          setPdfExportStatus('completed')
+          saveExportStatus('completed', docxExportStatus)
+        } else if (status === 'FAILURE') {
+          throw new Error(statusRes.data.error || 'PDF generisanje nije uspelo')
+        } else if (status === 'PROGRESS') {
+          console.log('[DEBUG] Still processing, polling again...')
+          setTimeout(poll, 1000)
+        } else {
+          console.log('[DEBUG] Unknown status, polling again...')
+          setTimeout(poll, 2000)
+        }
+      }
+      
+      poll()
+    } catch (err: any) {
+      console.error('[DEBUG] exportPdf error:', err)
+      console.error('[DEBUG] error response:', err.response)
+      const message = err.response?.data?.detail || err.message || 'Greška pri eksportu PDF-a'
+      toast.error(message)
+      setShowExportModal(false)
+      setPdfExportStatus('failed')
+      saveExportStatus('failed', docxExportStatus)
+    } finally {
+      setDownloadingPdf(false)
+    }
+  }
+
+  const handleExportDocx = async () => {
+    if (!docId) return
+    setDownloadingDocx(true)
+    setDocxTaskId(null)
+    setExportType('docx')
+    setExportProgress({ current: 0, total: 100, status: 'Priprema...' })
+    setShowExportModal(true)
+    setDocxExportStatus('processing')
+    saveExportStatus(pdfExportStatus, 'processing')
+    
+    try {
+      const res = await documentsApi.exportDocx(docId)
+      const taskId = res.data.task_id
+      setDocxTaskId(taskId)
+      
+      const poll = async () => {
+        const statusRes = await documentsApi.exportDocxStatus(taskId)
+        const status = statusRes.data.status
+        
+        // Celery PROGRESS state has result field with progress info
+        const info = statusRes.data.result || {}
+        
+        if (info.current !== undefined) {
+          setExportProgress({
+            current: info.current,
+            total: info.total || 100,
+            status: info.status || 'Procesiranje...'
+          })
+        }
+        
+        if (status === 'SUCCESS') {
+          setExportProgress({ current: 100, total: 100, status: 'Preuzimanje...' })
+          const downloadRes = await documentsApi.exportDocxDownload(docId, taskId)
+          const url = window.URL.createObjectURL(new Blob([downloadRes.data], { type: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document' }))
+          const a = document.createElement('a')
+          a.href = url
+          a.download = `${doc?.title ?? 'dokument'}_prevod.docx`
+          a.click()
+          window.URL.revokeObjectURL(url)
+          toast.success('DOCX uspešno generisan')
+          setShowExportModal(false)
+          setDocxExportStatus('completed')
+          saveExportStatus(pdfExportStatus, 'completed')
+        } else if (status === 'FAILURE') {
+          throw new Error(statusRes.data.error || 'DOCX generisanje nije uspelo')
+        } else if (status === 'PROGRESS' || status === 'PENDING' || status === 'STARTED') {
+          setTimeout(poll, 1000)
+        } else {
+          setTimeout(poll, 2000)
+        }
+      }
+      
+      poll()
+    } catch (err: any) {
+      const message = err.response?.data?.detail || err.message || 'Greška pri eksportu DOCX-a'
+      toast.error(message)
+      setShowExportModal(false)
+      setDocxExportStatus('failed')
+      saveExportStatus(pdfExportStatus, 'failed')
+    } finally {
+      setDownloadingDocx(false)
+    }
+  }
+
+  const handleExportXlsx = async () => {
+    if (!docId) return
+    setDownloadingXlsx(true)
+    try {
+      const res = await documentsApi.exportXlsx(docId)
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }))
       const a = document.createElement('a')
       a.href = url
-      a.download = `${doc?.title ?? 'dokument'}_prevod.pdf`
+      a.download = `${doc?.title ?? 'dokument'}_prevod.xlsx`
       a.click()
       window.URL.revokeObjectURL(url)
     } catch {
-      toast.error('Greška pri eksportu PDF-a')
+      toast.error('Greška pri eksportu XLSX-a')
     } finally {
-      setDownloadingPdf(false)
+      setDownloadingXlsx(false)
+    }
+  }
+
+  const handleExportPptx = async () => {
+    if (!docId) return
+    setDownloadingPptx(true)
+    try {
+      const res = await documentsApi.exportPptx(docId)
+      const url = window.URL.createObjectURL(new Blob([res.data], { type: 'application/vnd.openxmlformats-officedocument.presentationml.presentation' }))
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `${doc?.title ?? 'dokument'}_prevod.pptx`
+      a.click()
+      window.URL.revokeObjectURL(url)
+    } catch {
+      toast.error('Greška pri eksportu PPTX-a')
+    } finally {
+      setDownloadingPptx(false)
     }
   }
 
@@ -187,13 +410,41 @@ export default function DocumentDetailPage() {
 
   const doc = docQueryData?.data
 
+  // Toast when processing completes
+  const prevStatusRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const current = doc?.status
+    if (prevStatusRef.current && prevStatusRef.current === 'processing' && current === 'completed') {
+      const title = doc?.title || 'Dokument'
+      toast.success(`"${title}" — obrada završena!`, { duration: 5000 })
+    }
+    if (current) prevStatusRef.current = current
+  }, [doc?.status, doc?.title])
+
+  // Toast when translation completes
+  const prevTransStatusRef = useRef<string | undefined>(undefined)
+  useEffect(() => {
+    const current = doc?.status
+    if (prevTransStatusRef.current && prevTransStatusRef.current === 'translating' && current === 'completed') {
+      const title = doc?.title || 'Dokument'
+      toast.success(`"${title}" — prevod završen!`, { duration: 5000 })
+    }
+    if (current) prevTransStatusRef.current = current
+  }, [doc?.status, doc?.title])
+
   const getStatusConfig = (status: string, translatedChunks: number, totalChunks: number) => {
-    const configs: Record<string, { badge: string; strip: string; label: string }> = {
+    const configs: Record<string, { badge: string; strip: string; label: string; hasSubstatus?: boolean }> = {
       pending:     { badge: 'badge-gray',    strip: 'from-gray-500 to-slate-600',     label: 'Na čekanju' },
       processing:  { badge: 'badge-primary', strip: 'from-indigo-500 to-blue-600',    label: 'Obrađuje se' },
-      completed:   { badge: 'badge-success', strip: 'from-emerald-500 to-green-600',  label: totalChunks === 0 ? 'Bez odlomaka' : (translatedChunks === 0 ? 'Nije prevedeno' : 'Obrađeno') },
+      completed:   { 
+        badge: translatedChunks === 0 && totalChunks > 0 ? 'badge-warning' : 'badge-success', 
+        strip: translatedChunks === 0 && totalChunks > 0 ? 'from-orange-500 to-red-500' : 'from-emerald-500 to-green-600', 
+        label: totalChunks === 0 ? 'Bez odlomaka' : (translatedChunks === 0 ? 'Nije prevedeno' : 'Obrađeno'),
+        hasSubstatus: translatedChunks === 0 && totalChunks > 0
+      },
       translating: { badge: 'badge-primary', strip: 'from-violet-500 to-purple-600',  label: 'Prevodi se' },
       error:       { badge: 'badge-error',   strip: 'from-red-500 to-rose-600',       label: 'Greška' },
+      partial:     { badge: 'badge-warning', strip: 'from-amber-500 to-orange-500',   label: 'Delimično' },
     }
     return configs[status] || configs['pending']
   }
@@ -326,11 +577,17 @@ export default function DocumentDetailPage() {
                 )}
               </p>
               <p className={clsx('text-xs flex items-center gap-1.5', doc.status === 'translating' ? 'text-violet-500' : 'text-indigo-400')}>
-                {secondsSinceActivity !== null ? (
-                  secondsSinceActivity > 30 ? (
+                {doc.status === 'completed' ? (
+                  <span className="flex items-center gap-1 text-emerald-600">
+                    <CheckCircle className="w-3 h-3" />
+                    Obrada završena
+                    {progress?.elapsed_seconds ? ` · za ${Math.floor(progress.elapsed_seconds / 60)}m ${progress.elapsed_seconds % 60}s` : ''}
+                  </span>
+                ) : secondsSinceActivity !== null ? (
+                  secondsSinceActivity > 60 ? (
                     <span className="flex items-center gap-1 text-amber-600 font-medium">
                       <AlertTriangle className="w-3 h-3" />
-                      Nema aktivnosti već {secondsSinceActivity}s — worker možda nije pokrenut
+                      Nema aktivnosti već {Math.floor(secondsSinceActivity / 60)}m
                     </span>
                   ) : (
                     <span className="flex items-center gap-1 text-emerald-600">
@@ -449,6 +706,20 @@ export default function DocumentDetailPage() {
 
       {/* Action buttons */}
       <div className="flex flex-wrap gap-3">
+        {doc.status === 'translating' && (
+          <button
+            onClick={() => {
+              if (confirm('Da li želite da prekinete prevođenje? Progress će biti sačuvan.')) {
+                stopMutation.mutate()
+              }
+            }}
+            disabled={stopMutation.isPending}
+            className="btn-primary bg-red-600 hover:bg-red-700 disabled:opacity-50"
+          >
+            <Square className="w-4 h-4" />
+            {stopMutation.isPending ? 'Prekid...' : 'Prekini prevod'}
+          </button>
+        )}
         {doc.status === 'error' && (
           <div className="w-full bg-red-50 border border-red-200 rounded-lg p-4 mb-2">
             <div className="flex items-center gap-2 text-red-700 font-medium mb-2">
@@ -523,12 +794,87 @@ export default function DocumentDetailPage() {
               Auto Pipeline
             </button>
             <button
-              onClick={handleExportPdf}
+              onClick={() => {
+                console.log('[DEBUG] PDF button clicked!')
+                handleExportPdf()
+              }}
               disabled={(doc.status !== 'completed' && doc.status !== 'partial') || downloadingPdf}
               className={clsx('btn-primary bg-emerald-600 hover:bg-emerald-700', (doc.status !== 'completed' && doc.status !== 'partial') && 'opacity-50 pointer-events-none')}
             >
-              {downloadingPdf ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
-              {doc.status === 'partial' ? 'Preuzmi delimični PDF' : 'Preuzmi PDF'}
+              {downloadingPdf ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {pdfTaskId ? 'Priprema PDF...' : 'PDF'}
+                </span>
+              ) : pdfExportStatus === 'completed' ? (
+                <span className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  PDF
+                </span>
+              ) : pdfExportStatus === 'processing' ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  PDF...
+                </span>
+              ) : pdfExportStatus === 'failed' ? (
+                <span className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  PDF
+                </span>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  {doc.status === 'partial' ? 'Delimični PDF' : 'PDF'}
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleExportDocx}
+              disabled={(doc.status !== 'completed' && doc.status !== 'partial') || downloadingDocx}
+              className={clsx('btn-primary bg-blue-600 hover:bg-blue-700', (doc.status !== 'completed' && doc.status !== 'partial') && 'opacity-50 pointer-events-none')}
+            >
+              {downloadingDocx ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  {docxTaskId ? 'Priprema DOCX...' : 'DOCX'}
+                </span>
+              ) : docxExportStatus === 'completed' ? (
+                <span className="flex items-center gap-2">
+                  <CheckCircle className="w-4 h-4" />
+                  DOCX
+                </span>
+              ) : docxExportStatus === 'processing' ? (
+                <span className="flex items-center gap-2">
+                  <Loader2 className="w-4 h-4 animate-spin" />
+                  DOCX...
+                </span>
+              ) : docxExportStatus === 'failed' ? (
+                <span className="flex items-center gap-2">
+                  <AlertCircle className="w-4 h-4" />
+                  DOCX
+                </span>
+              ) : (
+                <>
+                  <Download className="w-4 h-4" />
+                  DOCX
+                </>
+              )}
+            </button>
+            <button
+              onClick={handleExportXlsx}
+              disabled={(doc.status !== 'completed' && doc.status !== 'partial') || downloadingXlsx}
+              className={clsx('btn-primary bg-green-600 hover:bg-green-700', (doc.status !== 'completed' && doc.status !== 'partial') && 'opacity-50 pointer-events-none')}
+            >
+              {downloadingXlsx ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              XLSX
+            </button>
+            <button
+              onClick={handleExportPptx}
+              disabled={(doc.status !== 'completed' && doc.status !== 'partial') || downloadingPptx}
+              className={clsx('btn-primary bg-orange-600 hover:bg-orange-700', (doc.status !== 'completed' && doc.status !== 'partial') && 'opacity-50 pointer-events-none')}
+            >
+              {downloadingPptx ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />}
+              PPTX
             </button>
           </>
         )}
@@ -693,6 +1039,77 @@ export default function DocumentDetailPage() {
           documentTitle={doc.title}
           onClose={() => setShowPipeline(false)}
         />
+      )}
+      
+      {/* Export Progress Modal */}
+      {showExportModal && exportProgress && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-md mx-4 overflow-hidden">
+            {/* Header */}
+            <div className="bg-gradient-to-r from-indigo-600 to-violet-600 px-6 py-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="w-10 h-10 bg-white/20 rounded-xl flex items-center justify-center">
+                    <FileDown className="w-5 h-5 text-white" />
+                  </div>
+                  <div>
+                    <h3 className="text-white font-semibold text-lg">
+                      {exportType?.toUpperCase()} Export
+                    </h3>
+                    <p className="text-white/80 text-sm">
+                      Generisanje dokumenta
+                    </p>
+                  </div>
+                </div>
+                <button
+                  onClick={() => setShowExportModal(false)}
+                  className="p-2 hover:bg-white/20 rounded-lg transition-colors"
+                >
+                  <X className="w-5 h-5 text-white" />
+                </button>
+              </div>
+            </div>
+
+            {/* Progress Content */}
+            <div className="p-6">
+              {/* Status Message */}
+              <p className="text-center text-gray-700 font-medium mb-4">
+                {exportProgress.status}
+              </p>
+
+              {/* Progress Bar */}
+              <div className="relative h-4 bg-gray-100 rounded-full overflow-hidden mb-2">
+                <div
+                  className="absolute left-0 top-0 h-full bg-gradient-to-r from-indigo-500 to-violet-500 transition-all duration-500 ease-out"
+                  style={{ width: `${exportProgress.current}%` }}
+                />
+              </div>
+
+              {/* Percentage */}
+              <div className="flex justify-between text-sm">
+                <span className="text-gray-500">
+                  {exportProgress.current}%
+                </span>
+                <span className="text-gray-500">
+                  {exportProgress.current}/{exportProgress.total}
+                </span>
+              </div>
+
+              {/* Spinner */}
+              <div className="flex justify-center mt-6">
+                <div className="relative">
+                  <div className="w-16 h-16 border-4 border-indigo-100 rounded-full" />
+                  <div className="absolute inset-0 border-4 border-indigo-600 rounded-full border-t-transparent animate-spin" />
+                </div>
+              </div>
+
+              {/* Tips */}
+              <p className="text-center text-gray-400 text-xs mt-4">
+                Molimo sačekajte. Vreme generisanja zavisi od veličine dokumenta.
+              </p>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   )

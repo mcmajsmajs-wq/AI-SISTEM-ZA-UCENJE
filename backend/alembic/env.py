@@ -24,6 +24,12 @@ from app.db.models.file import File  # noqa
 from app.db.models.document import Document, Chunk  # noqa
 from app.db.models.quiz import Quiz, Question, QuizAttempt, QuizAnswer  # noqa
 from app.db.models.study_plan import StudyPlan, StudyPlanItem  # noqa
+from app.db.models.knowledge import (
+    KnowledgeSource,
+    KnowledgeChunk,
+    KnowledgeSectionSummary,
+    KnowledgeDocumentSummary,
+)  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
@@ -85,9 +91,7 @@ def run_migrations_online() -> None:
     )
 
     with connectable.connect() as connection:
-        context.configure(
-            connection=connection, target_metadata=target_metadata
-        )
+        context.configure(connection=connection, target_metadata=target_metadata)
 
         with context.begin_transaction():
             context.run_migrations()

@@ -37,9 +37,14 @@ class LocalStorageService:
 
     def __init__(self):
         """Inicijalizuje lokalni storage."""
+        from pathlib import Path
+
         self.base_dir = Path(settings.LOCAL_STORAGE_PATH)
-        self.base_dir.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Local storage initialized at: {self.base_dir}")
+        if not self.base_dir.exists():
+            self.base_dir.mkdir(parents=True, exist_ok=True)
+            logger.info(f"Created local storage directory: {self.base_dir}")
+        else:
+            logger.info(f"Local storage initialized at: {self.base_dir}")
 
     @staticmethod
     def calculate_checksum(file_content: bytes) -> str:

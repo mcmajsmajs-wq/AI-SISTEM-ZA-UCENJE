@@ -188,18 +188,66 @@ def attempt_to_response(a: QuizAttempt) -> AttemptResponse:
 
 
 @router.get("/providers/list")
-async def get_quiz_providers(
+async def get_quiz_providers_list(
+    db: Session = Depends(get_db),
+):
+    """Dohvata listu svih dostupnih quiz providera."""
+    from app.services.quiz.quiz_validator import get_available_providers
+
+    providers = get_available_providers()
+    return {"providers": providers}
+
+
+@router.get("/validate")
+async def validate_quiz_provider(
+    provider: str = None,
     current_user: User = Depends(get_current_user),
 ):
-    """Lista dostupnih AI provajdera za generisanje kvizova."""
-    from app.services.quiz import quiz_service
+    """
+    ================================================================================
+    VALIDATE QUIZ PROVIDER
+    ================================================================================
+    Proverava da li je API ključ i model validni za zadati quiz provider.
+    Vraća jasne poruke za korisnika.
 
-    return {"providers": quiz_service.get_available_providers()}
+    Args:
+        provider: Ime providera (openai, claude, groq, ollama, etc.)
+        current_user: Trenutni korisnik
 
+    Returns:
+        Validation result sa porukom za korisnika
+    """
+    from app.services.quiz.quiz_validator import (
+        validate_quiz_provider as validate,
+        validate_all_quiz_providers,
+    )
 
-# ============================================================
-# QUIZ CRUD
-# ============================================================
+    if not provider:
+        all_results = validate_all_quiz_providers()
+        return {
+            "providers": [
+                {
+                    "provider": r.provider,
+                    "status": r.status,
+                    "user_message": r.user_message,
+                    "is_ok": r.is_ok,
+                    "model": r.model,
+                }
+                for r in all_results
+            ],
+            "message": "Svi dostupni quiz provideri",
+        }
+
+    result = validate(provider)
+
+    return {
+        "provider": result.provider,
+        "status": result.status,
+        "user_message": result.user_message,
+        "is_ok": result.is_ok,
+        "model": result.model,
+        "error": result.error,
+    }
 
 
 @router.post("", response_model=QuizResponse, status_code=status.HTTP_201_CREATED)
@@ -998,63 +1046,3 @@ AI odgovor: {reply}"""
     )
     db.commit()
     logger.info(f"Saved quiz chat to knowledge base for user {user.email}")
-
-
-# ============================================================
-# QUIZ PROVIDER VALIDATION
-# ============================================================
-
-
-@router.get("/validate")
-async def validate_quiz_provider(
-    provider: str = None,
-    current_user: User = Depends(get_current_user),
-):
-    """
-    ================================================================================
-    VALIDATE QUIZ PROVIDER
-    ================================================================================
-    Proverava da li je API ključ i model validni za zadati quiz provider.
-    Vraća jasne poruke za korisnika.
-
-    Args:
-        provider: Ime providera (openai, claude, groq, ollama, etc.)
-        current_user: Trenutni korisnik
-
-    Returns:
-        Validation result sa porukom za korisnika
-    """
-    from app.services.quiz.quiz_validator import (
-        validate_quiz_provider as validate,
-        validate_all_quiz_providers,
-    )
-
-    # Ako nije dat provider, vrati sve dostupne
-    if not provider:
-        # Vrati listu svih providera sa statusom
-        all_results = validate_all_quiz_providers()
-        return {
-            "providers": [
-                {
-                    "provider": r.provider,
-                    "status": r.status,
-                    "user_message": r.user_message,
-                    "is_ok": r.is_ok,
-                    "model": r.model,
-                }
-                for r in all_results
-            ],
-            "message": "Svi dostupni quiz provideri",
-        }
-
-    # Validiraj specificnog providera
-    result = validate(provider)
-
-    return {
-        "provider": result.provider,
-        "status": result.status,
-        "user_message": result.user_message,
-        "is_ok": result.is_ok,
-        "model": result.model,
-        "error": result.error,
-    }

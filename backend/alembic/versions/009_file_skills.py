@@ -10,7 +10,7 @@ from sqlalchemy.dialects.postgresql import UUID
 
 
 revision = "009_file_skills"
-down_revision = "008_question_used"
+down_revision = "008"
 branch_labels = None
 depends_on = None
 

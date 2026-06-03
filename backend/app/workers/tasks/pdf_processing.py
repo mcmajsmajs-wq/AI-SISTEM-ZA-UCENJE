@@ -7,14 +7,16 @@ Background task za obradu PDF fajlova.
 
 Task: process_pdf_task
 
-Verzija: 2.0.0 (FAZA 4 - Modularizacija)
+Verzija: 2.1.0 (ZAŠTITA - cuvaj prevedene chunks)
 ================================================================================
 """
 
 from celery import shared_task
 from sqlalchemy.orm import sessionmaker
 import logging
+import time
 import uuid
+from datetime import datetime, timezone
 
 from app.core.config import settings  # noqa: F401
 from app.db.session import engine
@@ -38,16 +40,23 @@ def get_db_session():
 
 
 @shared_task(bind=True, max_retries=3)
-def process_pdf_task(self, document_id: str, file_id: str = None):
+def process_pdf_task(
+    self, document_id: str, file_id: str = None, force_reprocess: bool = False
+):
     """
     Task za obradu PDF fajla.
     Ekstrahuje tekst, chunk-uje i priprema za prevod.
 
+    ZAŠTITA: Cuv prevedene chunks prilikom reprocessovanja!
+
     Args:
         document_id: ID dokumenta za obradu
         file_id: ID fajla (opcionalno, za backward compatibility)
+        force_reprocess: Ako True, brise sve chunks (ukljucujuci prevedene)
     """
-    logger.info(f"Starting PDF processing for document: {document_id}")
+    logger.info(
+        f"Starting PDF processing for document: {document_id}, force={force_reprocess}"
+    )
 
     db = get_db_session()
 
@@ -55,6 +64,45 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
         document = db.query(Document).filter(Document.id == document_id).first()
         if not document:
             raise ValueError(f"Document not found: {document_id}")
+
+        # Proveri postojece chunks - cuvaj prevedene!
+        existing_chunks = db.query(Chunk).filter(Chunk.document_id == document_id).all()
+
+        # Mapiraj translated_content postojecih chunks po sequence_number
+        # Ovo je KLJUCNO za cuvanje prevoda!
+        translated_map = {}
+        has_translations = False
+
+        if existing_chunks:
+            for chunk in existing_chunks:
+                if chunk.translated_content and chunk.translated_content.strip():
+                    translated_map[chunk.sequence_number] = chunk.translated_content
+                    has_translations = True
+
+            if has_translations:
+                logger.info(
+                    f"Document {document_id} has {len(translated_map)} translated chunks. "
+                    f"These will be preserved during reprocessing!"
+                )
+
+        # BRISANJE STARIH CHUNKS - ali cuvaj prevedene u map!
+        if existing_chunks and not force_reprocess:
+            # Samo obelezi stare chunks za brisanje ali NE BRISI prevedene
+            for chunk in existing_chunks:
+                if chunk.sequence_number not in translated_map:
+                    db.delete(chunk)
+            logger.info(
+                f"Deleted {len(existing_chunks) - len(translated_map)} non-translated chunks"
+            )
+        elif existing_chunks and force_reprocess:
+            # Ako je force_reprocess, obavesti i obrisi SVE
+            logger.warning(
+                f"FORCE REPROCESS: Deleting ALL {len(existing_chunks)} chunks "
+                f"({len(translated_map)} had translations - WILL BE LOST!)"
+            )
+            for chunk in existing_chunks:
+                db.delete(chunk)
+            translated_map = {}  # Resetuj jer su obrisani
 
         document.status = "processing"
         db.commit()
@@ -81,13 +129,35 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
 
         if file_ext in [".pdf", ".PDF"]:
             logger.info(f"Processing PDF file: {file.original_filename}")
+
+            start_time = time.time()
+
+            def progress_callback(pages_done, pages_total, chunks_so_far):
+                try:
+                    document.file_metadata = document.file_metadata or {}
+                    document.file_metadata["processing_progress"] = {
+                        "pages_done": pages_done,
+                        "pages_total": pages_total,
+                        "chunks_so_far": chunks_so_far,
+                        "elapsed_seconds": int(time.time() - start_time),
+                        "last_activity_at": datetime.now(timezone.utc).isoformat(),
+                    }
+                    db.commit()
+                except Exception as e:
+                    logger.warning(f"Failed to update progress: {e}")
+
             result = pdf_service.process_pdf(
                 file_bytes,
                 title=file.original_filename or "document.pdf",
+                progress_callback=progress_callback,
             )
 
             if not result.success:
                 raise ValueError(f"PDF processing failed: {result.error}")
+
+            # Kreiraj novi chunks - ali vrati prevedeni sadrzaj ako postoji!
+            chunks_created = 0
+            chunks_with_translation = 0
 
             for chunk_data in result.chunks:
                 chunk = Chunk(
@@ -97,8 +167,22 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
                     sequence_number=chunk_data.sequence_number,
                     token_count=chunk_data.token_count,
                     page_number=chunk_data.page_number,
+                    heading_level=getattr(chunk_data, "heading_level", 0),
+                    parent_heading=getattr(chunk_data, "parent_heading", ""),
+                    layout_data=getattr(chunk_data, "layout_data", None),
                 )
+
+                # VRATI PREVEDENI SADRZAJ AKO POSTOJI!
+                if chunk.sequence_number in translated_map:
+                    chunk.translated_content = translated_map[chunk.sequence_number]
+                    chunk.is_translated = 1
+                    chunks_with_translation += 1
+                    logger.debug(
+                        f"Restored translation for chunk {chunk.sequence_number}"
+                    )
+
                 db.add(chunk)
+                chunks_created += 1
 
             document.total_pages = result.metadata.total_pages
             document.status = "completed"
@@ -111,10 +195,14 @@ def process_pdf_task(self, document_id: str, file_id: str = None):
                 "pages_text": [
                     p[:200] + "..." if len(p) > 200 else p for p in result.pages_text
                 ],
+                "preserved_translations": chunks_with_translation,
             }
 
             file.status = "completed"
-            logger.info(f"PDF processing completed: {len(result.chunks)} chunks")
+            logger.info(
+                f"PDF processing completed: {chunks_created} chunks, "
+                f"{chunks_with_translation} translations preserved"
+            )
 
         elif file_ext in [".txt", ".TXT"]:
             logger.info(f"Processing text file: {file.original_filename}")

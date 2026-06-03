@@ -18,6 +18,18 @@ from app.workers.tasks.pdf_processing import (
     get_db_session as _pdf_get_db_session,
 )
 
+# PDF Export tasks
+from app.workers.tasks.pdf_export import (
+    export_pdf_task,
+    get_db_session as _pdf_export_get_db_session,
+)
+
+# DOCX Export tasks
+from app.workers.tasks.docx_export import (
+    export_docx_task,
+    get_db_session as _docx_export_get_db_session,
+)
+
 # Translation tasks
 from app.workers.tasks.translation import (
     translate_document_task,
@@ -65,6 +77,10 @@ def get_db_session():
 __all__ = [
     # PDF Processing
     "process_pdf_task",
+    # PDF Export
+    "export_pdf_task",
+    # DOCX Export
+    "export_docx_task",
     # Translation
     "translate_document_task",
     "translate_with_fallback",

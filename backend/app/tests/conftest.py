@@ -39,26 +39,73 @@ from app.core.config import settings
 # PostgreSQL UUID type is not natively supported by SQLite.
 # 1) DDL: render UUID columns as VARCHAR(36)
 # 2) DML: patch bind_processor so WHERE uuid_col = :val works with str/UUID
+import json as _json_mod
 import uuid as _uuid_mod
 from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB as PG_JSONB
+from sqlalchemy import types as _sa_types
 
-if not hasattr(SQLiteTypeCompiler, '_orig_visit_UUID'):
+# ── SQLite UUID compatibility ─────────────────────────────────────────────────
+if not hasattr(SQLiteTypeCompiler, "_orig_visit_UUID"):
     SQLiteTypeCompiler._orig_visit_UUID = None
-    SQLiteTypeCompiler.visit_UUID = lambda self, type_, **kw: 'VARCHAR(36)'
+    SQLiteTypeCompiler.visit_UUID = lambda self, type_, **kw: "VARCHAR(36)"
 
 _orig_pg_bind = PG_UUID.bind_processor
 
+
 def _sqlite_safe_bind(self, dialect):
-    if dialect.name == 'sqlite':
+    if dialect.name == "sqlite":
+
         def process(value):
             if value is None:
                 return None
             return str(value)
+
         return process
     return _orig_pg_bind(self, dialect) if _orig_pg_bind else None
 
+
 PG_UUID.bind_processor = _sqlite_safe_bind
+
+# ── SQLite JSONB compatibility ────────────────────────────────────────────────
+if not hasattr(SQLiteTypeCompiler, "_orig_visit_JSONB"):
+    SQLiteTypeCompiler._orig_visit_JSONB = None
+    SQLiteTypeCompiler.visit_JSONB = lambda self, type_, **kw: "JSON"
+
+
+def _jsonb_bind_processor(self, dialect):
+    if dialect.name == "sqlite":
+
+        def process(value):
+            if value is None:
+                return None
+            return _json_mod.dumps(value)
+
+        return process
+
+    orig = PG_JSONB.bind_processor
+    if orig:
+        return orig(self, dialect)
+    return None
+
+
+PG_JSONB.bind_processor = _jsonb_bind_processor
+
+
+def _jsonb_result_processor(self, dialect, coltype):
+    if dialect.name == "sqlite":
+
+        def process(value):
+            if value is None:
+                return None
+            return _json_mod.loads(value)
+
+        return process
+
+    return None
+
+
+PG_JSONB.result_processor = _jsonb_result_processor
 
 SQLALCHEMY_DATABASE_URL = "sqlite:///:memory:"
 
@@ -86,9 +133,9 @@ def db() -> Generator[Session, None, None]:
     Koristi in-memory SQLite za brze testove.
     """
     Base.metadata.create_all(bind=engine)
-    
+
     session = TestingSessionLocal()
-    
+
     try:
         yield session
     finally:
@@ -109,7 +156,7 @@ def test_user_data() -> dict:
     return {
         "email": "test@example.com",
         "password": "TestPassword123!",
-        "full_name": "Test User"
+        "full_name": "Test User",
     }
 
 
@@ -117,7 +164,7 @@ def test_user_data() -> dict:
 def test_user(db: Session, test_user_data: dict) -> User:
     """Kreira test korisnika u bazi."""
     from app.services.auth import AuthService
-    
+
     user = User(
         email=test_user_data["email"],
         hashed_password=AuthService.get_password_hash(test_user_data["password"]),
@@ -125,13 +172,13 @@ def test_user(db: Session, test_user_data: dict) -> User:
         is_active=True,
         is_verified=True,
         created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
+        updated_at=datetime.utcnow(),
     )
-    
+
     db.add(user)
     db.commit()
     db.refresh(user)
-    
+
     return user
 
 
@@ -139,7 +186,7 @@ def test_user(db: Session, test_user_data: dict) -> User:
 def test_user_token(test_user: User) -> str:
     """Generise JWT token za test korisnika."""
     from app.services.auth import AuthService
-    
+
     token = AuthService.create_access_token(data={"sub": str(test_user.id)})
     return token
 
@@ -148,7 +195,7 @@ def test_user_token(test_user: User) -> str:
 def test_refresh_token(test_user: User) -> str:
     """Generise refresh token za test korisnika."""
     from app.services.auth import AuthService
-    
+
     token = AuthService.create_refresh_token(data={"sub": str(test_user.id)})
     return token
 
@@ -162,7 +209,7 @@ def test_file_data() -> dict:
         "file_size": 1024 * 1024,  # 1MB
         "mime_type": "application/pdf",
         "checksum": "abc123def456",
-        "status": "uploaded"
+        "status": "uploaded",
     }
 
 
@@ -178,13 +225,13 @@ def test_file(db: Session, test_user: User, test_file_data: dict) -> File:
         checksum=test_file_data["checksum"],
         status=test_file_data["status"],
         created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
+        updated_at=datetime.utcnow(),
     )
-    
+
     db.add(file)
     db.commit()
     db.refresh(file)
-    
+
     return file
 
 
@@ -197,7 +244,7 @@ def test_document_data() -> dict:
         "total_chunks": 50,
         "source_language": "en",
         "target_language": "sr",
-        "status": "completed"
+        "status": "completed",
     }
 
 
@@ -214,13 +261,13 @@ def test_document(db: Session, test_file: File, test_document_data: dict) -> Doc
         target_language=test_document_data["target_language"],
         status=test_document_data["status"],
         created_at=datetime.utcnow(),
-        updated_at=datetime.utcnow()
+        updated_at=datetime.utcnow(),
     )
-    
+
     db.add(document)
     db.commit()
     db.refresh(document)
-    
+
     return document
 
 
@@ -228,28 +275,30 @@ def test_document(db: Session, test_file: File, test_document_data: dict) -> Doc
 def test_chunks(db: Session, test_document: Document) -> list:
     """Kreira test chunks u bazi."""
     chunks = []
-    
+
     for i in range(5):
         chunk = Chunk(
             document_id=test_document.id,
             sequence_number=i,
             content=f"This is test chunk number {i + 1}. It contains some English text for translation testing.",
-            translated_content=f"Ovo je test odlomak broj {i + 1}. Sadrzi neki engleski tekst za testiranje prevoda." if i < 3 else None,
+            translated_content=f"Ovo je test odlomak broj {i + 1}. Sadrzi neki engleski tekst za testiranje prevoda."
+            if i < 3
+            else None,
             is_translated=1 if i < 3 else 0,
             is_reviewed=0,
             heading_level=1 if i % 2 == 0 else 0,
             parent_heading=f"Section {i + 1}" if i % 2 == 0 else None,
             created_at=datetime.utcnow(),
-            updated_at=datetime.utcnow()
+            updated_at=datetime.utcnow(),
         )
         db.add(chunk)
         chunks.append(chunk)
-    
+
     db.commit()
-    
+
     for chunk in chunks:
         db.refresh(chunk)
-    
+
     return chunks
 
 
@@ -262,8 +311,10 @@ def mock_minio_client(mocker):
     mock_client.put_object.return_value = None
     mock_client.get_object.return_value = mocker.MagicMock(read=lambda: b"test content")
     mock_client.remove_object.return_value = None
-    mock_client.presigned_get_object.return_value = "http://test-presigned-url.com/file.pdf"
-    
+    mock_client.presigned_get_object.return_value = (
+        "http://test-presigned-url.com/file.pdf"
+    )
+
     return mock_client
 
 
@@ -275,7 +326,7 @@ def mock_redis_client(mocker):
     mock_client.set.return_value = True
     mock_client.delete.return_value = 1
     mock_client.exists.return_value = 0
-    
+
     return mock_client
 
 
@@ -286,12 +337,13 @@ def mock_ollama_client(mocker):
     mock_client.generate.return_value = {
         "response": "Ovo je test prevod na srpski jezik."
     }
-    
+
     return mock_client
 
 
 class TestSettings:
     """Test settings override."""
+
     SECRET_KEY = "test-secret-key-for-testing"
     JWT_SECRET = "test-jwt-secret-key-for-testing"
     JWT_ALGORITHM = "HS256"

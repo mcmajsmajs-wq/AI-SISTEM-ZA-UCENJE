@@ -640,6 +640,10 @@ async def translate_document(
 
     from app.workers.tasks import translate_document_task
 
+    # Update status to translating before queueing
+    document.status = "translating"
+    db.commit()
+
     task = translate_document_task.delay(str(document.id), provider)
 
     return {
@@ -1114,12 +1118,19 @@ async def get_document_progress(
     pages_done = proc_progress.get("pages_done", 0)
     pages_total = proc_progress.get("pages_total", document.total_pages or 0)
     chunks_so_far = proc_progress.get("chunks_so_far", 0)
-    elapsed_seconds = proc_progress.get("elapsed_seconds", 0)
-    # last_activity_at: from processing or translation progress
     trans_progress = meta.get("translation_progress", {})
-    last_activity_at = proc_progress.get("last_activity_at") or trans_progress.get(
-        "last_activity_at"
-    )
+    # Phase-aware elapsed_seconds i last_activity_at
+    if document.status == "translating":
+        elapsed_seconds = trans_progress.get("elapsed_seconds", 0)
+        last_activity_at = trans_progress.get("last_activity_at")
+    elif document.status == "processing":
+        elapsed_seconds = proc_progress.get("elapsed_seconds", 0)
+        last_activity_at = proc_progress.get("last_activity_at")
+    else:
+        elapsed_seconds = proc_progress.get("elapsed_seconds", 0)
+        last_activity_at = proc_progress.get("last_activity_at") or trans_progress.get(
+            "last_activity_at"
+        )
 
     progress_percentage = 0
     current_phase = "waiting"
@@ -1704,10 +1715,10 @@ async def export_document_pdf(
     db: Session = Depends(get_db),
 ):
     """
-    Generiše i preuzima PDF od prevedenih chunkova dokumenta.
+    Pokreće asinhrono generisanje PDF-a i vraća task_id za praćenje statusa.
     """
-    from fastapi.responses import Response
-    from app.services.pdf_export_service import pdf_export_service
+    from celery.result import AsyncResult
+    from app.workers.tasks import export_pdf_task
 
     document = (
         db.query(Document)
@@ -1720,50 +1731,97 @@ async def export_document_pdf(
     if not document:
         raise HTTPException(status_code=404, detail="Dokument nije pronađen")
 
-    chunks = (
-        db.query(Chunk)
-        .filter(
-            Chunk.document_id == document_id,
-            Chunk.translated_content.isnot(None),
-        )
-        .order_by(Chunk.sequence_number)
-        .all()
-    )
+    # Provera da li već postoji gotov PDF
+    if document.pdf_export_id and document.pdf_export_status == "completed":
+        return {
+            "status": "completed",
+            "task_id": None,
+            "file_id": document.pdf_export_id,
+            "message": "PDF je već generisan. Koristite /api/v1/files/{file_id} za preuzimanje.",
+        }
 
-    if not chunks:
-        raise HTTPException(
-            status_code=422,
-            detail="Dokument nema prevedenih segmenata. Pokrenite prevod pre eksporta.",
-        )
+    # Provera da li je task u toku
+    if document.pdf_export_status == "processing":
+        return {
+            "status": "processing",
+            "task_id": document.pdf_export_task_id,
+            "message": "PDF se već generiše...",
+        }
 
-    chunk_dicts = [
-        {"original_text": c.content, "translated_text": c.translated_content}
-        for c in chunks
-    ]
-
-    author = current_user.full_name or current_user.email
-    pdf_bytes = pdf_export_service.generate(
-        title=document.title,
-        chunks=chunk_dicts,
-        target_language=document.target_language or "sr",
+    # Pokretanje Celery task-a
+    task = export_pdf_task.delay(
+        document_id=document_id,
+        user_id=str(current_user.id),
         include_original=include_original,
-        author=author,
     )
 
-    safe_title = "".join(
-        c if c.isalnum() or c in "-_ " else "_" for c in document.title
-    )[:60]
-    filename = f"{safe_title}_prevod.pdf"
+    # Čuvanje task_id-a u dokumentu
+    document.pdf_export_task_id = task.id
+    document.pdf_export_status = "processing"
+    db.commit()
 
-    return Response(
-        content=pdf_bytes,
-        media_type="application/pdf",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    return {
+        "status": "processing",
+        "task_id": task.id,
+        "message": "PDF export je pokrenut. Poll-ujte /api/v1/documents/{document_id}/export/pdf/status/{task_id}",
+    }
+
+
+@router.get("/{document_id}/export/pdf/status/{task_id}")
+async def check_pdf_export_status(
+    document_id: str,
+    task_id: str,
+    current_user: User = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """
+    Proverava status PDF export task-a.
+    """
+    from celery.result import AsyncResult
+    from app.workers.celery_app import celery_app
+
+    document = (
+        db.query(Document)
+        .filter(
+            Document.id == document_id,
+            Document.user_id == str(current_user.id),
+        )
+        .first()
     )
+    if not document:
+        raise HTTPException(status_code=404, detail="Dokument nije pronađen")
+
+    task = AsyncResult(task_id, app=celery_app)
+
+    if task.state == "PENDING":
+        return {
+            "status": "processing",
+            "task_id": task_id,
+            "info": "Task čeka na izvršavanje...",
+        }
+    elif task.state == "PROGRESS":
+        return {"status": "processing", "task_id": task_id, "info": task.info}
+    elif task.state == "SUCCESS":
+        result = task.result
+        return {
+            "status": "completed",
+            "task_id": task_id,
+            "result": result,
+            "file_id": result.get("file_id"),
+            "filename": result.get("filename"),
+        }
+    elif task.state == "FAILURE":
+        return {
+            "status": "failed",
+            "task_id": task_id,
+            "error": str(task.info) if task.info else "Nepoznata greška",
+        }
+    else:
+        return {"status": task.state.lower(), "task_id": task_id}
 
 
 @router.get("/{document_id}/export/docx")
-async def export_document_docx(
+async def export_document_docx_legacy(
     document_id: str,
     include_original: bool = False,
     current_user: User = Depends(get_current_user),
@@ -1771,6 +1829,7 @@ async def export_document_docx(
 ):
     """
     Generiše i preuzima Word dokument od prevedenih chunkova.
+    OVO JE LEGACY ENDPOINT - koristi /export-docx za async verziju
     """
     from fastapi.responses import Response
     from app.services.docx_export_service import docx_export_service
@@ -1802,8 +1861,14 @@ async def export_document_docx(
             detail="Dokument nema prevedenih segmenata. Pokrenite prevod pre eksporta.",
         )
 
+    # Sada UKLJUČUJEMO heading_level!
     chunk_dicts = [
-        {"original_text": c.content, "translated_text": c.translated_content}
+        {
+            "original_text": c.content,
+            "translated_text": c.translated_content,
+            "heading_level": c.heading_level or 0,
+            "parent_heading": c.parent_heading,
+        }
         for c in chunks
     ]
 
@@ -1996,3 +2061,240 @@ async def get_quiz_availability(
         "used": used,
         "available": available,
     }
+
+
+# ─── DOCX EXPORT ENDPOINTS ────────────────────────────────────────────────
+
+from app.workers.tasks.docx_export import export_docx_task
+
+
+@router.post("/{document_id}/export-docx", status_code=202)
+def export_document_to_docx(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Pokrece async DOCX export task za dokument."""
+    from app.db.models.document import Document
+
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.user_id == current_user.id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokument nije pronadjen")
+
+    # Proveri da li ima chunks
+    chunk_count = db.query(Chunk).filter(Chunk.document_id == document_id).count()
+    if chunk_count == 0:
+        raise HTTPException(status_code=400, detail="Dokument nema chunks za export")
+
+    # Pokreni Celery task
+    task = export_docx_task.delay(document_id, str(current_user.id))
+
+    # Azuriraj status u bazi
+    doc.docx_export_status = "processing"
+    db.commit()
+
+    return {
+        "message": "DOCX export task pokrenut",
+        "task_id": task.id,
+        "status": "processing",
+        "chunks_count": chunk_count,
+    }
+
+
+@router.get("/docx-status/{task_id}")
+def get_docx_export_status(
+    task_id: str,
+):
+    """Proverava status DOCX export task-a."""
+    from celery.result import AsyncResult
+    from app.workers.celery_app import celery_app
+
+    task_result = AsyncResult(task_id, app=celery_app)
+
+    result = {
+        "task_id": task_id,
+        "status": task_result.status,
+    }
+
+    if task_result.failed():
+        result["error"] = str(task_result.info)
+    elif task_result.successful():
+        result["result"] = task_result.result
+    elif task_result.status == "PROGRESS":
+        # PROGRESS state stores progress info in .info (meta dict)
+        if task_result.info:
+            result["result"] = task_result.info
+
+    return result
+
+
+@router.get("/{document_id}/docx-download")
+def download_docx(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Download generisanog DOCX-a."""
+    from fastapi.responses import Response
+
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.user_id == current_user.id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokument nije pronadjen")
+
+    if doc.docx_export_status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"DOCX nije spreman (status: {doc.docx_export_status})",
+        )
+
+    # Koristi docx_export_path iz baze za download
+    storage_path = doc.docx_export_path
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="DOCX putanja nije definisana")
+
+    # Download iz MinIO storage-a
+    from app.services.storage import storage_service
+
+    try:
+        docx_content = storage_service.download_file(storage_path)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail="DOCX fajl nije pronadjen u storage-u"
+        )
+
+    return Response(
+        content=docx_content,
+        media_type="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        headers={
+            "Content-Disposition": f'attachment; filename="{doc.title or "document"}.docx"'
+        },
+    )
+
+
+# ─── PDF EXPORT ENDPOINTS ────────────────────────────────────────────────
+
+from app.workers.tasks.pdf_export import export_pdf_task
+from fastapi import BackgroundTasks
+
+
+@router.post("/{document_id}/export-pdf", status_code=202)
+def export_document_to_pdf(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Pokrece async PDF export task za dokument."""
+    from app.db.models.document import Document
+
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.user_id == current_user.id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokument nije pronadjen")
+
+    # Proveri da li ima chunks
+    chunk_count = db.query(Chunk).filter(Chunk.document_id == document_id).count()
+    if chunk_count == 0:
+        raise HTTPException(status_code=400, detail="Dokument nema chunks za export")
+
+    # Pokreni Celery task
+    task = export_pdf_task.delay(document_id, current_user.id)
+
+    # Azuriraj status u bazi
+    doc.pdf_export_status = "processing"
+    doc.pdf_export_task_id = task.id
+    db.commit()
+
+    return {
+        "message": "PDF export task pokrenut",
+        "task_id": task.id,
+        "status": "processing",
+        "chunks_count": chunk_count,
+    }
+
+
+@router.get("/pdf-status/{task_id}")
+def get_pdf_export_status(
+    task_id: str,
+):
+    """Proverava status PDF export task-a."""
+    from celery.result import AsyncResult
+    from app.workers.celery_app import celery_app
+
+    task_result = AsyncResult(task_id, app=celery_app)
+
+    result = {
+        "task_id": task_id,
+        "status": task_result.status,
+    }
+
+    if task_result.failed():
+        result["error"] = str(task_result.info)
+    elif task_result.successful():
+        result["result"] = task_result.result
+    elif task_result.status == "PROGRESS":
+        # PROGRESS state stores progress info in .info (meta dict)
+        if task_result.info:
+            result["result"] = task_result.info
+
+    return result
+
+
+@router.get("/{document_id}/pdf-download")
+def download_pdf(
+    document_id: str,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_user),
+):
+    """Download generisanog PDF-a."""
+    from fastapi.responses import FileResponse
+    from pathlib import Path
+
+    doc = (
+        db.query(Document)
+        .filter(Document.id == document_id, Document.user_id == current_user.id)
+        .first()
+    )
+    if not doc:
+        raise HTTPException(status_code=404, detail="Dokument nije pronadjen")
+
+    if doc.pdf_export_status != "completed":
+        raise HTTPException(
+            status_code=400,
+            detail=f"PDF nije spreman (status: {doc.pdf_export_status})",
+        )
+
+    # Koristi pdf_export_path iz baze za download
+    storage_path = doc.pdf_export_path
+    if not storage_path:
+        raise HTTPException(status_code=404, detail="PDF putanja nije definisana")
+
+    # Download iz MinIO storage-a
+    from app.services.storage import storage_service
+
+    try:
+        pdf_content = storage_service.download_file(storage_path)
+    except FileNotFoundError:
+        raise HTTPException(
+            status_code=404, detail="PDF fajl nije pronadjen u storage-u"
+        )
+
+    from fastapi.responses import Response
+
+    return Response(
+        content=pdf_content,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="{doc.title or "document"}.pdf"'
+        },
+    )

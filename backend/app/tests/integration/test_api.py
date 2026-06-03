@@ -127,8 +127,8 @@ class TestAuthEndpoints:
         async with AsyncClient(app=app, base_url="http://test") as client:
             response = await client.post(
                 "/api/v1/auth/login",
-                json={
-                    "email": test_user_data["email"],
+                data={  # Login endpoint koristi Form() parametre (OAuth2)
+                    "username": test_user_data["email"],
                     "password": test_user_data["password"],
                 },
             )
@@ -152,8 +152,8 @@ class TestAuthEndpoints:
         async with AsyncClient(app=app, base_url="http://test") as client:
             response = await client.post(
                 "/api/v1/auth/login",
-                json={
-                    "email": test_user_data["email"],
+                data={  # Login endpoint koristi Form() parametre (OAuth2)
+                    "username": test_user_data["email"],
                     "password": "WrongPassword123!",
                 },
             )

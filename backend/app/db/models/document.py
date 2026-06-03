@@ -56,6 +56,35 @@ class Document(Base):
     # Metadata
     file_metadata = Column("metadata", JSON, default={})
 
+    # PDF Export status
+    pdf_export_id = Column(UUID(as_uuid=True), nullable=True)
+    pdf_export_status = Column(
+        Enum(
+            "pending",
+            "processing",
+            "completed",
+            "failed",
+            name="pdf_export_status",
+        ),
+        nullable=True,
+    )
+    pdf_export_task_id = Column(String(255), nullable=True)
+    pdf_export_path = Column(Text, nullable=True)  # Putanja do PDF fajla na disku
+
+    # DOCX Export polja
+    docx_export_id = Column(UUID(as_uuid=True), nullable=True)
+    docx_export_status = Column(
+        Enum(
+            "pending",
+            "processing",
+            "completed",
+            "failed",
+            name="docx_export_status",
+        ),
+        nullable=True,
+    )
+    docx_export_path = Column(Text, nullable=True)  # Putanja do DOCX fajla u storage-u
+
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
@@ -105,6 +134,11 @@ class Chunk(Base):
 
     # Page number for image mapping
     page_number = Column(Integer, nullable=True)  # Broj stranice u PDF-u
+
+    # Layout data za PDF rekonstrukciju (font, size, paragraph structure)
+    layout_data = Column(
+        JSON, nullable=True
+    )  # {paragraphs: [{font, size, is_bold, alignment}], page_number: int}
 
     # Embeddings (ako koristite pgvector)
     # embedding = Column(Vector(1536))  # Zakomentarisano dok se ne doda pgvector

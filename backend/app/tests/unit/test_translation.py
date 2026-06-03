@@ -470,6 +470,12 @@ class TestTranslationService:
 
     def test_translate_with_specific_provider(self):
         """Test prevoda sa specifičnim provajderom."""
+        from app.services.translation.translation_validator import (
+            validate_translation_provider,
+            ValidationResult,
+            ValidationStatus,
+        )
+
         service = TranslationService()
 
         with patch.object(
@@ -482,10 +488,23 @@ class TestTranslationService:
                     success=True, translated_text="Prevod", provider="ollama"
                 )
 
-                result = service.translate(text="Test", provider="ollama")
+                with patch(
+                    "app.services.translation.service.validate_translation_provider",
+                    return_value=ValidationResult(
+                        status=ValidationStatus.OK,
+                        provider="ollama",
+                        api_key_valid=True,
+                        model_valid=True,
+                        model_used="llama3.1",
+                        available_models=["llama3.1"],
+                        user_message="OK",
+                        details="",
+                    ),
+                ):
+                    result = service.translate(text="Test", provider="ollama")
 
-                assert result.success is True
-                assert result.provider == "ollama"
+                    assert result.success is True
+                    assert result.provider == "ollama"
 
     def test_translate_fallback(self):
         """Test fallback mehanizma."""
