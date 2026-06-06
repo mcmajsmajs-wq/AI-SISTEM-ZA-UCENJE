@@ -52,7 +52,8 @@ class BaseExportService(ABC):
             return ""
 
     @abstractmethod
-    def generate(self, title: str, chunks: List[Dict[str, Any]], **kwargs) -> bytes: ...
+    def generate(self, title: str, chunks: List[Dict[str, Any]], **kwargs) -> bytes:
+        pass
 
 
 class ExportServiceError(Exception):
