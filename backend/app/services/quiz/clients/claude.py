@@ -32,7 +32,7 @@ class ClaudeQuizClient(BaseQuizClient):
     def __init__(self):
         self.api_key = settings.ANTHROPIC_API_KEY
         self.model = settings.CLAUDE_MODEL
-        self.timeout = getattr(settings, "CLAUDE_TIMEOUT", 120)
+        self.timeout = getattr(settings, "CLAUDE_TIMEOUT", 45)
 
     @property
     def provider_name(self) -> str:

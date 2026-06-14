@@ -205,6 +205,32 @@ def _validate_questions(data: list) -> List[dict]:
             )
             continue
 
+        # MC→CB konverzija: ako su SVE opcije tačne za multiple_choice, pretvori u checkbox
+        if q.get("question_type") == "multiple_choice":
+            mc_correct = q.get("correct_answer", "")
+            mc_options = q.get("options", [])
+            if mc_correct and isinstance(mc_options, list) and len(mc_options) >= 2:
+                mc_correct_parts = [
+                    p.strip() for p in mc_correct.split(",") if p.strip()
+                ]
+                if len(mc_correct_parts) >= 2:
+                    all_are_options = all(
+                        any(p == opt.strip() for opt in mc_options)
+                        for p in mc_correct_parts
+                    )
+                    if all_are_options and len(mc_correct_parts) == len(mc_options):
+                        q["question_type"] = "checkbox"
+                        logger.info(
+                            f"Pitanje {i} konvertovano iz multiple_choice u checkbox "
+                            f"(sve opcije su tačne)"
+                        )
+                    elif all_are_options and len(mc_correct_parts) > 1:
+                        q["question_type"] = "checkbox"
+                        logger.info(
+                            f"Pitanje {i} konvertovano iz multiple_choice u checkbox "
+                            f"({len(mc_correct_parts)} tačnih odgovora)"
+                        )
+
         # Postavljanje podrazumevanih vrednosti
         q.setdefault("explanation", "")
         q.setdefault("points", 1)

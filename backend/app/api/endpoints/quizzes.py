@@ -528,20 +528,12 @@ async def submit_attempt(
         if not q:
             continue
 
+        from app.services.quiz.evaluation import _check_answer_static
+
         user_answer = submitted_answer.user_answer.strip()
         correct_answer = q.correct_answer.strip() if q.correct_answer else ""
 
-        is_correct = False
-        if q.question_type in ("multiple_choice", "calculation", "true_false"):
-            is_correct = user_answer.lower() == correct_answer.lower()
-        elif q.question_type == "checkbox":
-            correct_parts = set(
-                p.strip().lower() for p in correct_answer.split(",") if p.strip()
-            )
-            selected_parts = set(
-                p.strip().lower() for p in user_answer.split(",") if p.strip()
-            )
-            is_correct = correct_parts == selected_parts
+        is_correct = _check_answer_static(q.question_type, user_answer, correct_answer)
 
         points = q.points if is_correct else 0
         total_score += points
