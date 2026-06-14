@@ -38,7 +38,7 @@ def get_db_session():
     return SessionLocal()
 
 
-@shared_task(bind=True, max_retries=2)
+@shared_task(bind=True, max_retries=2, soft_time_limit=300, time_limit=360)
 def generate_quiz_task(
     self,
     quiz_id: str,
@@ -138,7 +138,7 @@ def generate_quiz_task(
             pass
 
 
-@shared_task(bind=True, max_retries=2)
+@shared_task(bind=True, max_retries=2, soft_time_limit=300, time_limit=360)
 def auto_pipeline_task(
     self,
     document_id: str,

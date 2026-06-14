@@ -442,3 +442,178 @@ class TestParseQuestions:
         result = self._parse(raw)
         assert len(result) == 1
         assert result[0]["question_type"] == "fill_blank"
+
+
+class TestQuizPromptSemanticRules:
+    """Testovi za semantička pravila u QUIZ_PROMPT (MC vs checkbox)."""
+
+    def test_prompt_forbids_all_correct_mc(self):
+        """QUIZ_PROMPT mora zabraniti MC pitanja gde su sve opcije tačne."""
+        from app.services.quiz import QUIZ_PROMPT
+
+        assert (
+            "NEVER create a multiple_choice question where ALL options are correct"
+            in QUIZ_PROMPT
+        )
+
+    def test_prompt_forbids_single_correct_checkbox(self):
+        """QUIZ_PROMPT mora zabraniti checkbox sa samo 1 tačnim odgovorom."""
+        from app.services.quiz import QUIZ_PROMPT
+
+        assert (
+            "NEVER create a checkbox question where only 1 option is correct"
+            in QUIZ_PROMPT
+        )
+
+    def test_prompt_has_bad_mc_example(self):
+        """QUIZ_PROMPT mora imati BAD primer za MC koji treba da bude checkbox."""
+        from app.services.quiz import QUIZ_PROMPT
+
+        assert "BAD multiple_choice" in QUIZ_PROMPT
+
+    def test_prompt_has_good_mc_example(self):
+        """QUIZ_PROMPT mora imati GOOD primer za ispravan MC."""
+        from app.services.quiz import QUIZ_PROMPT
+
+        assert "GOOD multiple_choice" in QUIZ_PROMPT
+
+    def test_prompt_has_good_checkbox_example(self):
+        """QUIZ_PROMPT mora imati GOOD primer za ispravan checkbox."""
+        from app.services.quiz import QUIZ_PROMPT
+
+        assert "GOOD checkbox" in QUIZ_PROMPT
+
+    def test_prompt_states_mc_single_correct(self):
+        """QUIZ_PROMPT mora jasno reći da MC ima EXACTLY ONE correct answer."""
+        from app.services.quiz import QUIZ_PROMPT
+
+        assert "EXACTLY ONE" in QUIZ_PROMPT
+
+    def test_prompt_states_checkbox_multiple_correct(self):
+        """QUIZ_PROMPT mora jasno reći da checkbox ima 2+ correct answers."""
+        from app.services.quiz import QUIZ_PROMPT
+
+        assert "2+ correct answers" in QUIZ_PROMPT or "MULTIPLE" in QUIZ_PROMPT
+
+
+class TestMcToCbConversion:
+    """Testovi za MC→CB konverziju u _validate_questions()."""
+
+    def _validate(self, data):
+        from app.services.quiz import _validate_questions
+
+        return _validate_questions(data)
+
+    def test_mc_all_options_correct_converts_to_checkbox(self):
+        """MC sa svim tačnim opcijama mora biti konvertovan u checkbox."""
+        questions = [
+            {
+                "question_text": "Which are programming languages?",
+                "question_type": "multiple_choice",
+                "options": ["Python", "Java", "C++", "JavaScript"],
+                "correct_answer": "Python,Java,C++,JavaScript",
+                "explanation": "All are programming languages.",
+                "points": 1,
+            }
+        ]
+        result = self._validate(questions)
+        assert len(result) == 1
+        assert result[0]["question_type"] == "checkbox"
+
+    def test_mc_two_correct_options_converts_to_checkbox(self):
+        """MC sa 2 tačne opcije mora biti konvertovan u checkbox."""
+        questions = [
+            {
+                "question_text": "Which are fruits?",
+                "question_type": "multiple_choice",
+                "options": ["Apple", "Car", "Banana", "House"],
+                "correct_answer": "Apple,Banana",
+                "explanation": "Apple and Banana are fruits.",
+                "points": 1,
+            }
+        ]
+        result = self._validate(questions)
+        assert len(result) == 1
+        assert result[0]["question_type"] == "checkbox"
+
+    def test_mc_single_correct_stays_mc(self):
+        """MC sa 1 tačnom opcijom mora ostati MC."""
+        questions = [
+            {
+                "question_text": "What is the capital of France?",
+                "question_type": "multiple_choice",
+                "options": ["Paris", "London", "Berlin", "Madrid"],
+                "correct_answer": "Paris",
+                "explanation": "Paris is the capital of France.",
+                "points": 1,
+            }
+        ]
+        result = self._validate(questions)
+        assert len(result) == 1
+        assert result[0]["question_type"] == "multiple_choice"
+
+    def test_mc_converted_checkbox_gets_points_upgraded(self):
+        """Konvertovan MC→CB mora dobiti points=2."""
+        questions = [
+            {
+                "question_text": "Which are oceans?",
+                "question_type": "multiple_choice",
+                "options": ["Atlantic", "Pacific", "Indian", "Arctic"],
+                "correct_answer": "Atlantic,Pacific,Indian,Arctic",
+                "explanation": "All are oceans.",
+                "points": 1,
+            }
+        ]
+        result = self._validate(questions)
+        assert len(result) == 1
+        assert result[0]["points"] == 2
+
+    def test_checkbox_with_all_correct_stays_checkbox(self):
+        """Checkbox koji je već ispravan ne sme biti konvertovan."""
+        questions = [
+            {
+                "question_text": "Select colors:",
+                "question_type": "checkbox",
+                "options": ["Red", "Blue", "Green", "Yellow"],
+                "correct_answer": "Red,Blue,Green",
+                "explanation": "Three primary colors.",
+                "points": 2,
+            }
+        ]
+        result = self._validate(questions)
+        assert len(result) == 1
+        assert result[0]["question_type"] == "checkbox"
+
+    def test_mc_correct_answer_not_in_options_stays_mc(self):
+        """MC gde correct_answer nije medju opcijama mora ostati MC."""
+        questions = [
+            {
+                "question_text": "What is 2+2?",
+                "question_type": "multiple_choice",
+                "options": ["Three", "Four", "Five", "Six"],
+                "correct_answer": "Four",
+                "explanation": "2+2=4",
+                "points": 1,
+            }
+        ]
+        result = self._validate(questions)
+        assert len(result) == 1
+        assert result[0]["question_type"] == "multiple_choice"
+
+    def test_mc_converted_checkbox_has_all_options_as_correct(self):
+        """Konvertovan MC→CB mora imati sve opcije u correct_answer."""
+        questions = [
+            {
+                "question_text": "Which are prime numbers?",
+                "question_type": "multiple_choice",
+                "options": ["2", "3", "5", "7"],
+                "correct_answer": "2,3,5,7",
+                "explanation": "All are prime numbers.",
+                "points": 1,
+            }
+        ]
+        result = self._validate(questions)
+        assert result[0]["question_type"] == "checkbox"
+        correct_parts = [p.strip() for p in result[0]["correct_answer"].split(",")]
+        for opt in ["2", "3", "5", "7"]:
+            assert opt in correct_parts

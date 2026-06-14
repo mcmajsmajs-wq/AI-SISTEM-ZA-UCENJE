@@ -32,7 +32,7 @@ class OpenAIQuizClient(BaseQuizClient):
     def __init__(self):
         self.api_key = settings.OPENAI_API_KEY
         self.model = settings.OPENAI_MODEL
-        self.timeout = getattr(settings, "OPENAI_TIMEOUT", 120)
+        self.timeout = getattr(settings, "OPENAI_TIMEOUT", 45)
 
     @property
     def provider_name(self) -> str:

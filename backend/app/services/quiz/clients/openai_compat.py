@@ -44,7 +44,7 @@ class OpenAICompatQuizClient(BaseQuizClient):
         self.base_url = base_url
         self.model = model
         self.api_key = api_key
-        self.timeout = 120
+        self.timeout = 45
 
     @property
     def provider_name(self) -> str:

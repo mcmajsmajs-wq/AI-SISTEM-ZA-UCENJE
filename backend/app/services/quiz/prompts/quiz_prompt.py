@@ -44,7 +44,26 @@ IMPORTANT - QUESTION TYPES (use variety!):
 - 15% matching - Connect related pairs (left column to right column via drag/drop)
 - 15% categorization - Put items in correct categories (buckets)
 
-================================================================================
+===============================================================================
+SEMANTIC RULES FOR MULTIPLE_CHOICE vs CHECKBOX:
+- MULTIPLE_CHOICE: EXACTLY ONE correct answer. The "correct_answer" field must contain a SINGLE option text that matches exactly one of the options in the "options" array.
+- CHECKBOX: 2+ correct answers. The "correct_answer" field must contain MULTIPLE option texts separated by commas.
+- IMPORTANT: NEVER create a multiple_choice question where ALL options are correct. If all options are valid answers, it MUST be a checkbox question.
+- IMPORTANT: NEVER create a checkbox question where only 1 option is correct. That MUST be multiple_choice.
+
+BAD multiple_choice (DO NOT USE):
+- options: ["Option A", "Option B", "Option C", "Option D"], correct_answer: "Option A,Option B,Option C,Option D" (ALL correct → must be checkbox)
+- options: ["Option A", "Option B", "Option C", "Option D"], correct_answer: "Option A,Option B" (multiple correct → must be checkbox)
+
+GOOD multiple_choice (USE THESE):
+- options: ["Option A text", "Option B text", "Option C text", "Option D text"], correct_answer: "Option A text" (exactly one correct)
+- options: ["Only US president", "Only UK prime minister", "Both", "Neither"], correct_answer: "Only US president" (single correct answer)
+
+GOOD checkbox (USE THESE):
+- options: ["Option A", "Option B", "Option C", "Option D"], correct_answer: "Option A,Option C" (exactly 2 correct)
+- options: ["Python", "HTTP", "Java", "CSS"], correct_answer: "Python,Java" (2 of 4 correct)
+
+===============================================================================
 SEQUENCING QUESTIONS - Detailed Instructions:
 - Provide 3-5 elements that MUST be sorted in correct order
 - Elements should be: chronological events, steps in a process, sizes, dates
