@@ -11,10 +11,10 @@ Pokretanje:
 """
 
 import pytest
-import io
-from unittest.mock import patch, MagicMock
 
-from app.services.xlsx_export_service import XLSXExportService
+pytest.importorskip("openpyxl", reason="openpyxl nije instaliran (samo u Docker-u)")
+
+from app.services.xlsx_export_service import XLSXExportService  # noqa: E402
 
 
 class TestXLSXExportService:

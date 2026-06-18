@@ -23,7 +23,7 @@ class QuestionCreate(BaseModel):
     question_text: str = Field(..., min_length=5)
     question_type: str = Field(
         "multiple_choice",
-        pattern="^(multiple_choice|checkbox|true_false|fill_blank|calculation|step_by_step|text_input|sequencing|categorization|matching|odd_one_out)$",
+        pattern="^(multiple_choice|checkbox|true_false|fill_blank|calculation|step_by_step|text_input|sequencing|categorization|matching|odd_one_out)$",  # noqa: E501
     )
     options: List[str] = Field(..., min_length=2)
     correct_answer: str
@@ -97,7 +97,10 @@ class QuizCreate(BaseModel):
     )
     source_content: Optional[str] = Field(
         None,
-        description="Izvor teksta za kviz: 'translated' (srpski) ili 'original' (engleski). None = auto (koristi prevedeno ako postoji)",
+        description=(
+            "Izvor teksta za kviz: 'translated' (srpski) ili 'original' "
+            "(engleski). None = auto (koristi prevedeno ako postoji)"
+        ),
     )
 
 

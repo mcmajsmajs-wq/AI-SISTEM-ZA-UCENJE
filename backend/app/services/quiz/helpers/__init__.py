@@ -453,14 +453,14 @@ def mark_chunks_as_used(chunk_ids: list, db):
 
 
 # Re-export new modules for backward compatibility
-from app.services.quiz.helpers.subject_detection import (
+from app.services.quiz.helpers.subject_detection import (  # noqa: F401, E402
     detect_subject_area,
     get_subject_keywords,
     get_all_subjects as subject_detection_get_all_subjects,
     SUBJECT_KEYWORDS,
 )
 
-from app.services.quiz.helpers.document_structure import (
+from app.services.quiz.helpers.document_structure import (  # noqa: F401, E402
     detect_document_structure,
     get_structure_based_prompt,
     get_structure_keywords,
@@ -468,7 +468,7 @@ from app.services.quiz.helpers.document_structure import (
     STRUCTURE_PATTERNS,
 )
 
-from app.services.quiz.helpers.progress import (
+from app.services.quiz.helpers.progress import (  # noqa: E402
     update_quiz_progress,
     get_quiz_progress,
     delete_quiz_progress,

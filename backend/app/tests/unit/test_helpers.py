@@ -10,8 +10,6 @@ Pokretanje:
 ================================================================================
 """
 
-import pytest
-import hashlib
 import uuid
 from datetime import datetime
 

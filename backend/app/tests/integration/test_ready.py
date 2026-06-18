@@ -19,7 +19,6 @@ ILI CI/CD pipeline:
 """
 
 import pytest
-import os
 from httpx import AsyncClient
 
 

@@ -16,6 +16,7 @@
     "test:e2e:ui": "playwright test --ui"
   },
   "dependencies": {
+    "@rolldown/binding-linux-x64-gnu": "^1.1.1",
     "@tanstack/react-query": "^5.24.0",
     "axios": "^1.6.7",
     "clsx": "^2.1.0",

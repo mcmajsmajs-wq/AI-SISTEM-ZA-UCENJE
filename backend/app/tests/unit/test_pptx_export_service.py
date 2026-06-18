@@ -11,10 +11,10 @@ Pokretanje:
 """
 
 import pytest
-import io
-from unittest.mock import patch, MagicMock
 
-from app.services.pptx_export_service import PPTXExportService
+pytest.importorskip("pptx", reason="python-pptx nije instaliran (samo u Docker-u)")
+
+from app.services.pptx_export_service import PPTXExportService  # noqa: E402
 
 
 class TestPPTXExportService:

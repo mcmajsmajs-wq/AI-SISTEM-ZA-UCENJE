@@ -120,35 +120,35 @@ GENERALNO:
 def get_specialized_prompt(subject_area: str, num_questions: int, text: str) -> str:
     """
     Vraća specijalizovani prompt za oblast.
-    
+
     Args:
         subject_area: Oblast dokumenta
         num_questions: Broj pitanja
         text: Tekst dokumenta (truncate za prompt)
-    
+
     Returns:
         str: Specijalizovani prompt
     """
     from app.services.quiz.prompts.quiz_prompt import QUIZ_PROMPT
-    
+
     subject = subject_area.lower()
     instructions = SUBJECT_INSTRUCTIONS.get(subject, SUBJECT_INSTRUCTIONS["ostalo"])
-    
+
     base_prompt = QUIZ_PROMPT.format(
         num_questions=num_questions,
         text=text[:12000]
     )
-    
+
     return base_prompt + instructions
 
 
 def get_subject_instruction(subject_area: str) -> str:
     """
     Vraća dodatne instrukcije za oblast.
-    
+
     Args:
         subject_area: Oblast dokumenta
-    
+
     Returns:
         str: Dodatne instrukcije
     """
@@ -161,7 +161,7 @@ def get_subject_instruction(subject_area: str) -> str:
 def get_all_subjects() -> list:
     """
     Vraća listu svih podržanih oblasti.
-    
+
     Returns:
         list: Lista oblasti
     """

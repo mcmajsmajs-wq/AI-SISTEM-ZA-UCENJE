@@ -9,7 +9,6 @@ Verzija: 1.0.0 (2026-04-23)
 ================================================================================
 """
 
-from typing import Optional
 from sqlalchemy.orm import Session
 
 from app.db.models.document import Document, Chunk

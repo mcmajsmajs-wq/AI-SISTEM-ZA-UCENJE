@@ -9,14 +9,11 @@ Verzija: 1.1.0 (FAZA 14+) - Dodato cuvanje u files tabelu
 ================================================================================
 """
 
-import io
 import logging
 import uuid
 import hashlib
-from typing import List, Dict
 
 from celery import Task
-from sqlalchemy.orm import Session
 
 from app.db.session import engine
 from app.workers.celery_app import celery_app
@@ -172,9 +169,9 @@ def export_pdf_task(
         from app.services.skills.file_skills import get_file_skill
 
         try:
-            skill_prompt = get_file_skill().get_pdf_prompt()
+            get_file_skill().get_pdf_prompt()
         except Exception:
-            skill_prompt = ""
+            pass
 
         pdf_bytes = pdf_service.generate(
             title=document.title,

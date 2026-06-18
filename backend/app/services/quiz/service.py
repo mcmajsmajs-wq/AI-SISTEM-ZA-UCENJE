@@ -9,7 +9,6 @@ Verzija: 1.0.0
 """
 
 import logging
-import time
 from typing import List, Optional, Tuple
 
 import httpx
@@ -137,7 +136,6 @@ class QuizService:
 
             storage = CloudStorageService()
 
-            import io
             from botocore.exceptions import ClientError
 
             try:
@@ -269,7 +267,7 @@ class QuizService:
         if not document:
             raise ValueError(f"Dokument nije pronađen: {document_id}")
 
-        expected = num_questions if num_questions > 0 else 10
+        num_questions if num_questions > 0 else 10
 
         quiz = Quiz(
             document_id=document_id,
@@ -319,8 +317,6 @@ class QuizService:
         selected_chunks = select_chunks_for_quiz(chunks)
         if not selected_chunks:
             return False, "Nema validnih chunk-ova"
-
-        from app.services.quiz.helpers import _get_content
 
         # Determine which content to use based on source_content
         total_chars = 0

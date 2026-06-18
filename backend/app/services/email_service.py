@@ -68,7 +68,7 @@ class EmailService:
         html += "<li>Kreirajte licni plan ucenja</li>"
         html += "<li>Pratite napredak kroz analitiku</li>"
         html += "</ul>"
-        html += "<a href='http://localhost:5173' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pocnite sa ucenjem</a>"
+        html += "<a href='http://localhost:5173' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pocnite sa ucenjem</a>"  # noqa: E501
         html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>AI Sistem za ucenje</p></div>"
         return self._send(to, subject, html)
 
@@ -97,8 +97,8 @@ class EmailService:
         html += streak_html
         html += "<p><strong>Zakazani kvizovi za danas:</strong></p>"
         html += f"<ul>{quiz_list_html}</ul>"
-        html += "<a href='http://localhost:5173/quizzes' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Idi na kvizove</a>"
-        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Odjavite se od podsetnika u Podesavanjima.</p></div>"
+        html += "<a href='http://localhost:5173/quizzes' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Idi na kvizove</a>"  # noqa: E501
+        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Odjavite se od podsetnika u Podesavanjima.</p></div>"  # noqa: E501
         return self._send(to, subject, html)
 
     def send_weekly_summary(
@@ -123,16 +123,16 @@ class EmailService:
         html = "<div style='font-family:sans-serif;max-width:560px;margin:0 auto'>"
         html += f"<h2 style='color:#6366f1'>Nedeljni izvestaj, {name}</h2>"
         html += "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
-        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Uradjeni kvizovi</td><td style='padding:8px;font-weight:bold'>{week_completed} / {week_goal}</td></tr>"
-        html += f"<tr><td style='padding:8px'>Prosecan score</td><td style='padding:8px;font-weight:bold'>{avg_score}%</td></tr>"
-        html += f"<tr><td style='padding:8px;background:#f9fafb'>Streak</td><td style='padding:8px;font-weight:bold'>{streak} dana</td></tr>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Uradjeni kvizovi</td><td style='padding:8px;font-weight:bold'>{week_completed} / {week_goal}</td></tr>"  # noqa: E501
+        html += f"<tr><td style='padding:8px'>Prosecan score</td><td style='padding:8px;font-weight:bold'>{avg_score}%</td></tr>"  # noqa: E501
+        html += f"<tr><td style='padding:8px;background:#f9fafb'>Streak</td><td style='padding:8px;font-weight:bold'>{streak} dana</td></tr>"  # noqa: E501
         html += "</table>"
         html += best_html
         if achieved:
             html += "<p style='color:#10b981;font-weight:bold'>Bravo! Postigao si nedeljni cilj!</p>"
         else:
             html += f"<p>Nedostaje jos <strong>{week_goal - week_completed}</strong> kviz(eva) do cilja.</p>"
-        html += "<a href='http://localhost:5173/analytics' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj analitiku</a>"
+        html += "<a href='http://localhost:5173/analytics' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj analitiku</a>"  # noqa: E501
         html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>AI Sistem za ucenje</p></div>"
         return self._send(to, subject, html)
 
@@ -143,8 +143,8 @@ class EmailService:
         html += f"<h2 style='color:#6366f1'>Reset lozinke, {name}</h2>"
         html += "<p>Primili smo zahtev za reset lozinke za tvoj nalog.</p>"
         html += "<p>Klikni na dugme ispod da postavis novu lozinku. Link vazi <strong>1 sat</strong>.</p>"
-        html += f"<a href='{reset_link}' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Resetuj lozinku</a>"
-        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Ako nisi trazio reset lozinke, ignorisi ovaj email. Nalog ostaje siguran.</p></div>"
+        html += f"<a href='{reset_link}' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Resetuj lozinku</a>"  # noqa: E501
+        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Ako nisi trazio reset lozinke, ignorisi ovaj email. Nalog ostaje siguran.</p></div>"  # noqa: E501
         return self._send(to, subject, html)
 
     def send_document_processed(
@@ -161,14 +161,14 @@ class EmailService:
         html += f"<h2 style='color:#10b981'>Dokument je spreman, {name}!</h2>"
         html += f"<p>Vas dokument <strong>{document_title}</strong> je uspesno obradjen.</p>"
         html += "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
-        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Stranica</td><td style='padding:8px;font-weight:bold'>{total_pages}</td></tr>"
-        html += f"<tr><td style='padding:8px'>Chunk-ova</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Stranica</td><td style='padding:8px;font-weight:bold'>{total_pages}</td></tr>"  # noqa: E501
+        html += f"<tr><td style='padding:8px'>Chunk-ova</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"  # noqa: E501
         html += "</table>"
         html += "<p>Sada mozete:</p><ul>"
         html += "<li>Prevesti dokument na drugi jezik</li>"
         html += "<li>Generisati kviz iz sadrzaja</li>"
         html += "<li>Koristiti dokument za RAG pretragu</li></ul>"
-        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a></div>"
+        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a></div>"  # noqa: E501
         return self._send(to, subject, html)
 
     def send_quiz_completed(
@@ -191,7 +191,7 @@ class EmailService:
             html += "<p style='color:#10b981;font-weight:bold'>Prosli ste kviz!</p>"
         else:
             html += f"<p>Niste prosli. Potrebno je <strong>{pct}%</strong> za prolaz. Pokusajte ponovo!</p>"
-        html += "<a href='http://localhost:5173/quizzes' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj kvizove</a></div>"
+        html += "<a href='http://localhost:5173/quizzes' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj kvizove</a></div>"  # noqa: E501
         return self._send(to, subject, html)
 
     def send_chunks_ready(
@@ -220,15 +220,15 @@ class EmailService:
             f"<p>Vaš dokument <strong>{document_title}</strong> je uspešno obrađen.</p>"
         )
         html += "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
-        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Stranica</td><td style='padding:8px;font-weight:bold'>{total_pages}</td></tr>"
-        html += f"<tr><td style='padding:8px'>Odlomaka (chunk-ova)</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Stranica</td><td style='padding:8px;font-weight:bold'>{total_pages}</td></tr>"  # noqa: E501
+        html += f"<tr><td style='padding:8px'>Odlomaka (chunk-ova)</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"  # noqa: E501
         html += "</table>"
         html += "<p>Sada možete:</p><ul>"
         html += "<li>Prevesti dokument na drugi jezik</li>"
         html += "<li>Generisati kviz iz sadržaja</li>"
         html += "<li>Koristiti dokument za RAG pretragu</li></ul>"
-        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a>"
-        html += f"<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Započnite novi zadatak ili se izlogujte. Agent će vas obavestiti putem email-a kada završi.</p></div>"
+        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a>"  # noqa: E501
+        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Započnite novi zadatak ili se izlogujte. Agent će vas obavestiti putem email-a kada završi.</p></div>"  # noqa: E501
         return self._send(to, subject, html)
 
     def send_translation_ready(
@@ -279,16 +279,16 @@ class EmailService:
         html += f"<h2 style='color:#10b981'>Prevod je završen, {name}!</h2>"
         html += f"<p>Vaš dokument <strong>{document_title}</strong> je uspešno preveden.</p>"
         html += "<table style='width:100%;border-collapse:collapse;margin:16px 0'>"
-        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Iz jezika</td><td style='padding:8px;font-weight:bold'>{src_name}</td></tr>"
-        html += f"<tr><td style='padding:8px'>Na jezik</td><td style='padding:8px;font-weight:bold'>{tgt_name}</td></tr>"
-        html += f"<tr><td style='padding:8px;background:#f9fafb'>Prevedenih odlomaka</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"
+        html += f"<tr><td style='padding:8px;background:#f9fafb;border-radius:4px'>Iz jezika</td><td style='padding:8px;font-weight:bold'>{src_name}</td></tr>"  # noqa: E501
+        html += f"<tr><td style='padding:8px'>Na jezik</td><td style='padding:8px;font-weight:bold'>{tgt_name}</td></tr>"  # noqa: E501
+        html += f"<tr><td style='padding:8px;background:#f9fafb'>Prevedenih odlomaka</td><td style='padding:8px;font-weight:bold'>{total_chunks}</td></tr>"  # noqa: E501
         html += "</table>"
         html += "<p>Sada možete:</p><ul>"
         html += "<li>Generisati kviz iz prevedenog sadržaja</li>"
         html += "<li>Pretraživati prevedeni sadržaj</li>"
         html += "<li>Pogledati dokument</li></ul>"
-        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a>"
-        html += f"<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Započnite novi zadatak ili se izlogujte. Agent će vas obavestiti putem email-a kada završi.</p></div>"
+        html += "<a href='http://localhost:5173/documents' style='display:inline-block;margin-top:16px;padding:12px 24px;background:#6366f1;color:white;border-radius:8px;text-decoration:none;font-weight:bold'>Pogledaj dokumente</a>"  # noqa: E501
+        html += "<p style='margin-top:24px;color:#9ca3af;font-size:12px'>Započnite novi zadatak ili se izlogujte. Agent će vas obavestiti putem email-a kada završi.</p></div>"  # noqa: E501
         return self._send(to, subject, html)
 
 

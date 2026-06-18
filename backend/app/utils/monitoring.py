@@ -12,7 +12,6 @@ import functools
 import time
 from datetime import datetime
 from typing import Callable, Any
-import sys
 
 logger = logging.getLogger(__name__)
 
@@ -111,7 +110,7 @@ def log_action(action_type: str):
 
             except Exception as e:
                 duration = time.time() - start_time
-                error_entry = action_logger.log_error(
+                action_logger.log_error(
                     action_type=action_type,
                     error=e,
                     context={**context, "duration_seconds": round(duration, 2)},

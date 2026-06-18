@@ -62,6 +62,7 @@ export interface Document {
   description: string | null
   total_pages: number | null
   total_chunks: number
+  translated_chunks: number
   source_language: string
   target_language: string
   status: DocumentStatus
@@ -76,6 +77,7 @@ export type DocumentStatus =
   | 'translating'
   | 'completed'
   | 'error'
+  | 'partial'
 
 export interface Chunk {
   id: string
@@ -104,6 +106,13 @@ export interface TranslationProgress {
   current_chunk: number
   status: string
   progress_percent: number
+  progress_percentage?: number
+  pages_done?: number
+  pages_total?: number
+  chunks_so_far?: number
+  phase_label?: string
+  elapsed_seconds?: number
+  last_activity_at?: string
 }
 
 export interface Quiz {

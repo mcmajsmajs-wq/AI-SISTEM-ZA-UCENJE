@@ -12,7 +12,7 @@ Verzija: 1.0.0
 
 import logging
 from dataclasses import dataclass
-from typing import Optional, List, Dict, Any
+from typing import Optional, List
 
 from app.services.quiz.clients import _build_clients, _PROVIDER_ORDER
 from app.core.config import settings
@@ -133,14 +133,20 @@ def validate_quiz_provider(
                 provider=provider,
                 is_ok=False,
                 status="error",
-                user_message=f"API ključ za {provider} je nevažeći ili je istekao. Molimo vas da osvežite ključ u podešavanjima.",
+                user_message=(
+                    f"API ključ za {provider} je nevažeći ili je istekao. "
+                    "Molimo vas da osvežite ključ u podešavanjima."
+                ),
                 model=model,
                 error="API key invalid or expired",
             )
 
         # Optional: test generate
         if test_generate:
-            test_text = "Ovo je test tekst od 50 reči koje služe kao primer za generisanje simplest mogućeg kviz pitanja."
+            test_text = (
+                "Ovo je test tekst od 50 reči koje služe kao primer "
+                "za generisanje simplest mogućeg kviz pitanja."
+            )
             success, raw, error = client.generate(test_text, 1)
 
             if not success:

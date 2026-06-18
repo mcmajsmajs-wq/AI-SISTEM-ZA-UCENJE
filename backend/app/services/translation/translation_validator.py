@@ -19,7 +19,6 @@ import httpx
 
 from app.services.translation.translation_config import (
     get_provider_config,
-    get_default_model,
     get_fallback_models,
 )
 

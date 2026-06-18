@@ -10,8 +10,7 @@ Pokretanje:
 ================================================================================
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.utils.monitoring import (
     log_action,
@@ -122,7 +121,7 @@ class TestGetSystemStatus:
 
     def test_get_system_status(self):
         """Test dobijanja statusa sistema."""
-        with patch("app.utils.monitoring.logger") as mock_logger:
+        with patch("app.utils.monitoring.logger"):
             status = get_system_status()
 
             assert isinstance(status, dict)

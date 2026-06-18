@@ -76,34 +76,34 @@ SUBJECT_KEYWORDS: Dict[str, List[str]] = {
 def detect_subject_area(text: str, num_samples: int = 20) -> str:
     """
     Detektuje oblast dokumenta na osnovu ključnih reči.
-    
+
     Args:
         text: Tekst dokumenta
         num_samples: Broj uzoraka za AI detekciju (trenutno ne koristi)
-    
+
     Returns:
         str: Ime detektovane oblasti (npr. "matematika", "fizika", "hemija")
     """
     text_lower = text.lower()
     subject_scores: Dict[str, int] = {}
-    
+
     for subject, keywords in SUBJECT_KEYWORDS.items():
         score = sum(1 for kw in keywords if kw in text_lower)
         subject_scores[subject] = score
-    
+
     if not subject_scores or max(subject_scores.values()) == 0:
         return "ostalo"
-    
+
     return max(subject_scores, key=subject_scores.get)
 
 
 def get_subject_keywords(subject: str) -> List[str]:
     """
     Vraća listu ključnih reči za datu oblast.
-    
+
     Args:
         subject: Ime oblasti
-    
+
     Returns:
         List[str]: Lista ključnih reči
     """
@@ -113,7 +113,7 @@ def get_subject_keywords(subject: str) -> List[str]:
 def get_all_subjects() -> List[str]:
     """
     Vraća listu svih podržanih oblasti.
-    
+
     Returns:
         List[str]: Lista svih oblasti
     """

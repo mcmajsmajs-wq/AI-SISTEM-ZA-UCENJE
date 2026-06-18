@@ -1,7 +1,6 @@
 """Entry point for running the MCP server."""
 
-from . import main
-import asyncio
+from . import mcp
 
 if __name__ == "__main__":
-    asyncio.run(main())
+    mcp.run()

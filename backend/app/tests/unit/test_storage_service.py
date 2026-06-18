@@ -13,8 +13,7 @@ Pokretanje:
 import pytest
 import io
 import hashlib
-from pathlib import Path
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 from app.services.storage import LocalStorageService, StorageService
 
@@ -74,7 +73,7 @@ class TestLocalStorageService:
         def test_upload_file_creates_directory(self, local_storage, tmp_path):
             """Test da se kreira direktorijum za korisnika."""
             content = b"test"
-            result = local_storage.upload_file(
+            local_storage.upload_file(
                 file_content=io.BytesIO(content),
                 filename="test.pdf",
                 user_id="new-user",

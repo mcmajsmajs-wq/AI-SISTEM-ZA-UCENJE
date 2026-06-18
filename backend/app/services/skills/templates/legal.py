@@ -8,7 +8,7 @@ Verzija: 1.0.0
 ===============================================================================
 """
 
-LEGAL_PROMPT_TEMPLATE = """You are a legal document analyzer specialized in processing contracts, 
+LEGAL_PROMPT_TEMPLATE = """You are a legal document analyzer specialized in processing contracts,
 agreements, and legal texts.
 
 When processing this PDF:

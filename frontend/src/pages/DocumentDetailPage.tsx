@@ -13,9 +13,17 @@
  */
 
 import { useParams, Link, useNavigate } from 'react-router-dom'
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { useState, useEffect, useRef } from 'react'
 import { documentsApi } from '@/services/api'
+import {
+  useDocumentDetail,
+  useDocumentProgress,
+  useDocumentChunks,
+  useDocumentQuizAvailability,
+  useDeleteDocument,
+  useStopTranslation,
+} from '@/hooks/useDocuments'
 import { 
   BookOpen, 
   Languages, 
@@ -41,6 +49,7 @@ import {
 import clsx from 'clsx'
 import PipelineModal from '@/components/PipelineModal'
 import toast from 'react-hot-toast'
+import { useExportProgressStore } from '@/stores/exportProgressStore'
 
 export default function DocumentDetailPage() {
   const { id } = useParams<{ id: string }>()
@@ -65,6 +74,22 @@ export default function DocumentDetailPage() {
   
   const docId = id || ''
 
+  // Sync SSE export progress from store
+  const exportStoreExports = useExportProgressStore((s) => s.exports)
+
+  useEffect(() => {
+    const matchedExport = Object.values(exportStoreExports).find(
+      (e) => e.documentId === docId && e.format === exportType
+    )
+    if (matchedExport && matchedExport.status === 'progress') {
+      setExportProgress({
+        current: matchedExport.current,
+        total: matchedExport.total,
+        status: matchedExport.message || 'Procesiranje...',
+      })
+    }
+  }, [exportStoreExports, docId, exportType])
+
   // Load persisted export status on mount
   useEffect(() => {
     if (docId) {
@@ -86,15 +111,7 @@ export default function DocumentDetailPage() {
     }
   }
 
-  const deleteMutation = useMutation({
-    mutationFn: () => documentsApi.delete(docId),
-    onSuccess: () => {
-      toast.success('Dokument obrisan')
-      queryClient.invalidateQueries({ queryKey: ['documents'] })
-      navigate('/documents')
-    },
-    onError: () => toast.error('Greška pri brisanju dokumenta'),
-  })
+  const deleteMutation = useDeleteDocument()
 
   const translateMutation = useMutation({
     mutationFn: async ({ docId }: { docId: string }) => {
@@ -142,18 +159,7 @@ export default function DocumentDetailPage() {
     },
   })
 
-  const stopMutation = useMutation({
-    mutationFn: () => documentsApi.stopTranslation(docId),
-    onSuccess: () => {
-      toast.success('Prevođenje zaustavljeno. Možete nastaviti kasnije.')
-      queryClient.invalidateQueries({ queryKey: ['document', docId] })
-      queryClient.invalidateQueries({ queryKey: ['document-progress', docId] })
-    },
-    onError: (error: any) => {
-      const message = error.response?.data?.user_message || error.message || 'Greška pri zaustavljanju'
-      toast.error(message)
-    },
-  })
+  const stopMutation = useStopTranslation()
 
   const handleTranslate = () => {
     translateMutation.mutate({ docId })
@@ -226,11 +232,9 @@ export default function DocumentDetailPage() {
         } else if (status === 'FAILURE') {
           throw new Error(statusRes.data.error || 'PDF generisanje nije uspelo')
         } else if (status === 'PROGRESS') {
-          console.log('[DEBUG] Still processing, polling again...')
-          setTimeout(poll, 1000)
+          setTimeout(poll, 3000)
         } else {
-          console.log('[DEBUG] Unknown status, polling again...')
-          setTimeout(poll, 2000)
+          setTimeout(poll, 3000)
         }
       }
       
@@ -294,9 +298,9 @@ export default function DocumentDetailPage() {
         } else if (status === 'FAILURE') {
           throw new Error(statusRes.data.error || 'DOCX generisanje nije uspelo')
         } else if (status === 'PROGRESS' || status === 'PENDING' || status === 'STARTED') {
-          setTimeout(poll, 1000)
+          setTimeout(poll, 3000)
         } else {
-          setTimeout(poll, 2000)
+          setTimeout(poll, 3000)
         }
       }
       
@@ -348,41 +352,15 @@ export default function DocumentDetailPage() {
     }
   }
 
-  const activeStatuses = ['pending', 'processing', 'translating', 'partial']
-
   // Track seconds since last worker activity
   const [secondsSinceActivity, setSecondsSinceActivity] = useState<number | null>(null)
   const activityTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const { data: docQueryData, isLoading } = useQuery({
-    queryKey: ['document', docId],
-    queryFn: () => documentsApi.get(docId),
-    enabled: !!docId,
-    // Auto-refresh every 3s while document is being processed
-    refetchInterval: (query) => {
-      const status = (query.state.data as any)?.data?.status
-      return activeStatuses.includes(status) ? 3000 : false
-    },
-  })
+  const { data: doc, isLoading } = useDocumentDetail(docId)
 
-  const { data: progressData } = useQuery({
-    queryKey: ['document-progress', docId],
-    queryFn: () => documentsApi.getProgress(docId),
-    enabled: !!docId,
-    refetchInterval: (query) => {
-      const status = (query.state.data as any)?.data?.status
-      return activeStatuses.includes(status) ? 2000 : false
-    },
-  })
-  const progress = (progressData as any)?.data
+  const { data: progress } = useDocumentProgress(docId)
 
-  const { data: quizAvailabilityData } = useQuery({
-    queryKey: ['document-quiz-availability', docId],
-    queryFn: () => documentsApi.getQuizAvailability(docId),
-    enabled: !!docId && docQueryData?.data?.status === 'completed',
-    refetchInterval: 30000,
-  })
-  const quizAvailability = (quizAvailabilityData as any)?.data
+  const { data: quizAvailability } = useDocumentQuizAvailability(docId)
 
   // Update "seconds since last activity" counter every second
   useEffect(() => {
@@ -390,8 +368,9 @@ export default function DocumentDetailPage() {
       setSecondsSinceActivity(null)
       return
     }
+    const lastActivity = progress.last_activity_at
     const update = () => {
-      const diff = Math.floor((Date.now() - new Date(progress.last_activity_at).getTime()) / 1000)
+      const diff = Math.floor((Date.now() - new Date(lastActivity).getTime()) / 1000)
       setSecondsSinceActivity(diff)
     }
     update()
@@ -402,13 +381,7 @@ export default function DocumentDetailPage() {
   const [chunkPage, setChunkPage] = useState(0)
   const CHUNKS_PER_PAGE = 20
 
-  const { data: chunks } = useQuery({
-    queryKey: ['document-chunks', docId, chunkPage],
-    queryFn: () => documentsApi.getChunks(docId, chunkPage * CHUNKS_PER_PAGE, CHUNKS_PER_PAGE),
-    enabled: !!docId && docQueryData?.data?.status !== 'pending',
-  })
-
-  const doc = docQueryData?.data
+  const { data: chunks } = useDocumentChunks(docId, chunkPage * CHUNKS_PER_PAGE, CHUNKS_PER_PAGE)
 
   // Toast when processing completes
   const prevStatusRef = useRef<string | undefined>(undefined)
@@ -491,8 +464,8 @@ export default function DocumentDetailPage() {
   }
 
   const cfg = getStatusConfig(doc.status, doc.translated_chunks || 0, doc.total_chunks || 0)
-  const translatedCount = Array.isArray(chunks?.data) 
-    ? chunks.data.filter((c: any) => c.translated_content).length 
+  const translatedCount = Array.isArray(chunks?.items) 
+    ? chunks.items.filter((c: any) => c.translated_content).length 
     : 0
 
   return (
@@ -635,8 +608,8 @@ export default function DocumentDetailPage() {
           {progress && (
             <div className="grid grid-cols-3 gap-px bg-white/30 border-t border-white/40 mt-1">
               {(doc.status === 'processing' ? [
-                { label: 'Strana obrađeno', value: progress.pages_done > 0 ? `${progress.pages_done} / ${progress.pages_total || '?'}` : '...' },
-                { label: 'Odlomaka kreirano', value: progress.chunks_so_far > 0 ? progress.chunks_so_far : '...' },
+                { label: 'Strana obrađeno', value: (progress.pages_done ?? 0) > 0 ? `${progress.pages_done ?? 0} / ${progress.pages_total ?? '?'}` : '...' },
+                { label: 'Odlomaka kreirano', value: (progress.chunks_so_far ?? 0) > 0 ? (progress.chunks_so_far ?? 0) : '...' },
                 { label: 'Ukupno strana', value: progress.pages_total || doc.total_pages || '...' },
               ] : doc.status === 'completed' ? [
                 { label: 'Odlomaka ukupno', value: progress.total_chunks },
@@ -658,7 +631,7 @@ export default function DocumentDetailPage() {
       )}
 
       {/* Quiz availability status - show when document is completed */}
-      {docQueryData?.data?.status === 'completed' && quizAvailability && (
+      {doc?.status === 'completed' && quizAvailability && (
         <div className="card bg-gradient-to-r from-amber-50 to-orange-50 border-amber-200">
           <div className="px-5 py-3 flex items-center justify-between border-b border-amber-100">
             <div className="flex items-center gap-2">
@@ -710,7 +683,13 @@ export default function DocumentDetailPage() {
           <button
             onClick={() => {
               if (confirm('Da li želite da prekinete prevođenje? Progress će biti sačuvan.')) {
-                stopMutation.mutate()
+                stopMutation.mutate(docId, {
+                  onSuccess: () => toast.success('Prevođenje zaustavljeno. Možete nastaviti kasnije.'),
+                  onError: (error: any) => {
+                    const message = error.response?.data?.user_message || error.message || 'Greška pri zaustavljanju'
+                    toast.error(message)
+                  },
+                })
               }
             }}
             disabled={stopMutation.isPending}
@@ -727,11 +706,11 @@ export default function DocumentDetailPage() {
               Greška pri obradi dokumenta
             </div>
             <p className="text-red-600 text-sm mb-3">
-              {doc.metadata?.processing_error || doc.metadata?.translation?.errors?.[0] || doc.description || 'Nepoznata greška'}
+              {(doc.metadata as any)?.processing_error || (doc.metadata as any)?.translation?.errors?.[0] || doc.description || 'Nepoznata greška'}
             </p>
-            {(doc.metadata?.processing_error || doc.metadata?.translation?.errors?.[0]) && (
+            {((doc.metadata as any)?.processing_error || (doc.metadata as any)?.translation?.errors?.[0]) && (
               <p className="text-gray-600 text-xs">
-                Tehnički detalji: {doc.metadata.processing_error || doc.metadata.translation?.errors?.[0]}
+                Tehnički detalji: {(doc.metadata as any).processing_error || (doc.metadata as any).translation?.errors?.[0]}
               </p>
             )}
           </div>
@@ -756,7 +735,12 @@ export default function DocumentDetailPage() {
           <button
             onClick={() => {
               if (confirm('Da li želite da obrisete ovaj dokument?')) {
-                deleteMutation.mutate()
+                deleteMutation.mutate(docId, {
+                  onSuccess: () => {
+                    toast.success('Dokument obrisan')
+                    navigate('/documents')
+                  },
+                })
               }
             }}
             disabled={deleteMutation.isPending}
@@ -926,9 +910,9 @@ export default function DocumentDetailPage() {
             )}
           </div>
 
-          {Array.isArray(chunks?.data) && chunks.data.length > 0 ? (
+          {Array.isArray(chunks?.items) && chunks.items.length > 0 ? (
             <div className="divide-y divide-gray-100">
-              {chunks.data.map((chunk: any, idx: number) => (
+              {chunks.items.map((chunk: any, idx: number) => (
                 <div key={chunk.id} className="px-6 py-4 hover:bg-gray-50/80 transition-colors group">
                   <div className="flex items-start gap-3">
                     {/* Number + status */}

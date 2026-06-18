@@ -21,7 +21,7 @@ Verzija: 2.1.0 (Modularni keyword import)
 """
 
 import logging
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any
 
 from app.services.skills.keywords import SUBJECT_KEYWORDS
 

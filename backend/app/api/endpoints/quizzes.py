@@ -328,15 +328,16 @@ async def create_quiz(
         f"Kviz {quiz.id} kreiran, generisanje pokrenuto, source={data.source_content or 'auto'}"
     )
 
-    posthog_client.capture(
-        "quiz created",
-        distinct_id=str(current_user.id),
-        properties={
-            "num_questions": data.num_questions,
-            "ai_provider": user_provider or "auto",
-            "shuffle_questions": data.shuffle_questions,
-        },
-    )
+    if posthog_client:
+        posthog_client.capture(
+            "quiz created",
+            distinct_id=str(current_user.id),
+            properties={
+                "num_questions": data.num_questions,
+                "ai_provider": user_provider or "auto",
+                "shuffle_questions": data.shuffle_questions,
+            },
+        )
 
     return quiz_to_response(quiz)
 
@@ -478,11 +479,12 @@ async def start_attempt(
     db.commit()
     db.refresh(attempt)
 
-    posthog_client.capture(
-        "quiz attempt started",
-        distinct_id=str(current_user.id),
-        properties={"quiz_id": quiz_id},
-    )
+    if posthog_client:
+        posthog_client.capture(
+            "quiz attempt started",
+            distinct_id=str(current_user.id),
+            properties={"quiz_id": quiz_id},
+        )
 
     return attempt_to_response(attempt)
 
@@ -571,18 +573,19 @@ async def submit_attempt(
     db.commit()
     db.refresh(attempt)
 
-    posthog_client.capture(
-        "quiz attempt completed",
-        distinct_id=str(current_user.id),
-        properties={
-            "quiz_id": quiz_id,
-            "score": attempt.score,
-            "total_points": attempt.total_points,
-            "percentage": attempt.percentage,
-            "passed": attempt.passed,
-            "num_answers": len(answer_results),
-        },
-    )
+    if posthog_client:
+        posthog_client.capture(
+            "quiz attempt completed",
+            distinct_id=str(current_user.id),
+            properties={
+                "quiz_id": quiz_id,
+                "score": attempt.score,
+                "total_points": attempt.total_points,
+                "percentage": attempt.percentage,
+                "passed": attempt.passed,
+                "num_answers": len(answer_results),
+            },
+        )
 
     return AttemptResult(
         id=str(attempt.id),

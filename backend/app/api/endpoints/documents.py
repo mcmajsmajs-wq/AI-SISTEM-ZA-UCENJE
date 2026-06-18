@@ -38,55 +38,6 @@ router = APIRouter()
 logger = logging.getLogger(__name__)
 
 
-# UKLONJENO: document_to_response() i chunk_to_response()
-# Sada su u documents_helpers.py
-
-
-def document_to_response(doc: Document, db=None) -> DocumentResponse:
-    """Konvertuje Document model u DocumentResponse schema."""
-    translated_count = 0
-    if db is not None:
-        translated_count = (
-            db.query(Chunk)
-            .filter(Chunk.document_id == doc.id, Chunk.is_translated == 1)
-            .count()
-        )
-    return DocumentResponse(
-        id=str(doc.id),
-        file_id=str(doc.file_id) if doc.file_id else None,
-        user_id=str(doc.user_id),
-        title=doc.title,
-        description=doc.description,
-        total_pages=doc.total_pages,
-        total_chunks=doc.total_chunks,
-        translated_chunks=translated_count,
-        status=doc.status,
-        source_language=doc.source_language,
-        target_language=doc.target_language,
-        metadata=doc.file_metadata or {},
-        created_at=doc.created_at.isoformat() if doc.created_at else None,
-        updated_at=doc.updated_at.isoformat() if doc.updated_at else None,
-    )
-
-
-def chunk_to_response(chunk: Chunk) -> ChunkResponse:
-    """Konvertuje Chunk model u ChunkResponse schema."""
-    return ChunkResponse(
-        id=str(chunk.id),
-        document_id=str(chunk.document_id),
-        sequence_number=chunk.sequence_number,
-        content=chunk.content,
-        translated_content=chunk.translated_content,
-        token_count=chunk.token_count,
-        heading_level=chunk.heading_level,
-        parent_heading=chunk.parent_heading,
-        is_translated=bool(chunk.is_translated),
-        is_reviewed=bool(chunk.is_reviewed),
-        created_at=chunk.created_at.isoformat() if chunk.created_at else None,
-        updated_at=chunk.updated_at.isoformat() if chunk.updated_at else None,
-    )
-
-
 @router.get("/", response_model=DocumentListResponse)
 async def list_documents(
     skip: int = 0,
@@ -908,7 +859,8 @@ async def stop_translation(
         "translated_chunks": translated_chunks,
         "total_chunks": total_chunks,
         "can_resume": translated_chunks < total_chunks,
-        "message": f"Translation stopped. {translated_chunks}/{total_chunks} chunks translated. Možete ponovo pokrenuti kad želite.",
+        "message": f"Translation stopped. {translated_chunks}/{total_chunks} chunks translated. "
+        "Možete ponovo pokrenuti kad želite.",
     }
 
 
@@ -1717,7 +1669,6 @@ async def export_document_pdf(
     """
     Pokreće asinhrono generisanje PDF-a i vraća task_id za praćenje statusa.
     """
-    from celery.result import AsyncResult
     from app.workers.tasks import export_pdf_task
 
     document = (
@@ -2065,7 +2016,7 @@ async def get_quiz_availability(
 
 # ─── DOCX EXPORT ENDPOINTS ────────────────────────────────────────────────
 
-from app.workers.tasks.docx_export import export_docx_task
+from app.workers.tasks.docx_export import export_docx_task  # noqa: E402
 
 
 @router.post("/{document_id}/export-docx", status_code=202)
@@ -2181,8 +2132,7 @@ def download_docx(
 
 # ─── PDF EXPORT ENDPOINTS ────────────────────────────────────────────────
 
-from app.workers.tasks.pdf_export import export_pdf_task
-from fastapi import BackgroundTasks
+from app.workers.tasks.pdf_export import export_pdf_task  # noqa: E402
 
 
 @router.post("/{document_id}/export-pdf", status_code=202)
@@ -2257,8 +2207,6 @@ def download_pdf(
     current_user: User = Depends(get_current_user),
 ):
     """Download generisanog PDF-a."""
-    from fastapi.responses import FileResponse
-    from pathlib import Path
 
     doc = (
         db.query(Document)

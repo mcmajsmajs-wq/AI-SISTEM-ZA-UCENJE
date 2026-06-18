@@ -284,15 +284,16 @@ async def complete_plan_item(
     db.commit()
     db.refresh(item)
 
-    posthog_client.capture(
-        "study plan item completed",
-        distinct_id=str(current_user.id),
-        properties={
-            "quiz_id": str(item.quiz_id),
-            "priority": item.priority,
-            "has_attempt": bool(item.attempt_id),
-        },
-    )
+    if posthog_client:
+        posthog_client.capture(
+            "study plan item completed",
+            distinct_id=str(current_user.id),
+            properties={
+                "quiz_id": str(item.quiz_id),
+                "priority": item.priority,
+                "has_attempt": bool(item.attempt_id),
+            },
+        )
 
     return item_to_response(item)
 

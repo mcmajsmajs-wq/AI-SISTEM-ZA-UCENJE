@@ -11,8 +11,7 @@ Pokretanje:
 """
 
 import pytest
-from unittest.mock import MagicMock, patch, PropertyMock
-import httpx
+from unittest.mock import MagicMock, patch
 
 from app.services.translation import (
     TranslationService,
@@ -24,7 +23,10 @@ from app.services.translation import (
     OpenAIClient,
     GoogleTranslateClient,
     ClaudeClient,
-    BaseTranslationClient,
+)
+from app.services.translation.translation_validator import (
+    ValidationResult,
+    ValidationStatus,
 )
 
 
@@ -288,7 +290,6 @@ class TestOpenAIClient:
     def test_is_available(self):
         """Test dostupnosti."""
         client_with_key = OpenAIClient(api_key="test-key")
-        client_without_key = OpenAIClient(api_key=None)
 
         assert client_with_key.is_available() is True
         # Bez ključa — mora biti False čak i ako env varijabla postoji
@@ -471,7 +472,6 @@ class TestTranslationService:
     def test_translate_with_specific_provider(self):
         """Test prevoda sa specifičnim provajderom."""
         from app.services.translation.translation_validator import (
-            validate_translation_provider,
             ValidationResult,
             ValidationStatus,
         )
@@ -673,13 +673,26 @@ class TestTranslationService:
         """Test kad traženi provajder nije dostupan."""
         service = TranslationService()
 
-        with patch.object(
-            service._clients["deepl"], "is_available", return_value=False
+        with patch(
+            "app.services.translation.service.validate_translation_provider",
+            return_value=ValidationResult(
+                status=ValidationStatus.OK,
+                provider="deepl",
+                api_key_valid=True,
+                model_valid=True,
+                model_used="deepl",
+                available_models=["deepl"],
+                user_message="OK",
+                details="",
+            ),
         ):
-            result = service.translate("Test", provider="deepl")
+            with patch.object(
+                service._clients["deepl"], "is_available", return_value=False
+            ):
+                result = service.translate("Test", provider="deepl")
 
-            assert result.success is False
-            assert "not available" in result.error.lower()
+                assert result.success is False
+                assert "not available" in result.error.lower()
 
 
 class TestEdgeCases:

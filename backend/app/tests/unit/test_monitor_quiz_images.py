@@ -11,9 +11,6 @@ Pokretanje:
 """
 
 import pytest
-from unittest.mock import patch, MagicMock
-
-from app.utils.monitor_quiz_images import check_quiz_images, check_all_quiz_issues
 
 
 class TestCheckQuizImages:

@@ -105,7 +105,7 @@ def _split_paragraphs(text: str, expected_count: int = 0) -> list:
             if m.start() == prev_end and m.start() < 3:
                 continue
             if m.start() > prev_end:
-                result.append(text[prev_end : m.start()].strip())
+                result.append(text[prev_end:m.start()].strip())
             prev_end = m.start()
         if prev_end < len(text):
             result.append(text[prev_end:].strip())

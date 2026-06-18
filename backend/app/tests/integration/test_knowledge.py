@@ -75,6 +75,7 @@ class TestRagQueryWithContext:
 
         # Verify the system prompt source code doesn't contain the restrictive phrase
         import inspect
+
         source = inspect.getsource(rag.rag_query)
         assert "ISKLJUČIVO" not in source, (
             "System prompt ne sme ograničavati AI samo na kontekst — "
@@ -87,16 +88,39 @@ class TestRagQueryWithContext:
         from app.services.rag import rag_query
 
         mock_chunks = [
-            {"id": "c1", "content": "Content A", "source_name": "Doc A", "source_type": "pdf", "url": None, "similarity": 0.9},
-            {"id": "c2", "content": "Content B", "source_name": "Doc A", "source_type": "pdf", "url": None, "similarity": 0.85},
-            {"id": "c3", "content": "Content C", "source_name": "Doc B", "source_type": "url", "url": "https://example.com", "similarity": 0.8},
+            {
+                "id": "c1",
+                "content": "Content A",
+                "source_name": "Doc A",
+                "source_type": "pdf",
+                "url": None,
+                "similarity": 0.9,
+            },
+            {
+                "id": "c2",
+                "content": "Content B",
+                "source_name": "Doc A",
+                "source_type": "pdf",
+                "url": None,
+                "similarity": 0.85,
+            },
+            {
+                "id": "c3",
+                "content": "Content C",
+                "source_name": "Doc B",
+                "source_type": "url",
+                "url": "https://example.com",
+                "similarity": 0.8,
+            },
         ]
 
         with patch("app.services.rag.similarity_search", return_value=mock_chunks):
             with patch("httpx.AsyncClient") as mock_client_cls:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
-                mock_resp.json.return_value = {"choices": [{"message": {"content": "Synthesized answer"}}]}
+                mock_resp.json.return_value = {
+                    "choices": [{"message": {"content": "Synthesized answer"}}]
+                }
                 mock_client = AsyncMock()
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_client.__aexit__ = AsyncMock(return_value=False)
@@ -110,7 +134,9 @@ class TestRagQueryWithContext:
                     mock_settings.MISTRAL_API_KEY = ""
                     mock_settings.ANTHROPIC_API_KEY = ""
 
-                    result = await rag_query(db=MagicMock(), query="test", provider_override="gemini")
+                    result = await rag_query(
+                        db=MagicMock(), query="test", provider_override="gemini"
+                    )
 
         # Deduplicated: Doc A and Doc B
         assert result["chunks_used"] == 3
@@ -128,13 +154,17 @@ class TestRagQueryWithoutContext:
         """Kada nema chunk-ova, AI mora biti pozvan i dati direktan odgovor (ne statična poruka)."""
         from app.services.rag import rag_query
 
-        ai_answer = "Python is a high-level programming language known for its simplicity."
+        ai_answer = (
+            "Python is a high-level programming language known for its simplicity."
+        )
 
         with patch("app.services.rag.similarity_search", return_value=[]):
             with patch("httpx.AsyncClient") as mock_client_cls:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
-                mock_resp.json.return_value = {"choices": [{"message": {"content": ai_answer}}]}
+                mock_resp.json.return_value = {
+                    "choices": [{"message": {"content": ai_answer}}]
+                }
                 mock_client = AsyncMock()
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_client.__aexit__ = AsyncMock(return_value=False)
@@ -170,7 +200,9 @@ class TestRagQueryWithoutContext:
                 mock_client = AsyncMock()
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_client.__aexit__ = AsyncMock(return_value=False)
-                mock_client.post = AsyncMock(side_effect=Exception("Connection refused"))
+                mock_client.post = AsyncMock(
+                    side_effect=Exception("Connection refused")
+                )
                 mock_client_cls.return_value = mock_client
 
                 with patch("app.core.config.settings") as mock_settings:
@@ -203,7 +235,9 @@ class TestRagQueryProviderSelection:
             with patch("httpx.AsyncClient") as mock_client_cls:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
-                mock_resp.json.return_value = {"choices": [{"message": {"content": "Gemini answer"}}]}
+                mock_resp.json.return_value = {
+                    "choices": [{"message": {"content": "Gemini answer"}}]
+                }
                 mock_client = AsyncMock()
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_client.__aexit__ = AsyncMock(return_value=False)
@@ -217,7 +251,9 @@ class TestRagQueryProviderSelection:
                     s.MISTRAL_API_KEY = ""
                     s.ANTHROPIC_API_KEY = ""
 
-                    result = await rag_query(db=MagicMock(), query="test", provider_override="gemini")
+                    result = await rag_query(
+                        db=MagicMock(), query="test", provider_override="gemini"
+                    )
 
         assert result["provider"] == "gemini"
         # Verify Gemini URL was called
@@ -233,7 +269,9 @@ class TestRagQueryProviderSelection:
             with patch("httpx.AsyncClient") as mock_client_cls:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
-                mock_resp.json.return_value = {"choices": [{"message": {"content": "Groq answer"}}]}
+                mock_resp.json.return_value = {
+                    "choices": [{"message": {"content": "Groq answer"}}]
+                }
                 mock_client = AsyncMock()
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_client.__aexit__ = AsyncMock(return_value=False)
@@ -247,7 +285,9 @@ class TestRagQueryProviderSelection:
                     s.MISTRAL_API_KEY = ""
                     s.ANTHROPIC_API_KEY = ""
 
-                    result = await rag_query(db=MagicMock(), query="test", provider_override="groq")
+                    result = await rag_query(
+                        db=MagicMock(), query="test", provider_override="groq"
+                    )
 
         assert result["provider"] == "groq"
 
@@ -260,7 +300,9 @@ class TestRagQueryProviderSelection:
             with patch("httpx.AsyncClient") as mock_client_cls:
                 mock_resp = MagicMock()
                 mock_resp.status_code = 200
-                mock_resp.json.return_value = {"choices": [{"message": {"content": "Answer"}}]}
+                mock_resp.json.return_value = {
+                    "choices": [{"message": {"content": "Answer"}}]
+                }
                 mock_client = AsyncMock()
                 mock_client.__aenter__ = AsyncMock(return_value=mock_client)
                 mock_client.__aexit__ = AsyncMock(return_value=False)
@@ -276,7 +318,9 @@ class TestRagQueryProviderSelection:
                     s.OLLAMA_HOST = "http://ollama:11434"
                     s.OLLAMA_MODEL = "llama3.1"
 
-                    result = await rag_query(db=MagicMock(), query="test", provider_override=None)
+                    result = await rag_query(
+                        db=MagicMock(), query="test", provider_override=None
+                    )
 
         # Should have used groq (first available in auto order after empty ones)
         assert result["provider"] == "groq"
@@ -300,7 +344,9 @@ class TestRagQueryProviderSelection:
             elif "groq" in url:
                 # Groq succeeds
                 mock_resp.status_code = 200
-                mock_resp.json.return_value = {"choices": [{"message": {"content": "Groq fallback answer"}}]}
+                mock_resp.json.return_value = {
+                    "choices": [{"message": {"content": "Groq fallback answer"}}]
+                }
             return mock_resp
 
         with patch("app.services.rag.similarity_search", return_value=[]):
@@ -320,7 +366,9 @@ class TestRagQueryProviderSelection:
                     s.OLLAMA_HOST = "http://ollama:11434"
                     s.OLLAMA_MODEL = "llama3.1"
 
-                    result = await rag_query(db=MagicMock(), query="test", provider_override=None)
+                    result = await rag_query(
+                        db=MagicMock(), query="test", provider_override=None
+                    )
 
         assert result["answer"] == "Groq fallback answer"
         assert result["provider"] == "groq"
@@ -342,7 +390,9 @@ class TestKnowledgeBaseApiEndpoint:
             with patch("app.services.rag.rag_query") as mock_rag:
                 mock_rag.return_value = {
                     "answer": "LightBurn is laser software.",
-                    "sources": [{"name": "LightBurn Manual", "type": "pdf", "url": None}],
+                    "sources": [
+                        {"name": "LightBurn Manual", "type": "pdf", "url": None}
+                    ],
                     "chunks_used": 2,
                     "provider": "gemini",
                     "has_context": True,

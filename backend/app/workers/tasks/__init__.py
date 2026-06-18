@@ -13,32 +13,41 @@ Verzija: 2.0.0 (FAZA 4 - Modularizacija)
 """
 
 # PDF Processing tasks
-from app.workers.tasks.pdf_processing import (
+from app.workers.tasks.pdf_processing import (  # noqa: F401
     process_pdf_task,
     get_db_session as _pdf_get_db_session,
 )
 
 # PDF Export tasks
-from app.workers.tasks.pdf_export import (
+from app.workers.tasks.pdf_export import (  # noqa: F401
     export_pdf_task,
     get_db_session as _pdf_export_get_db_session,
 )
 
-# DOCX Export tasks
-from app.workers.tasks.docx_export import (
-    export_docx_task,
-    get_db_session as _docx_export_get_db_session,
-)
+# DOCX Export tasks (optional - requires python-docx)
+try:
+    from app.workers.tasks.docx_export import (  # noqa: F401
+        export_docx_task,
+        get_db_session as _docx_export_get_db_session,
+    )
+except ImportError:
+    import logging as _logging
+
+    _logging.getLogger(__name__).warning(
+        "DOCX export tasks unavailable (python-docx not installed)"
+    )
+    export_docx_task = None
+    _docx_export_get_db_session = None
 
 # Translation tasks
-from app.workers.tasks.translation import (
+from app.workers.tasks.translation import (  # noqa: F401
     translate_document_task,
     translate_with_fallback,
     get_db_session as _trans_get_db_session,
 )
 
 # Quiz tasks
-from app.workers.tasks.quiz import (
+from app.workers.tasks.quiz import (  # noqa: F401
     generate_quiz_task,
     auto_pipeline_task,
     get_db_session as _quiz_get_db_session,

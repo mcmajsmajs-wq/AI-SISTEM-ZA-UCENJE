@@ -12,13 +12,12 @@ Verzija: 1.0.0
 import hashlib
 import uuid
 from datetime import datetime
-from typing import Optional
 
 
 def generate_uuid() -> str:
     """
     Generiše novi UUID.
-    
+
     Returns:
         UUID string
     """
@@ -28,10 +27,10 @@ def generate_uuid() -> str:
 def calculate_sha256(file_content: bytes) -> str:
     """
     Računa SHA256 hash fajla.
-    
+
     Args:
         file_content: Sadržaj fajla u bytes
-    
+
     Returns:
         SHA256 hash string
     """
@@ -43,10 +42,10 @@ def calculate_sha256(file_content: bytes) -> str:
 def format_file_size(size_bytes: int) -> str:
     """
     Formatira veličinu fajla u čitljiv format.
-    
+
     Args:
         size_bytes: Veličina u bajtovima
-    
+
     Returns:
         Formatirani string (npr. "1.5 MB")
     """
@@ -60,10 +59,10 @@ def format_file_size(size_bytes: int) -> str:
 def sanitize_filename(filename: str) -> str:
     """
     Sanitizuje ime fajla uklanjajući nedozvoljene karaktere.
-    
+
     Args:
         filename: Originalno ime fajla
-    
+
     Returns:
         Sanitizovano ime fajla
     """
@@ -77,7 +76,7 @@ def sanitize_filename(filename: str) -> str:
 def get_current_timestamp() -> str:
     """
     Vraća trenutni timestamp u ISO formatu.
-    
+
     Returns:
         ISO format timestamp
     """

@@ -164,7 +164,8 @@ AVAILABLE_TOOLS = [
         "type": "function",
         "function": {
             "name": "search_knowledge",
-            "description": "Pretraživanje baze znanja. Koristi ovaj alat kada korisnik pita o opštim temama ili traži informacije.",
+            "description": "Pretraživanje baze znanja. Koristi ovaj alat kada "  # noqa: E501
+            "korisnik pita o opštim temama ili traži informacije.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -945,7 +946,7 @@ class GeminiChatClient(BaseAIChatClient):
             if msg.role == MessageRole.USER.value:
                 contents.append({"role": "user", "parts": [{"text": msg.content}]})
 
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:streamGenerateContent?key={self.api_key}&alt=sse"
+        url = f"https://generativelanguage.googleapis.com/v1beta/models/{self.model}:streamGenerateContent?key={self.api_key}&alt=sse"  # noqa: E501
 
         payload = {
             "contents": contents,
@@ -1394,7 +1395,10 @@ class AIChatService:
             document_id = arguments.get("document_id", "")
             num_questions = arguments.get("num_questions", 5)
 
-            return f"Generisanje kviza za dokument {document_id} sa {num_questions} pitanja. Ovo može potrajati nekoliko minuta."
+            return (
+                f"Generisanje kviza za dokument {document_id} sa "
+                f"{num_questions} pitanja. Ovo može potrajati nekoliko minuta."
+            )
 
         elif tool_name == "get_document_summary":
             document_id = arguments.get("document_id", "")
@@ -1406,7 +1410,10 @@ class AIChatService:
             if not doc:
                 return f"Dokument {document_id} nije pronađen."
 
-            return f"Dokument: {doc.title}\nStatus: {doc.status}\nStranica: {doc.total_pages}\nChunks: {doc.total_chunks}"
+            return (
+                f"Dokument: {doc.title}\nStatus: {doc.status}\n"
+                f"Stranica: {doc.total_pages}\nChunks: {doc.total_chunks}"
+            )
 
         elif tool_name == "search_documents":
             query = arguments.get("query", "")

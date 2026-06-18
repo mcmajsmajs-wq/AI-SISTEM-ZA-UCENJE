@@ -44,7 +44,7 @@ async def get_overview(
         db.query(QuizAttempt)
         .filter(
             QuizAttempt.user_id == current_user.id,
-            QuizAttempt.passed == True,
+            QuizAttempt.passed.is_(True),
         )
         .count()
     )
@@ -70,7 +70,7 @@ async def get_overview(
         .join(StudyPlan)
         .filter(
             StudyPlan.user_id == current_user.id,
-            StudyPlanItem.is_completed == True,
+            StudyPlanItem.is_completed.is_(True),
         )
         .count()
     )

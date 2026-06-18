@@ -16,34 +16,30 @@ Pokretanje testova:
 
 import os
 import sys
-from typing import Generator, AsyncGenerator
+from typing import Generator
 from datetime import datetime
 
 import pytest
 import asyncio
-from httpx import AsyncClient
-from sqlalchemy import create_engine, event
+from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker, Session
 from sqlalchemy.pool import StaticPool
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.db.base import Base
-from app.db.models.user import User, UserSession
-from app.db.models.file import File
-from app.db.models.document import Document, Chunk
-from app.db.models.conversation import Conversation, Message
-from app.core.config import settings
+from app.db.base import Base  # noqa: E402
+from app.db.models.user import User  # noqa: E402
+from app.db.models.file import File  # noqa: E402
+from app.db.models.document import Document, Chunk  # noqa: E402
+
 
 # ── SQLite UUID compatibility ─────────────────────────────────────────────────
 # PostgreSQL UUID type is not natively supported by SQLite.
 # 1) DDL: render UUID columns as VARCHAR(36)
 # 2) DML: patch bind_processor so WHERE uuid_col = :val works with str/UUID
-import json as _json_mod
-import uuid as _uuid_mod
-from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler
-from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB as PG_JSONB
-from sqlalchemy import types as _sa_types
+import json as _json_mod  # noqa: E402
+from sqlalchemy.dialects.sqlite.base import SQLiteTypeCompiler  # noqa: E402
+from sqlalchemy.dialects.postgresql import UUID as PG_UUID, JSONB as PG_JSONB  # noqa: E402
 
 # ── SQLite UUID compatibility ─────────────────────────────────────────────────
 if not hasattr(SQLiteTypeCompiler, "_orig_visit_UUID"):

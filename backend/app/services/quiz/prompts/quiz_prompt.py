@@ -8,7 +8,7 @@ Verzija: 1.2.0 - Fixed ALL curly brace escaping for Python format()
 ================================================================================
 """
 
-QUIZ_PROMPT = """You are an expert educator and assessment designer. Based on the following text, generate exactly {num_questions} high-quality quiz questions that test deep understanding.
+QUIZ_PROMPT = """You are an expert educator and assessment designer. Based on the following text, generate exactly {num_questions} high-quality quiz questions that test deep understanding.  # noqa: E501
 
 STRICT FILTERING RULES - IGNORE the following content COMPLETELY:
 1. "This page intentionally left blank" and similar blank page notices
@@ -39,7 +39,7 @@ ONLY create questions from:
 IMPORTANT - QUESTION TYPES (use variety!):
 - 30% multiple_choice - 1 correct answer, 4 plausible options
 - 15% checkbox - 2-4 correct answers, 4 options (select ALL that apply)
-- 10% true_false - balanced mix of TRUE and FALSE statements  
+- 10% true_false - balanced mix of TRUE and FALSE statements
 - 15% sequencing - Sort elements in correct order (e.g., chronological events, steps)
 - 15% matching - Connect related pairs (left column to right column via drag/drop)
 - 15% categorization - Put items in correct categories (buckets)
@@ -93,7 +93,8 @@ FOR MATHEMATICS (especially important!):
 - Show the STEP-BY-STEP CALCULATION process
 - Include the FORMULA used for the solution
 - Explain the MATHEMATICAL LOGIC and reasoning
-- Example: "Povrsina trougla se racuna kao polovina proizvoda osnovice i visine: P = (a * h) / 2. Za a=6 i h=4, dobijamo P = (6 * 4) / 2 = 12cm2"
+- Example: "Povrsina trougla se racuna kao polovina proizvoda osnovice i visine: "
+  "P = (a * h) / 2. Za a=6 i h=4, dobijamo P = (6 * 4) / 2 = 12cm2"
 
 For geometry:
 - Always include which formula was used
@@ -118,15 +119,18 @@ GENERAL EXPLANATION RULES:
 - NEVER just say "because it's in the text" - EXPLAIN THE REASONING
 
 BAD explanation examples (DO NOT USE):
-- "Tacno je zato sto pise u tekstu" 
-- "Odgovor je tacan" 
+- "Tacno je zato sto pise u tekstu"
+- "Odgovor je tacan"
 
 GOOD explanation examples (USE THESE):
-- "Tacan odgovor je 24cm2. Povrsina pravougaonika racuna se kao proizvod stranica: P = a * b = 6 * 4 = 24cm2. Drugi odgovori su pogresni jer koriste pogresnu formulu ili pogresno izracunavaju." 
-- "Netacno. Zbir uglova u trouglu uvek iznosi 180 stepeni bez obzira na oblik trougla. Ovo sledi iz Teoreme o zbiru uglova trougla." 
-- "Odgovor A je tacan. Koristimo Pitagorinu teoremu: a2 + b2 = c2. Za a=3 i b=4: 9 + 16 = 25, pa je c = 5." 
+- "Tacan odgovor je 24cm2. Povrsina pravougaonika racuna se kao proizvod stranica: "
+  "P = a * b = 6 * 4 = 24cm2. Drugi odgovori su pogresni jer koriste pogresnu formulu."
+- "Netacno. Zbir uglova u trouglu uvek iznosi 180 stepeni bez obzira na oblik "
+  "trougla. Ovo sledi iz Teoreme o zbiru uglova trougla."
+- "Odgovor A je tacan. Koristimo Pitagorinu teoremu: a2 + b2 = c2. "
+  "Za a=3 i b=4: 9 + 16 = 25, pa je c = 5."
 
-CRITICAL: USE SERBIAN LATIN SCRIPT ONLY (a, b, c, c, d, dj, e, f, g, h, i, j, k, l, lj, m, n, nj, o, p, r, s, s, t, u, v, z, z)
+CRITICAL: USE SERBIAN LATIN SCRIPT ONLY (a, b, c, c, d, dj, e, f, g, h, i, j, k, l, lj, m, n, nj, o, p, r, s, s, t, u, v, z, z)  # noqa: E501
 - DO NOT USE CYRILLIC
 
 Return ONLY valid JSON array. Each object must have:

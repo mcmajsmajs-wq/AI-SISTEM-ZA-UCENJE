@@ -20,8 +20,8 @@ import logging
 import os
 import time
 import re
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from typing import Any, Optional
-from datetime import datetime
 
 from app.core.config import settings
 from app.db.session import engine
@@ -30,9 +30,22 @@ from app.db.models.user import User
 from app.services.translation import (
     translation_service,
 )
+from app.services.translation.rate_limiter import RateLimitController
 from app.utils.cyrillic import cyrillic_to_latin
 
 logger = logging.getLogger(__name__)
+
+TRANSLATION_BATCH_SIZE = int(os.environ.get("TRANSLATION_BATCH_SIZE", "5"))
+TRANSLATION_CHECKPOINT_EVERY = int(os.environ.get("TRANSLATION_CHECKPOINT_EVERY", "10"))
+TRANSLATION_MAX_RETRIES = int(os.environ.get("TRANSLATION_MAX_RETRIES", "2"))
+TRANSLATION_PARALLEL_WORKERS = int(os.environ.get("TRANSLATION_PARALLEL_WORKERS", "4"))
+
+_rate_limiter = RateLimitController()
+
+
+def reset_rate_limiter():
+    """Reset rate limiter state (for testing)."""
+    _rate_limiter.reset()
 
 
 def get_db_session():
@@ -115,6 +128,135 @@ def translate_with_fallback(
 
     logger.error(f"All translation providers failed. Last error: {last_error}")
     raise Exception(f"Translation failed: {last_error}")
+
+
+def _translate_batch_worker(
+    batch_data: list,
+    provider: str,
+    source_language: str,
+    target_language: str,
+    user_api_keys: dict,
+    batch_index: int,
+) -> dict:
+    """
+    Worker funkcija za ThreadPoolExecutor — prevodi jedan batch chunkova.
+    Svaki worker kreira sopstvenu DB sesiju i komituje samostalno.
+
+    Args:
+        batch_data: Lista dictova sa 'id', 'content', 'sequence_number'
+        provider: Preferirani AI provajder
+        source_language: Izvorni jezik
+        target_language: Ciljni jezik
+        user_api_keys: API kljucevi korisnika
+        batch_index: Redni broj batch-a (za logovanje)
+
+    Returns:
+        dict: Sa 'translated_count', 'total_cost', 'total_tokens', 'errors'
+    """
+    db = get_db_session()
+    try:
+        batch_text = ""
+        for idx, item in enumerate(batch_data):
+            batch_text += f"\n\n### {idx + 1}\n" + item["content"]
+
+        translated_count = 0
+        total_cost = 0.0
+        total_tokens = 0
+        errors = []
+        batch_success = False
+        result = None
+
+        _rate_limiter.wait_if_needed(provider, timeout=30)
+
+        for attempt in range(TRANSLATION_MAX_RETRIES):
+            try:
+                _rate_limiter.record_request(provider)
+                result = translate_with_fallback(
+                    text=batch_text,
+                    source_language=source_language,
+                    target_language=target_language,
+                    user_api_keys=user_api_keys,
+                    preferred_provider=provider,
+                )
+                if result.success:
+                    batch_success = True
+                    break
+            except Exception as e:
+                logger.warning(
+                    f"[Worker {batch_index}] Batch attempt {attempt + 1} failed: {e}"
+                )
+                if attempt < TRANSLATION_MAX_RETRIES - 1:
+                    time.sleep(1)
+
+        if batch_success and result:
+            parts = re.split(r"\n\n?###\s+\d+", result.translated_text)
+            parts = [p.strip() for p in parts if p.strip()]
+
+            for idx, item in enumerate(batch_data):
+                translated_part = (
+                    parts[idx] if idx < len(parts) else result.translated_text
+                )
+                chunk = db.query(Chunk).filter(Chunk.id == item["id"]).first()
+                if chunk:
+                    chunk.translated_content = cyrillic_to_latin(translated_part)
+                    chunk.is_translated = 1
+                    translated_count += 1
+
+            db.commit()
+            total_cost += result.cost
+            total_tokens += result.tokens_used
+        else:
+            for item in batch_data:
+                single_success = False
+                for attempt in range(TRANSLATION_MAX_RETRIES):
+                    try:
+                        _rate_limiter.record_request(provider)
+                        single_result = translate_with_fallback(
+                            text=item["content"],
+                            source_language=source_language,
+                            target_language=target_language,
+                            user_api_keys=user_api_keys,
+                        )
+                        if single_result.success:
+                            chunk = (
+                                db.query(Chunk).filter(Chunk.id == item["id"]).first()
+                            )
+                            if chunk:
+                                chunk.translated_content = cyrillic_to_latin(
+                                    single_result.translated_text
+                                )
+                                chunk.is_translated = 1
+                                translated_count += 1
+                                total_cost += single_result.cost
+                                total_tokens += single_result.tokens_used
+                            single_success = True
+                            break
+                    except Exception:
+                        if attempt < TRANSLATION_MAX_RETRIES - 1:
+                            time.sleep(0.5)
+
+                if not single_success:
+                    errors.append(f"Chunk {item['sequence_number']}: Failed")
+
+            if translated_count > 0:
+                db.commit()
+
+        return {
+            "translated_count": translated_count,
+            "total_cost": total_cost,
+            "total_tokens": total_tokens,
+            "errors": errors,
+        }
+    except Exception as e:
+        logger.error(f"[Worker {batch_index}] Unexpected error: {e}")
+        return {
+            "translated_count": 0,
+            "total_cost": 0.0,
+            "total_tokens": 0,
+            "errors": [str(e)],
+        }
+    finally:
+        db.close()
 
 
 def run_document_translation(
@@ -240,127 +382,42 @@ def run_document_translation(
         f"using provider: {_use_provider}"
     )
 
-    BATCH_SIZE = 2
-    CHECKPOINT_EVERY = 5
-    MAX_RETRIES_PER_CHUNK = 2
-
     translated_count = already_translated
-    batch_num = 0
-    start_time = time.time()
+    time.time()
 
-    while batch_num * BATCH_SIZE < len(untranslated):
-        batch_start = batch_num * BATCH_SIZE
-        batch = untranslated[batch_start : batch_start + BATCH_SIZE]
-        if not batch:
-            break
+    batch_data_list = []
+    for batch_num in range(0, len(untranslated), TRANSLATION_BATCH_SIZE):
+        batch = untranslated[batch_num:batch_num + TRANSLATION_BATCH_SIZE]
+        batch_data = [
+            {"id": c.id, "content": c.content, "sequence_number": c.sequence_number}
+            for c in batch
+        ]
+        batch_data_list.append((batch_num // TRANSLATION_BATCH_SIZE, batch_data))
 
-        batch_text = ""
-        for idx, chunk in enumerate(batch):
-            batch_text += f"\n\n### {idx + 1}\n" + chunk.content
+    with ThreadPoolExecutor(max_workers=TRANSLATION_PARALLEL_WORKERS) as executor:
+        futures = {
+            executor.submit(
+                _translate_batch_worker,
+                batch_data,
+                _use_provider,
+                document.source_language,
+                document.target_language,
+                user_api_keys,
+                batch_index,
+            ): batch_index
+            for batch_index, batch_data in batch_data_list
+        }
 
-        batch_success = False
-        result = None
-
-        for attempt in range(MAX_RETRIES_PER_CHUNK):
+        for future in as_completed(futures):
             try:
-                result = translate_with_fallback(
-                    text=batch_text,
-                    source_language=document.source_language,
-                    target_language=document.target_language,
-                    user_api_keys=user_api_keys,
-                    preferred_provider=_use_provider,
-                )
-                if result.success:
-                    batch_success = True
-                    break
+                result = future.result()
+                translated_count += result["translated_count"]
+                total_cost += result["total_cost"]
+                total_tokens += result["total_tokens"]
+                errors.extend(result["errors"])
             except Exception as e:
-                logger.warning(f"Batch attempt {attempt + 1} failed: {e}")
-                if attempt < MAX_RETRIES_PER_CHUNK - 1:
-                    time.sleep(1)
-
-        if batch_success and result:
-            parts = re.split(r"\n\n?###\s+\d+", result.translated_text)
-            parts = [p.strip() for p in parts if p.strip()]
-
-            for idx, chunk in enumerate(batch):
-                translated_part = (
-                    parts[idx] if idx < len(parts) else result.translated_text
-                )
-                chunk.translated_content = cyrillic_to_latin(translated_part)
-                chunk.is_translated = 1
-                translated_count += 1
-
-                document.file_metadata = document.file_metadata or {}
-                document.file_metadata["translation_progress"] = {
-                    "translated_chunks": translated_count,
-                    "total_chunks": total_chunks,
-                    "elapsed_seconds": int(time.time() - start_time),
-                    "last_activity_at": datetime.utcnow().isoformat() + "Z",
-                }
-                if translated_count % CHECKPOINT_EVERY == 0:
-                    document.file_metadata["translation_checkpoint"] = {
-                        "last_chunk_index": translated_count,
-                        "last_translated_count": translated_count,
-                        "last_updated": datetime.utcnow().isoformat() + "Z",
-                    }
-                flag_modified(document, "file_metadata")
-                db.commit()
-                logger.info(f"Translated {translated_count}/{total_chunks} chunks")
-
-            total_cost += result.cost
-            total_tokens += result.tokens_used
-        else:
-            for chunk in batch:
-                single_success = False
-                for attempt in range(MAX_RETRIES_PER_CHUNK):
-                    try:
-                        single_result = translate_with_fallback(
-                            text=chunk.content,
-                            source_language=document.source_language,
-                            target_language=document.target_language,
-                            user_api_keys=user_api_keys,
-                        )
-                        if single_result.success:
-                            chunk.translated_content = cyrillic_to_latin(
-                                single_result.translated_text
-                            )
-                            chunk.is_translated = 1
-                            translated_count += 1
-                            total_cost += single_result.cost
-                            total_tokens += single_result.tokens_used
-                            single_success = True
-
-                            document.file_metadata = document.file_metadata or {}
-                            document.file_metadata["translation_progress"] = {
-                                "translated_chunks": translated_count,
-                                "total_chunks": total_chunks,
-                                "elapsed_seconds": int(time.time() - start_time),
-                                "last_activity_at": datetime.utcnow().isoformat() + "Z",
-                            }
-                            if translated_count % CHECKPOINT_EVERY == 0:
-                                document.file_metadata["translation_checkpoint"] = {
-                                    "last_chunk_index": translated_count,
-                                    "last_translated_count": translated_count,
-                                    "last_updated": datetime.utcnow().isoformat() + "Z",
-                                }
-                            flag_modified(document, "file_metadata")
-                            db.commit()
-                            logger.info(
-                                f"Translated {translated_count}/{total_chunks} chunks"
-                            )
-                            break
-                    except Exception as e:
-                        if attempt < MAX_RETRIES_PER_CHUNK - 1:
-                            time.sleep(0.5)
-
-                if not single_success:
-                    errors.append(f"Chunk {chunk.sequence_number}: Failed")
-                    logger.error(f"Failed to translate chunk {chunk.sequence_number}")
-
-                time.sleep(0.2)
-
-        time.sleep(0.2)
-        batch_num += 1
+                logger.error(f"Parallel batch failed: {e}")
+                errors.append(str(e))
 
     db.commit()
 
@@ -375,6 +432,7 @@ def run_document_translation(
         "translated_chunks": translated_count,
         "errors": errors[:10] if errors else [],
     }
+    flag_modified(document, "file_metadata")
 
     if translated_count == total_chunks:
         document.status = "completed"

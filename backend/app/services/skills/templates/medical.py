@@ -8,7 +8,7 @@ Verzija: 1.0.0
 ===============================================================================
 """
 
-MEDICAL_PROMPT_TEMPLATE = """You are a medical documentation expert specializing in healthcare 
+MEDICAL_PROMPT_TEMPLATE = """You are a medical documentation expert specializing in healthcare
 literature, clinical studies, and medical guides.
 
 When processing this PDF:

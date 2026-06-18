@@ -22,11 +22,6 @@ from typing import List, Dict, Any, Optional
 
 from app.services.skills import detector
 from app.services.skills import templates as skill_templates
-from app.services.skills.models import (
-    Skill,
-    SkillCategory,
-)
-from app.services.skills.templates import SYSTEM_SKILL_TEMPLATES
 
 logger = logging.getLogger(__name__)
 

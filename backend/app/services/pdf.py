@@ -717,12 +717,12 @@ class PDFService:
         if self.encoder:
             tokens = self.encoder.encode(text)
             if len(tokens) > self.chunk_overlap:
-                overlap_tokens = tokens[-self.chunk_overlap :]
+                overlap_tokens = tokens[-self.chunk_overlap:]
                 return self.encoder.decode(overlap_tokens)
 
         words = text.split()
         if len(words) > self.chunk_overlap // 2:
-            return " ".join(words[-(self.chunk_overlap // 2) :])
+            return " ".join(words[-(self.chunk_overlap // 2):])
         return text
 
     def process_pdf(

@@ -3,7 +3,6 @@
 Testovi za EmailService
 """
 
-import pytest
 from unittest.mock import patch, MagicMock
 from app.services.email_service import EmailService
 

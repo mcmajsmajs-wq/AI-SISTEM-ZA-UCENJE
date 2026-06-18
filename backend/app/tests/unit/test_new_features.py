@@ -7,8 +7,6 @@ Unit testovi za nove funkcionalnosti:
 - Dashboard translationPct logika
 """
 
-import pytest
-from unittest.mock import MagicMock, patch
 from datetime import date, timedelta
 
 
@@ -147,7 +145,9 @@ class TestFlagModifiedImport:
         with open("app/workers/tasks/translation.py") as f:
             content = f.read()
         count = content.count('flag_modified(document, "file_metadata")')
-        assert count >= 2, f"Očekivano >=2 poziva flag_modified, nađeno: {count}"
+        assert count == 1, (
+            f"Očekivan 1 poziv flag_modified (paralelni worker-i komituju samostalno), nađeno: {count}"
+        )
 
 
 # ─────────────────────────────────────────────

@@ -13,12 +13,20 @@ import io
 import logging
 from typing import List, Dict, Any
 
-from pptx import Presentation
-from pptx.util import Inches, Pt
-
-from pptx.dml.color import RGBColor
-
 from app.services.base_export_service import BaseExportService
+
+try:
+    from pptx import Presentation
+    from pptx.util import Inches, Pt
+    from pptx.dml.color import RGBColor
+
+    PPTX_AVAILABLE = True
+except ImportError:
+    Presentation = None
+    Inches = None
+    Pt = None
+    RGBColor = None
+    PPTX_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

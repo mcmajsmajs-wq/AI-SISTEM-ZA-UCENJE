@@ -91,7 +91,10 @@ async def upload_file(
         logger.warning(f"File too large: {file_size} bytes")
         raise HTTPException(
             status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
-            detail=f"File too large. Maximum size is {MAX_FILE_SIZE // 1024 // 1024}MB. Got: {file_size // 1024 // 1024}MB",
+            detail=(
+                f"File too large. Maximum size is {MAX_FILE_SIZE // 1024 // 1024}MB. "
+                f"Got: {file_size // 1024 // 1024}MB"
+            ),
         )
 
     # Upload u MinIO
@@ -127,15 +130,16 @@ async def upload_file(
 
     logger.info(f"File uploaded successfully: {db_file.id}")
 
-    posthog_client.capture(
-        "file uploaded",
-        distinct_id=str(current_user.id),
-        properties={
-            "file_type": file_ext,
-            "file_size_kb": round(file_size / 1024, 1),
-            "mime_type": file.content_type or "application/pdf",
-        },
-    )
+    if posthog_client:
+        posthog_client.capture(
+            "file uploaded",
+            distinct_id=str(current_user.id),
+            properties={
+                "file_type": file_ext,
+                "file_size_kb": round(file_size / 1024, 1),
+                "mime_type": file.content_type or "application/pdf",
+            },
+        )
 
     return FileUploadResponse(
         id=str(db_file.id),
@@ -345,11 +349,12 @@ async def delete_file(
 
     logger.info(f"File soft deleted: {file_id}")
 
-    posthog_client.capture(
-        "file deleted",
-        distinct_id=str(current_user.id),
-        properties={"file_id": file_id},
-    )
+    if posthog_client:
+        posthog_client.capture(
+            "file deleted",
+            distinct_id=str(current_user.id),
+            properties={"file_id": file_id},
+        )
 
     return None
 

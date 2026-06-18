@@ -15,7 +15,7 @@ Verzija: 1.0.0 (FAZA 6 - Skill Sistem)
 """
 
 from enum import Enum as PyEnum
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 from sqlalchemy import (
     Column,

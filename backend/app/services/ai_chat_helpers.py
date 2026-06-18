@@ -10,7 +10,6 @@ Verzija: 1.0.0 (2026-04-23)
 """
 
 from enum import Enum
-from typing import Optional
 
 
 # Valid modeli po provideru

@@ -8,7 +8,7 @@ Verzija: 1.0.0
 """
 
 from sqlalchemy import Column, String, Boolean, DateTime, Enum, Text
-from sqlalchemy.dialects.postgresql import UUID, JSON
+from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
 import uuid

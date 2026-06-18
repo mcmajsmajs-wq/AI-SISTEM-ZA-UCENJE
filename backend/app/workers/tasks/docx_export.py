@@ -9,12 +9,9 @@ Verzija: 1.0.0 (FAZA 14)
 ================================================================================
 """
 
-import io
 import logging
-from typing import List, Dict
 
 from celery import Task
-from sqlalchemy.orm import Session
 
 from app.db.session import engine
 from app.workers.celery_app import celery_app

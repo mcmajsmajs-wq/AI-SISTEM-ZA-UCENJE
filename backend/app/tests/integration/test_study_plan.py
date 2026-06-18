@@ -24,6 +24,7 @@ from app.db.models.study_plan import StudyPlan, StudyPlanItem
 # Fixtures
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 @pytest.fixture
 def test_quiz_ready(db: Session, test_document: Document) -> Quiz:
     """Kviz spreman za zakazivanje."""
@@ -64,7 +65,9 @@ def test_plan(db: Session, test_user: User) -> StudyPlan:
 
 
 @pytest.fixture
-def test_plan_item(db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz) -> StudyPlanItem:
+def test_plan_item(
+    db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz
+) -> StudyPlanItem:
     """Kreira test stavku plana (kviz zakazan za danas)."""
     item = StudyPlanItem(
         plan_id=test_plan.id,
@@ -83,6 +86,7 @@ def test_plan_item(db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz) -> 
 # ────────────────────────────────────────────────────────────────────────────────
 # Tests: StudyPlan model
 # ────────────────────────────────────────────────────────────────────────────────
+
 
 class TestStudyPlanModel:
     def test_create_plan(self, db: Session, test_user: User):
@@ -129,14 +133,18 @@ class TestStudyPlanModel:
         assert isinstance(test_plan.study_days, list)
         assert all(isinstance(d, int) for d in test_plan.study_days)
 
-    def test_one_plan_per_user(self, db: Session, test_plan: StudyPlan, test_user: User):
+    def test_one_plan_per_user(
+        self, db: Session, test_plan: StudyPlan, test_user: User
+    ):
         """Jedan korisnik može imati samo jedan plan (unique constraint)."""
         existing = db.query(StudyPlan).filter(StudyPlan.user_id == test_user.id).count()
         assert existing == 1
 
 
 class TestStudyPlanItem:
-    def test_create_item(self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz):
+    def test_create_item(
+        self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz
+    ):
         """Kreiranje stavke plana."""
         today = date.today()
         item = StudyPlanItem(
@@ -168,7 +176,9 @@ class TestStudyPlanItem:
         assert test_plan_item.is_completed is True
         assert test_plan_item.completed_at is not None
 
-    def test_future_item(self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz):
+    def test_future_item(
+        self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz
+    ):
         """Zakazivanje kviza u budućnosti."""
         future = date.today() + timedelta(days=7)
         item = StudyPlanItem(
@@ -185,7 +195,9 @@ class TestStudyPlanItem:
 
         assert item.scheduled_for > date.today()
 
-    def test_item_priorities(self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz):
+    def test_item_priorities(
+        self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz
+    ):
         """Prioriteti stavki: 1=normalan, 2=visok, 3=kritičan."""
         for priority in [1, 2, 3]:
             item = StudyPlanItem(
@@ -199,15 +211,21 @@ class TestStudyPlanItem:
             db.add(item)
         db.commit()
 
-        items = db.query(StudyPlanItem).filter(StudyPlanItem.plan_id == test_plan.id).all()
+        items = (
+            db.query(StudyPlanItem).filter(StudyPlanItem.plan_id == test_plan.id).all()
+        )
         priorities = {i.priority for i in items}
         assert {1, 2, 3}.issubset(priorities)
 
-    def test_quiz_relationship(self, test_plan_item: StudyPlanItem, test_quiz_ready: Quiz):
+    def test_quiz_relationship(
+        self, test_plan_item: StudyPlanItem, test_quiz_ready: Quiz
+    ):
         """Stavka je povezana sa kvizom (lazy joined)."""
         assert str(test_plan_item.quiz_id) == str(test_quiz_ready.id)
 
-    def test_multiple_items_same_plan(self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz):
+    def test_multiple_items_same_plan(
+        self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz
+    ):
         """Plan može imati više stavki."""
         for i in range(5):
             item = StudyPlanItem(
@@ -221,12 +239,18 @@ class TestStudyPlanItem:
             db.add(item)
         db.commit()
 
-        count = db.query(StudyPlanItem).filter(StudyPlanItem.plan_id == test_plan.id).count()
+        count = (
+            db.query(StudyPlanItem)
+            .filter(StudyPlanItem.plan_id == test_plan.id)
+            .count()
+        )
         assert count == 5
 
 
 class TestStudyPlanProgress:
-    def test_today_items_count(self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz):
+    def test_today_items_count(
+        self, db: Session, test_plan: StudyPlan, test_quiz_ready: Quiz
+    ):
         """Pravilno broji stavke za danas."""
         today = date.today()
         # Dodamo 2 stavke za danas
@@ -242,10 +266,14 @@ class TestStudyPlanProgress:
             db.add(item)
         db.commit()
 
-        today_items = db.query(StudyPlanItem).filter(
-            StudyPlanItem.plan_id == test_plan.id,
-            StudyPlanItem.scheduled_for == today,
-        ).count()
+        today_items = (
+            db.query(StudyPlanItem)
+            .filter(
+                StudyPlanItem.plan_id == test_plan.id,
+                StudyPlanItem.scheduled_for == today,
+            )
+            .count()
+        )
         assert today_items == 2
 
     def test_completed_items_tracked(self, db: Session, test_plan_item: StudyPlanItem):
@@ -254,10 +282,14 @@ class TestStudyPlanProgress:
         test_plan_item.completed_at = datetime.utcnow()
         db.commit()
 
-        completed = db.query(StudyPlanItem).filter(
-            StudyPlanItem.plan_id == test_plan_item.plan_id,
-            StudyPlanItem.is_completed == True,
-        ).count()
+        completed = (
+            db.query(StudyPlanItem)
+            .filter(
+                StudyPlanItem.plan_id == test_plan_item.plan_id,
+                StudyPlanItem.is_completed.is_(True),
+            )
+            .count()
+        )
         assert completed >= 1
 
     def test_delete_item(self, db: Session, test_plan_item: StudyPlanItem):

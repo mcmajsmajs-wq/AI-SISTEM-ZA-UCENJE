@@ -10,9 +10,7 @@ Pokretanje:
 ================================================================================
 """
 
-import pytest
-from unittest.mock import MagicMock, patch, mock_open
-import io
+from unittest.mock import MagicMock, patch
 
 from app.services.pdf import PDFService, ChunkData, PDFMetadata, ProcessingResult
 
@@ -88,13 +86,13 @@ class TestDenoiseText:
 
         text = """
         Some content here.
-        
+
         1
-        
+
         More content.
-        
+
         Page 5
-        
+
         Even more content.
         """
 
@@ -110,11 +108,11 @@ class TestDenoiseText:
 
         text = """
         Document content.
-        
+
         © 2024 Company Name. All rights reserved.
-        
+
         More content.
-        
+
         www.example.com
         """
 
@@ -128,10 +126,10 @@ class TestDenoiseText:
 
         text = """
         Chapter 1: Introduction
-        
+
         This is an important paragraph with useful content.
         It should not be removed during denoising.
-        
+
         The quick brown fox jumps over the lazy dog.
         """
 
@@ -406,7 +404,7 @@ class TestProcessPDF:
                                 {
                                     "spans": [
                                         {
-                                            "text": "Test content for the page. This is a longer text that contains more than fifty characters to pass the empty page check in the PDF service.",
+                                            "text": "Test content for the page. This is a longer text that contains more than fifty characters to pass the empty page check in the PDF service.",  # noqa: E501
                                             "font": "ArialMT",
                                             "size": 10,
                                             "flags": 0,
@@ -417,7 +415,7 @@ class TestProcessPDF:
                         }
                     ]
                 }
-            return "Test content for the page. This is a longer text that contains more than fifty characters to pass the empty page check in the PDF service."
+            return "Test content for the page. This is a longer text that contains more than fifty characters to pass the empty page check in the PDF service."  # noqa: E501
 
         mock_page.get_text.side_effect = get_text_side_effect
         mock_page.get_images.return_value = []
@@ -615,11 +613,11 @@ class TestEdgeCases:
 
         text = """
         This is English text.
-        
+
         Ovo je tekst na srpskom jeziku.
-        
+
         这是中文文本。
-        
+
         Это русский текст.
         """
 

@@ -10,7 +10,7 @@ Verzija: 1.0.0
 ================================================================================
 """
 
-from typing import Dict, List, Optional
+from typing import Dict, List
 
 
 STRUCTURE_PATTERNS: Dict[str, List[str]] = {

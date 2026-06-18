@@ -45,7 +45,7 @@ class FileSkillService:
         """
         return (
             self.db.query(FileSkill)
-            .filter(FileSkill.category == category, FileSkill.is_active == True)
+            .filter(FileSkill.category == category, FileSkill.is_active.is_(True))
             .first()
         )
 
@@ -69,7 +69,7 @@ class FileSkillService:
         Returns:
             Lista FileSkill objekata
         """
-        return self.db.query(FileSkill).filter(FileSkill.is_active == True).all()
+        return self.db.query(FileSkill).filter(FileSkill.is_active.is_(True)).all()
 
     def get_translate_prompt(self) -> str:
         """Dohvata translate skill prompt."""

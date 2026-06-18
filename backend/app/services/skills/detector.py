@@ -15,8 +15,7 @@ Verzija: 1.0.0 (FAZA 6 - Skill Sistem)
 """
 
 import logging
-import re
-from typing import List, Dict, Any, Optional, Tuple
+from typing import List, Dict, Any
 
 from app.services.skills.templates import DOCUMENT_TYPE_KEYWORDS
 

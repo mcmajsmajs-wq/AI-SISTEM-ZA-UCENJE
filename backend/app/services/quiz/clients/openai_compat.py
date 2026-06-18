@@ -30,7 +30,10 @@ class OpenAICompatQuizClient(BaseQuizClient):
     ================================================================================
     """
 
-    SYSTEM = "You are an expert educator that creates quiz questions. Always respond with valid JSON only — no markdown, no extra text."
+    SYSTEM = (
+        "You are an expert educator that creates quiz questions. "
+        "Always respond with valid JSON only — no markdown, no extra text."
+    )
 
     def __init__(self, name: str, base_url: str, model: str, api_key: str = ""):
         """

@@ -12,7 +12,7 @@ Pokretanje:
 
 import pytest
 from httpx import AsyncClient
-from unittest.mock import patch, MagicMock
+from unittest.mock import patch
 
 
 class TestHealthEndpoints:

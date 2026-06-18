@@ -23,6 +23,7 @@ from app.db.models.quiz import Quiz, QuizAttempt
 # Helpers
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 def _make_attempt(
     db: Session,
     quiz_id,
@@ -71,10 +72,12 @@ def test_quiz_ready(db: Session, test_document: Document) -> Quiz:
 # Tests: Streak calculation
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 class TestStreakCalculation:
     def _calc_streak(self, attempts):
         """Replika _calc_streak logike iz analytics.py za testiranje."""
         from datetime import date, timedelta
+
         if not attempts:
             return 0
         # Grupiši po datumima
@@ -99,12 +102,14 @@ class TestStreakCalculation:
     def test_single_today_attempt_returns_one(self):
         class FakeAttempt:
             completed_at = datetime.utcnow()
+
         assert self._calc_streak([FakeAttempt()]) == 1
 
     def test_consecutive_days_streak(self):
         class FakeAttempt:
             def __init__(self, days_ago):
                 self.completed_at = datetime.utcnow() - timedelta(days=days_ago)
+
         attempts = [FakeAttempt(0), FakeAttempt(1), FakeAttempt(2)]
         assert self._calc_streak(attempts) == 3
 
@@ -112,6 +117,7 @@ class TestStreakCalculation:
         class FakeAttempt:
             def __init__(self, days_ago):
                 self.completed_at = datetime.utcnow() - timedelta(days=days_ago)
+
         # Dan 0, 1, ali ne i 2 — streak=2
         attempts = [FakeAttempt(0), FakeAttempt(1), FakeAttempt(3)]
         assert self._calc_streak(attempts) == 2
@@ -120,6 +126,7 @@ class TestStreakCalculation:
         class FakeAttempt:
             def __init__(self, days_ago):
                 self.completed_at = datetime.utcnow() - timedelta(days=days_ago)
+
         # Nema danas ni juče → streak=0
         attempts = [FakeAttempt(5), FakeAttempt(6), FakeAttempt(7)]
         assert self._calc_streak(attempts) == 0
@@ -129,22 +136,29 @@ class TestStreakCalculation:
 # Tests: QuizAttempt aggregations
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 class TestAttemptAggregations:
-    def test_no_attempts_returns_zero(self, db: Session, test_user: User, test_quiz_ready: Quiz):
-        count = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == test_user.id
-        ).count()
+    def test_no_attempts_returns_zero(
+        self, db: Session, test_user: User, test_quiz_ready: Quiz
+    ):
+        count = (
+            db.query(QuizAttempt).filter(QuizAttempt.user_id == test_user.id).count()
+        )
         assert count == 0
 
-    def test_multiple_attempts_counted(self, db: Session, test_user: User, test_quiz_ready: Quiz):
+    def test_multiple_attempts_counted(
+        self, db: Session, test_user: User, test_quiz_ready: Quiz
+    ):
         for i in range(5):
             _make_attempt(db, test_quiz_ready.id, test_user.id, days_ago=i)
-        count = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == test_user.id
-        ).count()
+        count = (
+            db.query(QuizAttempt).filter(QuizAttempt.user_id == test_user.id).count()
+        )
         assert count == 5
 
-    def test_average_score_calculation(self, db: Session, test_user: User, test_quiz_ready: Quiz):
+    def test_average_score_calculation(
+        self, db: Session, test_user: User, test_quiz_ready: Quiz
+    ):
         """Prosečan skor: 60% + 80% + 100% = 80%."""
         scores = [
             (3, 5),  # 60%
@@ -161,52 +175,76 @@ class TestAttemptAggregations:
                 passed=(score / total >= 0.6),
             )
 
-        attempts = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == test_user.id
-        ).all()
+        attempts = (
+            db.query(QuizAttempt).filter(QuizAttempt.user_id == test_user.id).all()
+        )
         avg = sum(a.percentage for a in attempts) / len(attempts)
         assert abs(avg - 80.0) < 0.5
 
-    def test_passed_attempts_filter(self, db: Session, test_user: User, test_quiz_ready: Quiz):
+    def test_passed_attempts_filter(
+        self, db: Session, test_user: User, test_quiz_ready: Quiz
+    ):
         """Filtriranje položenih pokušaja."""
         _make_attempt(db, test_quiz_ready.id, test_user.id, passed=True)
-        _make_attempt(db, test_quiz_ready.id, test_user.id, score=1, total_points=5, passed=False)
+        _make_attempt(
+            db, test_quiz_ready.id, test_user.id, score=1, total_points=5, passed=False
+        )
 
-        passed = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == test_user.id,
-            QuizAttempt.passed == True,
-        ).count()
-        failed = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == test_user.id,
-            QuizAttempt.passed == False,
-        ).count()
+        passed = (
+            db.query(QuizAttempt)
+            .filter(
+                QuizAttempt.user_id == test_user.id,
+                QuizAttempt.passed.is_(True),
+            )
+            .count()
+        )
+        failed = (
+            db.query(QuizAttempt)
+            .filter(
+                QuizAttempt.user_id == test_user.id,
+                QuizAttempt.passed.is_(False),
+            )
+            .count()
+        )
 
         assert passed == 1
         assert failed == 1
 
-    def test_activity_window_30_days(self, db: Session, test_user: User, test_quiz_ready: Quiz):
+    def test_activity_window_30_days(
+        self, db: Session, test_user: User, test_quiz_ready: Quiz
+    ):
         """Aktivnost u poslednjih 30 dana."""
         _make_attempt(db, test_quiz_ready.id, test_user.id, days_ago=5)
         _make_attempt(db, test_quiz_ready.id, test_user.id, days_ago=15)
         _make_attempt(db, test_quiz_ready.id, test_user.id, days_ago=40)  # Van 30d
 
         cutoff = datetime.utcnow() - timedelta(days=30)
-        recent = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == test_user.id,
-            QuizAttempt.completed_at >= cutoff,
-        ).count()
+        recent = (
+            db.query(QuizAttempt)
+            .filter(
+                QuizAttempt.user_id == test_user.id,
+                QuizAttempt.completed_at >= cutoff,
+            )
+            .count()
+        )
         assert recent == 2
 
-    def test_daily_activity_grouping(self, db: Session, test_user: User, test_quiz_ready: Quiz):
+    def test_daily_activity_grouping(
+        self, db: Session, test_user: User, test_quiz_ready: Quiz
+    ):
         """Grupiranje pokušaja po danima."""
         # 2 pokušaja danas, 1 juče
         _make_attempt(db, test_quiz_ready.id, test_user.id, days_ago=0)
         _make_attempt(db, test_quiz_ready.id, test_user.id, days_ago=0)
         _make_attempt(db, test_quiz_ready.id, test_user.id, days_ago=1)
 
-        all_attempts = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == test_user.id,
-        ).all()
+        all_attempts = (
+            db.query(QuizAttempt)
+            .filter(
+                QuizAttempt.user_id == test_user.id,
+            )
+            .all()
+        )
 
         by_date = {}
         for a in all_attempts:
@@ -222,10 +260,14 @@ class TestAttemptAggregations:
 # Tests: Overview stats
 # ────────────────────────────────────────────────────────────────────────────────
 
+
 class TestOverviewStats:
-    def test_total_documents(self, db: Session, test_user: User, test_document: Document):
+    def test_total_documents(
+        self, db: Session, test_user: User, test_document: Document
+    ):
         """Ukupan broj dokumenata za korisnika."""
         from app.db.models.document import Document as DocModel
+
         count = db.query(DocModel).filter(DocModel.user_id == test_user.id).count()
         assert count >= 1
 
@@ -233,13 +275,21 @@ class TestOverviewStats:
         """Procenat položenih kvizova."""
         _make_attempt(db, test_quiz_ready.id, test_user.id, passed=True)
         _make_attempt(db, test_quiz_ready.id, test_user.id, passed=True)
-        _make_attempt(db, test_quiz_ready.id, test_user.id, score=1, total_points=5, passed=False)
+        _make_attempt(
+            db, test_quiz_ready.id, test_user.id, score=1, total_points=5, passed=False
+        )
 
-        total = db.query(QuizAttempt).filter(QuizAttempt.user_id == test_user.id).count()
-        passed = db.query(QuizAttempt).filter(
-            QuizAttempt.user_id == test_user.id,
-            QuizAttempt.passed == True,
-        ).count()
+        total = (
+            db.query(QuizAttempt).filter(QuizAttempt.user_id == test_user.id).count()
+        )
+        passed = (
+            db.query(QuizAttempt)
+            .filter(
+                QuizAttempt.user_id == test_user.id,
+                QuizAttempt.passed.is_(True),
+            )
+            .count()
+        )
 
         pass_rate = (passed / total * 100) if total > 0 else 0
         assert abs(pass_rate - 66.67) < 1.0

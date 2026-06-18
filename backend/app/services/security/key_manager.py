@@ -15,7 +15,7 @@ Datum: 2026-04-09
 """
 
 from datetime import datetime
-from typing import List, Optional
+from typing import Optional
 
 from sqlalchemy.orm import Session
 
@@ -210,5 +210,3 @@ class KeyManager:
 
 class KeyManagerService(KeyManager):
     """Alias za KeyManager (backward compatibility)."""
-
-    pass

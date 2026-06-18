@@ -10,7 +10,7 @@ Verzija: 1.0.0
 
 # Prompts
 from app.services.quiz.prompts.quiz_prompt import QUIZ_PROMPT
-from app.services.quiz.prompts.subjects import (
+from app.services.quiz.prompts.subjects import (  # noqa: F401
     get_specialized_prompt,
     get_subject_instruction,
     get_all_subjects as prompts_get_all_subjects,
@@ -29,7 +29,7 @@ from app.services.quiz.helpers import (
 )
 
 # Helpers - subject detection
-from app.services.quiz.helpers.subject_detection import (
+from app.services.quiz.helpers.subject_detection import (  # noqa: F401
     detect_subject_area,
     get_subject_keywords,
     get_all_subjects as subject_detection_get_all_subjects,
@@ -37,7 +37,7 @@ from app.services.quiz.helpers.subject_detection import (
 )
 
 # Helpers - document structure
-from app.services.quiz.helpers.document_structure import (
+from app.services.quiz.helpers.document_structure import (  # noqa: F401
     detect_document_structure,
     get_structure_based_prompt,
     get_structure_keywords,

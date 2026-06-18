@@ -11,10 +11,10 @@ Pokretanje:
 """
 
 import pytest
-import io
-from unittest.mock import patch, MagicMock
 
-from app.services.docx_export_service import DOCXExportService
+pytest.importorskip("docx", reason="python-docx nije instaliran (samo u Docker-u)")
+
+from app.services.docx_export_service import DOCXExportService  # noqa: E402
 
 
 class TestDOCXExportService:

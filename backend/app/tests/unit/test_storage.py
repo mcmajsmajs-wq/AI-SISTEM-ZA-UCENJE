@@ -11,10 +11,7 @@ Pokretanje:
 """
 
 import pytest
-import tempfile
-import os
 from io import BytesIO
-from pathlib import Path
 
 from app.services.storage_local import StorageService
 

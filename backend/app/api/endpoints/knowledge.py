@@ -101,16 +101,17 @@ async def query_knowledge(
         provider_override=body.provider,
     )
 
-    posthog_client.capture(
-        "knowledge queried",
-        distinct_id=str(current_user.id),
-        properties={
-            "chunks_used": result.get("chunks_used", 0),
-            "top_k": body.top_k,
-            "source_type_filter": body.source_type,
-            "query_length": len(body.query),
-        },
-    )
+    if posthog_client:
+        posthog_client.capture(
+            "knowledge queried",
+            distinct_id=str(current_user.id),
+            properties={
+                "chunks_used": result.get("chunks_used", 0),
+                "top_k": body.top_k,
+                "source_type_filter": body.source_type,
+                "query_length": len(body.query),
+            },
+        )
 
     return QueryResponse(**result)
 
@@ -135,17 +136,18 @@ async def query_knowledge_tiered(
         provider_override=body.provider,
     )
 
-    posthog_client.capture(
-        "knowledge tiered query",
-        distinct_id=str(current_user.id),
-        properties={
-            "chunks_used": result.get("chunks_used", 0),
-            "l0_used": result.get("l0_used", 0),
-            "l1_used": result.get("l1_used", 0),
-            "top_k": body.top_k,
-            "query_length": len(body.query),
-        },
-    )
+    if posthog_client:
+        posthog_client.capture(
+            "knowledge tiered query",
+            distinct_id=str(current_user.id),
+            properties={
+                "chunks_used": result.get("chunks_used", 0),
+                "l0_used": result.get("l0_used", 0),
+                "l1_used": result.get("l1_used", 0),
+                "top_k": body.top_k,
+                "query_length": len(body.query),
+            },
+        )
 
     return TieredQueryResponse(**result)
 

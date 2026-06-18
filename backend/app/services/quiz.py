@@ -16,7 +16,7 @@ Verzija: 2.1.0
 
 # Re-export everything from the new modular structure for backwards compatibility
 # noqa: F401 - intentionally re-exported for backwards compatibility
-from app.services.quiz import (
+from app.services.quiz import (  # noqa: F401
     BaseQuizClient,  # noqa: F401
     ClaudeQuizClient,  # noqa: F401
     OllamaQuizClient,  # noqa: F401

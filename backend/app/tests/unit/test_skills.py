@@ -10,7 +10,6 @@ Pokretanje:
 ===============================================================================
 """
 
-import pytest
 from app.services.skills import (
     SkillDetector,
     SkillService,

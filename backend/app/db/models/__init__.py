@@ -13,9 +13,9 @@ except ImportError:
     pass  # Skills module not available
 
 # Knowledge / RAG models
-from app.db.models.knowledge import (
+from app.db.models.knowledge import (  # noqa: F401
     KnowledgeSource,
     KnowledgeChunk,
     KnowledgeSectionSummary,
     KnowledgeDocumentSummary,
-)  # noqa: F401
+)

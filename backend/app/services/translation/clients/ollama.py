@@ -34,7 +34,7 @@ logger = logging.getLogger(__name__)
 class OllamaClient(BaseTranslationClient):
     """Klijent za Ollama API (lokalni, besplatni)."""
 
-    TRANSLATION_PROMPT = """You are a professional translator. Translate the following text from {source_language} to {target_language}.
+    TRANSLATION_PROMPT = """You are a professional translator. Translate the following text from {source_language} to {target_language}.  # noqa: E501
 
 Rules:
 1. Maintain the original formatting and structure

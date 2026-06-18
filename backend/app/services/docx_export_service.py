@@ -14,11 +14,20 @@ import logging
 from typing import List, Dict, Any
 from datetime import datetime
 
-from docx import Document
-from docx.shared import Pt, RGBColor
-from docx.enum.text import WD_ALIGN_PARAGRAPH
-
 from app.services.base_export_service import BaseExportService
+
+try:
+    from docx import Document
+    from docx.shared import Pt, RGBColor
+    from docx.enum.text import WD_ALIGN_PARAGRAPH
+
+    DOCX_AVAILABLE = True
+except ImportError:
+    Document = None
+    Pt = None
+    RGBColor = None
+    WD_ALIGN_PARAGRAPH = None
+    DOCX_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

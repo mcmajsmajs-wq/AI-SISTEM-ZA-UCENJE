@@ -12,7 +12,6 @@ Pokretanje:
 import pytest
 from app.services.security import (
     EncryptionService,
-    KeyManager,
     APIKeyValidator,
 )
 

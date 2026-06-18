@@ -10,9 +10,6 @@ Pokretanje:
 ================================================================================
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
-
 from app.services.file_processing import (
     FileProcessingService,
     TESSERACT_AVAILABLE,
@@ -86,7 +83,7 @@ class TestProcessPdf:
             nonlocal callback_called
             callback_called = True
 
-        result = service._process_pdf(b"%PDF-1.4 fake", callback)
+        service._process_pdf(b"%PDF-1.4 fake", callback)
 
         # Callback može ali ne mora biti pozvan, depending on implementation
 

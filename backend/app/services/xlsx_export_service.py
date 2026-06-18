@@ -14,10 +14,21 @@ import logging
 from typing import List, Dict, Any
 from datetime import datetime
 
-from openpyxl import Workbook
-from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
-
 from app.services.base_export_service import BaseExportService
+
+try:
+    from openpyxl import Workbook
+    from openpyxl.styles import Font, Alignment, PatternFill, Border, Side
+
+    XLSX_AVAILABLE = True
+except ImportError:
+    Workbook = None
+    Font = None
+    Alignment = None
+    PatternFill = None
+    Border = None
+    Side = None
+    XLSX_AVAILABLE = False
 
 logger = logging.getLogger(__name__)
 

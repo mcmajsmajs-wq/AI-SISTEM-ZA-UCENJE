@@ -1,5 +1,5 @@
 # Tests for AI Learning System
-# 
+#
 # Structure:
 # - conftest.py - Shared fixtures
 # - unit/ - Unit tests for individual components

@@ -11,9 +11,7 @@ Pokretanje:
 """
 
 import pytest
-import uuid
 from datetime import datetime
-from unittest.mock import patch, MagicMock
 from sqlalchemy.orm import Session
 
 from app.db.models.user import User
