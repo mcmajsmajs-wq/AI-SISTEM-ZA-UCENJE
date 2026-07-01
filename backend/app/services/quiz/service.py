@@ -390,6 +390,16 @@ class QuizService:
             correct_answer_raw = q_data.get("correct_answer", "")
             if isinstance(correct_answer_raw, list):
                 correct_answer = ", ".join(str(x) for x in correct_answer_raw)
+            elif isinstance(correct_answer_raw, str):
+                import json as _json
+                try:
+                    parsed = _json.loads(correct_answer_raw)
+                    if isinstance(parsed, list):
+                        correct_answer = ", ".join(str(x) for x in parsed)
+                    else:
+                        correct_answer = str(parsed)
+                except Exception:
+                    correct_answer = str(correct_answer_raw).strip("[]")
             else:
                 correct_answer = str(correct_answer_raw) if correct_answer_raw else ""
             correct_answer = cyrillic_to_latin(correct_answer)

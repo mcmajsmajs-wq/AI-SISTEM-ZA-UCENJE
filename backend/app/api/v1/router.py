@@ -22,6 +22,8 @@ from app.api.endpoints import analytics
 from app.api.endpoints import knowledge
 from app.api.endpoints import intelligence_test
 from app.api.endpoints import chat
+from app.api.endpoints import providers
+from app.api.endpoints import gamification
 
 # ================================================================================
 # GLAVNI API ROUTER
@@ -103,6 +105,20 @@ api_router.include_router(
     chat.router,
     prefix="/chat",
     tags=["AI Chat"]
+)
+
+# Providery Health Check
+api_router.include_router(
+    providers.router,
+    prefix="/providers",
+    tags=["Providers"]
+)
+
+# Gamification
+api_router.include_router(
+    gamification.router,
+    prefix="/gamification",
+    tags=["Gamification"]
 )
 
 # TODO: Dodati ostale endpoint-e kada se implementiraju:

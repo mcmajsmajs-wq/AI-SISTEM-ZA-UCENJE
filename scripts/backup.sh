@@ -11,9 +11,9 @@
 #   ./backup.sh --verify          # Verify last backup only
 #
 # Cron:
-#   0 2 * * 0 root /home/dju/scripts/backup.sh --type=full      # Nedjelja
-#   0 2 * * 1-6 root /home/dju/scripts/backup.sh        # Pon-Sub
-#   0 3 1 * * root /home/dju/scripts/backup.sh --type=archive  # Monthly
+#   0 2 * * 0 root /home/dju/projects/ai-learning/scripts/backup.sh --type=full      # Nedjelja
+#   0 2 * * 1-6 root /home/dju/projects/ai-learning/scripts/backup.sh        # Pon-Sub
+#   0 3 1 * * root /home/dju/projects/ai-learning/scripts/backup.sh --type=archive  # Monthly
 #
 
 set -euo pipefail
@@ -224,7 +224,7 @@ backup_config() {
     fi
     
     # Create config archive (excluding .env for security)
-    cd "${CONFIG_DIR}" || CONFIG_DIR="/home/dju/mojAiProjekat/New folder/docker"
+    cd "${CONFIG_DIR}" || CONFIG_DIR="/home/dju/projects/ai-learning/docker"
     
     if [[ -d "${CONFIG_DIR}" ]]; then
         tar -czf "${output_file}" \

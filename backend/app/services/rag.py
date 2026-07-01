@@ -452,6 +452,17 @@ Budi edukativan, detaljan i jasan."""
                 if answer:
                     used_provider = "mistral"
                     break
+            elif p == "deepseek":
+                api_key = user_deepseek_key or getattr(settings, "DEEPSEEK_API_KEY", "")
+                if not api_key:
+                    continue
+                deepseek_model = getattr(settings, "DEEPSEEK_MODEL", "deepseek-chat")
+                answer = await _call_openai_compat(
+                    "https://api.deepseek.com/v1", api_key, deepseek_model
+                )
+                if answer:
+                    used_provider = "deepseek"
+                    break
             elif p == "claude":
                 api_key = user_claude_key or getattr(settings, "ANTHROPIC_API_KEY", "")
                 if not api_key:
@@ -1018,6 +1029,17 @@ Budi edukativan, detaljan i jasan."""
                 )
                 if answer:
                     used_provider = "mistral"
+                    break
+            elif p == "deepseek":
+                api_key = user_deepseek_key or getattr(settings, "DEEPSEEK_API_KEY", "")
+                if not api_key:
+                    continue
+                deepseek_model = getattr(settings, "DEEPSEEK_MODEL", "deepseek-chat")
+                answer = await _call_openai_compat(
+                    "https://api.deepseek.com/v1", api_key, deepseek_model
+                )
+                if answer:
+                    used_provider = "deepseek"
                     break
             elif p == "claude":
                 api_key = user_claude_key or getattr(settings, "ANTHROPIC_API_KEY", "")

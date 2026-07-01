@@ -100,6 +100,7 @@ def _check_answer_static(
         return user_answer == correct_answer
 
     elif q_type == "checkbox":
+        correct_answer = correct_answer.strip("[]")
         correct_parts = set(
             p.strip().lower() for p in correct_answer.split(",") if p.strip()
         )

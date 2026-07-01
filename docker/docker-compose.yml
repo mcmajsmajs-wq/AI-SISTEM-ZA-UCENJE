@@ -17,6 +17,7 @@ services:
       dockerfile: Dockerfile
     container_name: ai-learning-app
     restart: unless-stopped
+    mem_limit: 2g
     user: root
     working_dir: /app
     command: >
@@ -125,6 +126,7 @@ services:
       dockerfile: Dockerfile
     container_name: ai-learning-worker
     restart: unless-stopped
+    mem_limit: 4g
     user: root
     command: >
       sh -c "chmod 777 /app/uploads && su appuser -s /bin/sh -c 'celery -A app.workers.celery_app worker --loglevel=info --concurrency=4 -Q pdf_processing,translation,quiz_generation,default'"
@@ -175,6 +177,7 @@ services:
       dockerfile: Dockerfile
     container_name: ai-learning-beat
     restart: unless-stopped
+    mem_limit: 1g
     command: celery -A app.workers.celery_app beat --loglevel=info
     env_file:
       - .env
@@ -218,6 +221,7 @@ services:
     image: minio/minio:latest
     container_name: ai-learning-minio
     restart: unless-stopped
+    mem_limit: 1g
     command: server /data --console-address ":9001"
     environment:
       - MINIO_ROOT_USER=${MINIO_ROOT_USER}
@@ -243,6 +247,7 @@ services:
     image: ollama/ollama:latest
     container_name: ai-learning-ollama
     restart: unless-stopped
+    mem_limit: 4g
     profiles:
       - ollama
     ports:
@@ -288,6 +293,7 @@ services:
     image: prom/prometheus:latest
     container_name: ai-learning-prometheus
     restart: unless-stopped
+    mem_limit: 1g
     ports:
       - "9090:9090"
     volumes:
@@ -315,6 +321,7 @@ services:
     image: grafana/grafana:latest
     container_name: ai-learning-grafana
     restart: unless-stopped
+    mem_limit: 1g
     ports:
       - "3000:3000"
     environment:

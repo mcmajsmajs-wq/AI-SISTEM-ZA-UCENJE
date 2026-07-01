@@ -39,8 +39,8 @@ Personalizovana aplikacija za učenje koja automatizuje proces konverzije struč
 ## Brzi početak
 
 ```bash
-cd /home/dju/mojAiProjekat/New\ folder
-docker compose up -d
+cd /home/dju/projects/ai-learning
+docker compose -f docker/docker-compose.yml up -d
 docker compose exec app alembic upgrade head
 ```
 

@@ -40,7 +40,7 @@ AI Sistem za učenje je web aplikacija koja vam omogućuje da:
 ### Brzo pokretanje
 
 ```bash
-cd /home/dju/mojAiProjekat/New\ folder
+cd /home/dju/projects/ai-learning
 make up
 ```
 

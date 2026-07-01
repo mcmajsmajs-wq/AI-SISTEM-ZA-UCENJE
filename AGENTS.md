@@ -45,7 +45,7 @@ Instalirano 23 engineering skill-a. **Auto-discovery** - agent sam bira skill po
 | shipping-and-launch | Pre deploy-a | Pre-launch checklist, staged rollout |
 
 **Izvor:** [addyosmani/agent-skills](https://github.com/addyosmani/agent-skills) (45k ⭐, MIT)  
-**Repo lokacija:** `/home/dju/mojAiProjekat/agent-skills`  
+**Repo lokacija:** `/home/dju/projects/ai-learning/agent-skills`  
 **Lokacija skill-ova:** `~/.config/opencode/skills/` (symlinkovani)  
 **Srpski priručnik:** `SRPSKI_PRIRUCNIK.md` (u projektu + u repo-u)  
 **Ponašanje:** Agent automatski detektuje koji skill treba i učitava ga. Ne moraš ručno da biraš.
@@ -67,7 +67,7 @@ Cilj: korisnik **ne mora da pamti** 23 skill-a — agent ga podseća.
 ## Projekat Struktura
 
 ```
-/home/dju/mojAiProjekat/New folder/
+/home/dju/projects/ai-learning/
 ├── backend/          # FastAPI + SQLAlchemy
 ├── frontend/         # TypeScript + Vite
 ├── mcp-server/      # MCP Server
@@ -80,7 +80,7 @@ Cilj: korisnik **ne mora da pamti** 23 skill-a — agent ga podseća.
 
 ### Development
 ```bash
-cd /home/dju/mojAiProjekat/New\ folder
+cd /home/dju/projects/ai-learning
 make dev          # Start development
 make test         # Run tests
 ```
@@ -429,7 +429,7 @@ curl -X POST "http://localhost:8010/api/v1/quizzes/$QUIZ_ID/attempts/$ATTEMPT_ID
 
 **Rebuild komande nakon izmena:**
 ```bash
-cd /home/dju/mojAiProjekat/New\ folder/docker
+cd /home/dju/projects/ai-learning/docker
 docker-compose build app worker
 docker-compose up -d app worker
 ```

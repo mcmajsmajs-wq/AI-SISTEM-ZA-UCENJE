@@ -537,8 +537,9 @@ async def submit_attempt(
         if q.question_type in ("multiple_choice", "calculation", "true_false"):
             is_correct = user_answer.lower() == correct_answer.lower()
         elif q.question_type == "checkbox":
+            correct_answer_clean = correct_answer.strip("[]")
             correct_parts = set(
-                p.strip().lower() for p in correct_answer.split(",") if p.strip()
+                p.strip().lower() for p in correct_answer_clean.split(",") if p.strip()
             )
             selected_parts = set(
                 p.strip().lower() for p in user_answer.split(",") if p.strip()
@@ -573,6 +574,23 @@ async def submit_attempt(
     db.commit()
     db.refresh(attempt)
 
+    from app.services.gamification import award_xp, xp_for_quiz, xp_for_quiz_pass, update_streak, check_milestone_badges, check_streak_badges
+
+    try:
+        update_streak(current_user, db)
+        xp_amount = xp_for_quiz(attempt.percentage)
+        if attempt.passed:
+            xp_amount += xp_for_quiz_pass()
+        xp_result = award_xp(current_user, xp_amount, db)
+        new_badges = []
+        new_badges.extend(check_milestone_badges(current_user, db))
+        new_badges.extend(check_streak_badges(current_user, db))
+        if new_badges:
+            xp_result["new_badges"] = new_badges
+    except Exception:
+        logger.exception("Gamification error in submit_attempt (non-blocking)")
+        xp_result = {"xp_awarded": 0, "leveled_up": False, "level": current_user.level, "new_badges": []}
+
     if posthog_client:
         posthog_client.capture(
             "quiz attempt completed",
@@ -598,6 +616,10 @@ async def submit_attempt(
         started_at=attempt.started_at,
         completed_at=attempt.completed_at,
         answers=answer_results,
+        xp_awarded=xp_result["xp_awarded"],
+        leveled_up=xp_result["leveled_up"],
+        new_level=xp_result["level"],
+        new_badges=xp_result["new_badges"] if xp_result["new_badges"] else None,
     )
 
 
@@ -850,19 +872,21 @@ async def _call_chat_ai(
     user_groq_key = getattr(user, "ai_api_key_groq", None)
     user_mistral_key = getattr(user, "ai_api_key_mistral", None)
     user_claude_key = getattr(user, "ai_api_key_claude", None)
+    user_deepseek_key = getattr(user, "ai_api_key_deepseek", None)
 
     providers_to_try: list
     if provider == "auto":
         # Try providers in order of availability — prefer configured ones
-        auto_order = ["gemini", "groq", "mistral", "openai", "claude", "ollama"]
+        auto_order = ["gemini", "groq", "mistral", "deepseek", "openai", "claude", "ollama"]
         providers_to_try = []
         key_map = {
             "gemini": user_gemini_key or getattr(settings, "GEMINI_API_KEY", ""),
             "groq": user_groq_key or getattr(settings, "GROQ_API_KEY", ""),
             "mistral": user_mistral_key or getattr(settings, "MISTRAL_API_KEY", ""),
+            "deepseek": user_deepseek_key or getattr(settings, "DEEPSEEK_API_KEY", ""),
             "openai": user_openai_key or getattr(settings, "OPENAI_API_KEY", ""),
             "claude": user_claude_key or getattr(settings, "ANTHROPIC_API_KEY", ""),
-            "ollama": True,  # always try ollama
+            "ollama": True,
         }
         for p in auto_order:
             if key_map.get(p):
@@ -958,6 +982,17 @@ async def _call_chat_ai(
                     continue
                 result = await _openai_compat(
                     "https://api.mistral.ai/v1", api_key, "mistral-small-latest"
+                )
+                if result:
+                    return result
+            elif p == "deepseek":
+                api_key = user_deepseek_key or getattr(settings, "DEEPSEEK_API_KEY", "")
+                if not api_key:
+                    continue
+                result = await _openai_compat(
+                    "https://api.deepseek.com/v1",
+                    api_key,
+                    getattr(settings, "DEEPSEEK_MODEL", "deepseek-chat"),
                 )
                 if result:
                     return result

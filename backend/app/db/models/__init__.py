@@ -19,3 +19,4 @@ from app.db.models.knowledge import (  # noqa: F401
     KnowledgeSectionSummary,
     KnowledgeDocumentSummary,
 )
+from app.db.models.gamification import Badge, UserBadge  # noqa: F401

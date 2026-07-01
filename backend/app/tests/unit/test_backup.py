@@ -16,7 +16,7 @@ TEST_DB_USER = "ai_learning_user"
 
 def _scripts_exist():
     """Proverava da li backup skripte postoje (ne postoje unutar Docker-a)."""
-    return os.path.exists("/home/dju/mojAiProjekat/New folder/scripts/backup.sh")
+    return os.path.exists("/home/dju/projects/ai-learning/scripts/backup.sh")
 
 
 _skip_no_scripts = pytest.mark.skipif(
@@ -31,7 +31,7 @@ class TestBackupScript:
     @pytest.fixture
     def backup_script(self):
         """Path to backup script"""
-        return "/home/dju/mojAiProjekat/New folder/scripts/backup.sh"
+        return "/home/dju/projects/ai-learning/scripts/backup.sh"
 
     @_skip_no_scripts
     def test_backup_script_exists(self, backup_script):
@@ -65,7 +65,7 @@ class TestRestoreScript:
     @pytest.fixture
     def restore_script(self):
         """Path to restore script"""
-        return "/home/dju/mojAiProjekat/New folder/scripts/restore.sh"
+        return "/home/dju/projects/ai-learning/scripts/restore.sh"
 
     @_skip_no_scripts
     def test_restore_script_exists(self, restore_script):
@@ -98,7 +98,7 @@ class TestBackupCron:
     @pytest.fixture
     def cron_script(self):
         """Path to cron script"""
-        return "/home/dju/mojAiProjekat/New folder/scripts/backup-cron.sh"
+        return "/home/dju/projects/ai-learning/scripts/backup-cron.sh"
 
     @_skip_no_scripts
     def test_cron_script_exists(self, cron_script):
@@ -124,7 +124,7 @@ class TestBackupProcess:
     @pytest.mark.skip(reason="Requires /backups directory permissions")
     def test_backup_script_runs(self):
         """Test that backup script runs without error"""
-        script = "/home/dju/mojAiProjekat/New folder/scripts/backup.sh"
+        script = "/home/dju/projects/ai-learning/scripts/backup.sh"
 
         # Run with test mode
         result = subprocess.run(
@@ -141,7 +141,7 @@ class TestBackupProcess:
     @pytest.mark.skip(reason="Requires /backups directory permissions")
     def test_restore_script_list_backups(self):
         """Test restore can list backups"""
-        script = "/home/dju/mojAiProjekat/New folder/scripts/restore.sh"
+        script = "/home/dju/projects/ai-learning/scripts/restore.sh"
 
         result = subprocess.run([script, "--verify"], capture_output=True, timeout=30)
 
@@ -192,7 +192,7 @@ class TestBackupSecurity:
     @_skip_no_scripts
     def test_backup_script_no_hardcoded_secrets(self):
         """Verify no hardcoded secrets in backup script"""
-        script_path = "/home/dju/mojAiProjekat/New folder/scripts/backup.sh"
+        script_path = "/home/dju/projects/ai-learning/scripts/backup.sh"
 
         with open(script_path) as f:
             content = f.read()
@@ -220,7 +220,7 @@ class TestBackupSecurity:
     @_skip_no_scripts
     def test_restore_requires_confirmation(self):
         """Verify restore asks for confirmation"""
-        script_path = "/home/dju/mojAiProjekat/New folder/scripts/restore.sh"
+        script_path = "/home/dju/projects/ai-learning/scripts/restore.sh"
 
         with open(script_path) as f:
             content = f.read()
@@ -260,10 +260,10 @@ class TestBackupCronSchedule:
         """Verify cron file format is correct"""
         cron_content = """
 # Full backup - Nedjelja u 02:00
-0 2 * * 0 root /home/dju/scripts/backup.sh --type=full >> /backups/cron.log 2>&1
+0 2 * * 0 root /home/dju/projects/ai-learning/scripts/backup.sh --type=full >> /backups/cron.log 2>&1
 
 # Incremental backup - Ponedjeljak do Subota u 02:00
-0 2 * * 1-6 root /home/dju/scripts/backup.sh >> /backups/cron.log 2>&1
+0 2 * * 1-6 root /home/dju/projects/ai-learning/scripts/backup.sh >> /backups/cron.log 2>&1
 """
 
         # Check cron format
@@ -287,8 +287,8 @@ class TestBackupCronSchedule:
         # Cron: 0 2 * * 0 = At 02:00 on Sunday (0 = Sunday)
         # Format: minute hour day month day-of-week command
         cron_lines = [
-            "0 2 * * 0 root /home/dju/scripts/backup.sh --type=full",
-            "0 2 * * 1-6 root /home/dju/scripts/backup.sh",
+            "0 2 * * 0 root /home/dju/projects/ai-learning/scripts/backup.sh --type=full",
+            "0 2 * * 1-6 root /home/dju/projects/ai-learning/scripts/backup.sh",
         ]
 
         # parts[4] is day of week

@@ -178,6 +178,10 @@ export interface AnswerResult {
 
 export interface AttemptResult extends QuizAttempt {
   answers: AnswerResult[]
+  xp_awarded?: number
+  leveled_up?: boolean
+  new_level?: number
+  new_badges?: { slug: string; name: string; icon_name: string; xp_reward: number }[]
 }
 
 export interface ApiError {
@@ -222,6 +226,31 @@ export interface StudyPlanProgress {
   today_goal: number
   today_items: StudyPlanItem[]
   upcoming_items: StudyPlanItem[]
+}
+
+export interface BadgeInfo {
+  slug: string
+  name: string
+  description: string
+  icon_name: string
+  xp_reward: number
+  criteria_type: string
+  criteria_threshold: number
+  earned: boolean
+  earned_at: string | null
+}
+
+export interface GamificationProfile {
+  xp: number
+  level: number
+  total_xp_earned: number
+  xp_current_in_level: number
+  xp_needed_for_next: number
+  progress_pct: number
+  current_streak: number
+  longest_streak: number
+  badges: BadgeInfo[]
+  recent_badges: BadgeInfo[]
 }
 
 export interface CostEstimate {

@@ -16,7 +16,7 @@ import { useParams, useLocation, useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { quizzesApi } from '@/services/api'
 import { AttemptResult, AnswerResult } from '@/types'
-import { CheckCircle, XCircle, Trophy, RotateCcw, List, ChevronDown, ChevronUp, Loader2 } from 'lucide-react'
+import { CheckCircle, XCircle, Trophy, RotateCcw, List, ChevronDown, ChevronUp, Loader2, Star, Zap } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
 
@@ -94,6 +94,39 @@ export default function QuizResultsPage() {
           {result.score} / {result.total_points} poena · {correct}/{total} tačnih
         </p>
       </div>
+
+      {/* XP Award */}
+      {(result as any).xp_awarded != null && (result as any).xp_awarded > 0 && (
+        <div className="rounded-2xl border border-indigo-200 bg-gradient-to-br from-indigo-50 to-violet-50 p-5 text-center">
+          <div className="flex items-center justify-center gap-4">
+            <div className="flex items-center gap-2">
+              <Zap className="w-5 h-5 text-yellow-500" />
+              <span className="text-lg font-bold text-indigo-700">
+                +{(result as any).xp_awarded} XP
+              </span>
+            </div>
+            {(result as any).leveled_up && (
+              <div className="flex items-center gap-2 px-3 py-1 rounded-full bg-gradient-to-r from-indigo-500 to-violet-500 text-white text-sm font-semibold shadow-md">
+                <Star className="w-4 h-4" />
+                Nivo {(result as any).new_level}
+              </div>
+            )}
+          </div>
+          {(result as any).new_badges?.length > 0 && (
+            <div className="mt-3 flex flex-wrap justify-center gap-2">
+              {(result as any).new_badges.map((badge: any) => (
+                <span
+                  key={badge.slug}
+                  className="inline-flex items-center gap-1 px-3 py-1 rounded-full bg-white border border-amber-200 text-amber-700 text-xs font-semibold shadow-sm"
+                >
+                  <Trophy className="w-3.5 h-3.5" />
+                  {badge.name} {badge.xp_reward > 0 && `+${badge.xp_reward} XP`}
+                </span>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Actions */}
       <div className="flex gap-3">

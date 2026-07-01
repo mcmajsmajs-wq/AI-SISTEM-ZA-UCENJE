@@ -67,7 +67,7 @@ install_cron() {
 0 3 1 * * root ${BACKUP_SCRIPT} --type=archive >> ${BACKUP_DIR}/cron.log 2>&1
 
 # Security check - svaki sati u 00:00
-0 0 * * * root /home/dju/mojAiProjekat/New\ folder/scripts/security_check_cron.sh >> /var/log/ai-security-monitor.log 2>&1
+0 0 * * * root /home/dju/projects/ai-learning/scripts/security_check_cron.sh >> /var/log/ai-security-monitor.log 2>&1
 
 EOF
     

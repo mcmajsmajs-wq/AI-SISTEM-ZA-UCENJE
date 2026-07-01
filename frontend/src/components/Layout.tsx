@@ -1,10 +1,10 @@
 import { Outlet, NavLink, useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
-import { 
-  FileText, 
-  Settings, 
-  LogOut, 
-  Menu, 
+import {
+  FileText,
+  Settings,
+  LogOut,
+  Menu,
   X,
   Sparkles,
   LayoutDashboard,
@@ -12,7 +12,9 @@ import {
   Bell,
   BookOpen,
   BarChart2,
-  Brain
+  Brain,
+  Activity,
+  Trophy
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -25,6 +27,8 @@ const navigation = [
   { name: 'Test Inteligencije', href: '/intelligence-test', icon: Brain },
   { name: 'Baza Znanja', href: '/knowledge', icon: Brain },
   { name: 'Analitika', href: '/analytics', icon: BarChart2 },
+  { name: 'Status provajdera', href: '/providers', icon: Activity },
+  { name: 'Dostignuća', href: '/achievements', icon: Trophy },
   { name: 'Podešavanja', href: '/settings', icon: Settings },
 ]
 
@@ -36,6 +40,8 @@ const pageTitles: Record<string, string> = {
   '/intelligence-test': 'Test Inteligencije',
   '/knowledge': 'Baza Znanja',
   '/analytics': 'Analitika',
+  '/providers': 'Status provajdera',
+  '/achievements': 'Dostignuća',
   '/settings': 'Podešavanja',
 }
 

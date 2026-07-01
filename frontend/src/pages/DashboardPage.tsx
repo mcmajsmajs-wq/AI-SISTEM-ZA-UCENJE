@@ -13,7 +13,7 @@
  */
 
 import { useQuery } from '@tanstack/react-query'
-import { usersApi, documentsApi, analyticsApi, aiSettingsApi } from '@/services/api'
+import { usersApi, documentsApi, analyticsApi, aiSettingsApi, gamificationApi } from '@/services/api'
 import { 
   FileText, 
   Languages, 
@@ -33,6 +33,8 @@ import {
 } from 'lucide-react'
 import { Link } from 'react-router-dom'
 import { useAuthStore } from '@/stores/authStore'
+import XpBar from '@/components/XpBar'
+import StreakBadge from '@/components/StreakBadge'
 import clsx from 'clsx'
 
 export default function DashboardPage() {
@@ -52,6 +54,15 @@ export default function DashboardPage() {
     queryKey: ['analytics-overview'],
     queryFn: () => analyticsApi.getOverview(),
     staleTime: 60_000,
+  })
+
+  const { data: gamificationData } = useQuery({
+    queryKey: ['gamification-profile'],
+    queryFn: async () => {
+      const res = await gamificationApi.profile()
+      return res.data
+    },
+    staleTime: 30_000,
   })
 
   const { data: aiSettingsData } = useQuery({
@@ -152,6 +163,27 @@ export default function DashboardPage() {
           </div>
         )}
       </div>
+
+      {/* XP Progress */}
+      {gamificationData && (
+        <div className="bg-white rounded-xl border border-gray-200 p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="flex items-center gap-2">
+              <div className="w-8 h-8 rounded-full bg-gradient-to-br from-indigo-500 to-violet-500 flex items-center justify-center text-white font-bold text-xs shadow-sm">
+                {(gamificationData as any).level}
+              </div>
+              <span className="text-sm font-semibold text-gray-700">Nivo {(gamificationData as any).level}</span>
+            </div>
+            <StreakBadge streak={(gamificationData as any).current_streak || 0} />
+          </div>
+          <XpBar
+            level={(gamificationData as any).level}
+            xpCurrent={(gamificationData as any).xp_current_in_level}
+            xpNeeded={(gamificationData as any).xp_needed_for_next}
+            progressPct={(gamificationData as any).progress_pct}
+          />
+        </div>
+      )}
 
       {/* Stats row */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-5">

@@ -57,7 +57,7 @@ echo "4. Syntax checks..."
 
 # Bash scripts
 echo -n "  Backup script: "
-if bash -n /home/dju/mojAiProjekat/New\ folder/scripts/backup.sh 2>/dev/null; then
+if bash -n /home/dju/projects/ai-learning/scripts/backup.sh 2>/dev/null; then
     echo -e "${GREEN}OK${NC}"
 else
     echo -e "${RED}ERROR${NC}"
@@ -65,7 +65,7 @@ else
 fi
 
 echo -n "  Restore script: "
-if bash -n /home/dju/mojAiProjekat/New\ folder/scripts/restore.sh 2>/dev/null; then
+if bash -n /home/dju/projects/ai-learning/scripts/restore.sh 2>/dev/null; then
     echo -e "${GREEN}OK${NC}"
 else
     echo -e "${RED}ERROR${NC}"
@@ -73,7 +73,7 @@ else
 fi
 
 echo -n "  Backup cron: "
-if bash -n /home/dju/mojAiProjekat/New\ folder/scripts/backup-cron.sh 2>/dev/null; then
+if bash -n /home/dju/projects/ai-learning/scripts/backup-cron.sh 2>/dev/null; then
     echo -e "${GREEN}OK${NC}"
 else
     echo -e "${RED}ERROR${NC}"
@@ -83,7 +83,7 @@ echo ""
 
 # 5. Run unit tests
 echo "5. Running unit tests..."
-cd /home/dju/mojAiProjekat/New\ folder/backend
+cd /home/dju/projects/ai-learning/backend
 if python3 -m pytest app/tests/unit/test_backup.py -v --tb=line 2>&1 | tail -3 | grep -q "passed"; then
     echo -e "${GREEN}✓ Tests passed${NC}"
 else

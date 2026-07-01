@@ -383,4 +383,13 @@ export const intelligenceTestApi = {
   getResults: () => api.get('/intelligence-test/results'),
 }
 
+export const providersHealthApi = {
+  check: () => api.get('/providers/health'),
+}
+
+export const gamificationApi = {
+  profile: () => api.get('/gamification/profile'),
+  badges: () => api.get('/gamification/badges'),
+}
+
 export default api

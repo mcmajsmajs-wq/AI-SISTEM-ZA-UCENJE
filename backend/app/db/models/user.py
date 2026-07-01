@@ -7,7 +7,7 @@ Verzija: 1.0.0
 ================================================================================
 """
 
-from sqlalchemy import Column, String, Boolean, DateTime, Enum, Text
+from sqlalchemy import Column, String, Boolean, DateTime, Enum, Text, Integer
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from sqlalchemy.orm import relationship
@@ -53,6 +53,14 @@ class User(Base):
     ai_api_key_deepseek = Column(Text, nullable=True)
     ai_custom_base_url = Column(String(500), nullable=True)
     ai_api_key_custom = Column(Text, nullable=True)
+
+    # Gamifikacija
+    xp = Column(Integer, default=0, nullable=False)
+    level = Column(Integer, default=1, nullable=False)
+    total_xp_earned = Column(Integer, default=0, nullable=False)
+    current_streak = Column(Integer, default=0, nullable=False)
+    longest_streak = Column(Integer, default=0, nullable=False)
+    last_activity_date = Column(DateTime(timezone=True), nullable=True)
 
     # Timestamps
     created_at = Column(DateTime(timezone=True), server_default=func.now())

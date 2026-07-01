@@ -11,7 +11,7 @@
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-BACKUP_DIR="${BACKUP_DIR:-/home/dju/mojAiProjekat/New folder/backups}"
+BACKUP_DIR="${BACKUP_DIR:-/home/dju/projects/ai-learning/backups}"
 LOG_FILE="/var/log/ai-learning-backup.log"
 
 # Dani za čuvanje

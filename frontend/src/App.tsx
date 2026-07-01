@@ -21,6 +21,8 @@ import AnalyticsPage from '@/pages/AnalyticsPage'
 import KnowledgeBasePage from '@/pages/KnowledgeBasePage'
 import TranslationsPage from '@/pages/TranslationsPage'
 import IntelligenceTestPage from '@/pages/IntelligenceTestPage'
+import ProviderHealthPage from '@/pages/ProviderHealthPage'
+import AchievementsPage from '@/pages/AchievementsPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 function App() {
@@ -78,6 +80,8 @@ function App() {
         <Route path="knowledge" element={<KnowledgeBasePage />} />
         <Route path="review" element={<TranslationsPage />} />
         <Route path="intelligence-test" element={<IntelligenceTestPage />} />
+        <Route path="providers" element={<ProviderHealthPage />} />
+        <Route path="achievements" element={<AchievementsPage />} />
       </Route>
       
       <Route path="*" element={<NotFoundPage />} />

@@ -252,7 +252,7 @@ docker logs ai-learning-worker --tail 5
 
 ```bash
 # 1. Restartuj sve contejnere
-cd /home/dju/mojAiProjekat/New\ folder/docker
+cd /home/dju/projects/ai-learning/docker
 docker-compose restart
 
 # 2. Čekanje da se podigne

@@ -61,7 +61,7 @@
 **Izvor:** https://github.com/addyosmani/agent-skills (45k ⭐, MIT license, Addy Osmani)
 
 **Instalacija:**
-- Repo kloniran: `/home/dju/mojAiProjekat/agent-skills`
+- Repo kloniran: `/home/dju/projects/ai-learning/agent-skills`
 - Symlinkovani u `~/.config/opencode/skills/` (svih 23)
 
 **Skill-ovi:**

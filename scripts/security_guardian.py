@@ -21,8 +21,8 @@ CONFIG = {
     "check_interval": 60,  # seconds
     "alert_threshold": 3,
     "file_watch_paths": [
-        "/home/dju/mojAiProjekat/New folder/backend/app",
-        "/home/dju/mojAiProjekat/New folder/docker",
+        "/home/dju/projects/ai-learning/backend/app",
+        "/home/dju/projects/ai-learning/docker",
     ],
     "suspicious_patterns": [
         r"nc -l",  # Reverse shell

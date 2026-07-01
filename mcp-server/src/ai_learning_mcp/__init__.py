@@ -31,7 +31,7 @@ mcp = FastMCP("ai_learning_mcp")
 
 API_BASE_URL = os.environ.get("API_BASE_URL", "http://localhost:8010")
 
-PROJECT_ROOT = os.environ.get("PROJECT_ROOT", "/home/dju/mojAiProjekat/New folder")
+PROJECT_ROOT = os.environ.get("PROJECT_ROOT", "/home/dju/projects/ai-learning")
 DOCKER_DIR = Path(PROJECT_ROOT) / "docker"
 DOCKER_COMPOSE_FILE = str(DOCKER_DIR / "docker-compose.yml")
 

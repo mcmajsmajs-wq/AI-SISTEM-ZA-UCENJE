@@ -191,6 +191,10 @@ class AttemptResult(AttemptResponse):
     """Detaljan rezultat sa odgovorima."""
 
     answers: List[AnswerResult] = []
+    xp_awarded: Optional[int] = None
+    leveled_up: Optional[bool] = None
+    new_level: Optional[int] = None
+    new_badges: Optional[List[dict]] = None
 
 
 class AttemptListResponse(BaseModel):
