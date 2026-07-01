@@ -112,20 +112,20 @@ jobs:
 
     steps:
       - name: Checkout koda
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Podešavanje Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Login na Docker Hub
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
       - name: Određivanje tagova za Docker images
         id: meta-backend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-learning-backend
           tags: |
@@ -136,7 +136,7 @@ jobs:
 
       - name: Određivanje tagova za frontend image
         id: meta-frontend
-        uses: docker/metadata-action@v5
+        uses: docker/metadata-action@v6
         with:
           images: ${{ secrets.DOCKER_HUB_USERNAME }}/ai-learning-frontend
           tags: |
@@ -146,7 +146,7 @@ jobs:
             type=raw,value=${{ needs.check-config.outputs.image_tag }}
 
       - name: Build i push backend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./backend
           file: ./backend/Dockerfile.prod
@@ -157,7 +157,7 @@ jobs:
           cache-to: type=gha,mode=max
 
       - name: Build i push frontend image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v7
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
@@ -192,10 +192,10 @@ jobs:
 
     steps:
       - name: Checkout koda
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Deploy na staging via SSH
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.STAGING_SSH_HOST }}
           username: ${{ secrets.STAGING_SSH_USER }}
@@ -243,7 +243,7 @@ jobs:
             echo "✅ Deploy završen!"
 
       - name: Health check staging
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.STAGING_SSH_HOST }}
           username: ${{ secrets.STAGING_SSH_USER }}
@@ -302,10 +302,10 @@ jobs:
 
     steps:
       - name: Checkout koda
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Deploy na produkciju via SSH
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.PRODUCTION_SSH_HOST }}
           username: ${{ secrets.PRODUCTION_SSH_USER }}
@@ -355,7 +355,7 @@ jobs:
             echo "✅ Produkcijski deploy završen!"
 
       - name: Health check produkcija
-        uses: appleboy/ssh-action@master
+        uses: appleboy/ssh-action@v1.2.5
         with:
           host: ${{ secrets.PRODUCTION_SSH_HOST }}
           username: ${{ secrets.PRODUCTION_SSH_USER }}
@@ -401,7 +401,7 @@ jobs:
 
       - name: Kreiranje GitHub Release-a
         if: startsWith(github.ref, 'refs/tags/v') && success()
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
           generate_release_notes: true
           body: |
@@ -430,7 +430,7 @@ jobs:
     steps:
       - name: Slack notifikacija
         if: env.SLACK_WEBHOOK_URL != ''
-        uses: 8398a7/action-slack@v3
+        uses: 8398a7/action-slack@v4
         with:
           status: ${{ contains(needs.*.result, 'failure') && 'failure' || 'success' }}
           fields: repo,message,commit,author,ref,workflow
