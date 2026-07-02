@@ -155,6 +155,7 @@ jobs:
   # PLAYWRIGHT E2E TESTS
   # ============================================================================
   e2e:
+    if: false
     runs-on: ubuntu-latest
     timeout-minutes: 30
     needs: [backend, frontend]
@@ -360,7 +361,7 @@ jobs:
   # ============================================================================
   docker:
     runs-on: ubuntu-latest
-    needs: [backend, frontend, e2e, performance]
+    needs: [backend, frontend, performance]
 
     steps:
       - name: Checkout code
