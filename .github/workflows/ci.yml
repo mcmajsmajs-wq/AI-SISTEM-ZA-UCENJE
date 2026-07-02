@@ -259,6 +259,7 @@ jobs:
           npx playwright test --reporter=line
         env:
           API_URL: http://localhost:8000
+          FRONTEND_URL: http://localhost:3000
 
       - name: Upload E2E test results
         if: always()
