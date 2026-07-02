@@ -1,15 +1,13 @@
-import { test, expect, describe } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
 const API_URL = process.env.API_URL || 'http://localhost:8010';
 const BACKUP_DIR = process.env.BACKUP_DIR || '/backups';
 
-describe('Backup System Tests', () => {
+test.describe('Backup System Tests', () => {
   
   test.describe('Backup Script', () => {
     test('backup script exists and is executable', async ({ }) => {
-      // Check if backup script exists
-      const { exec } = require('child_process');
-      // This would run on the server, not in browser
+      // Script check would run on server, not in browser
       expect(true).toBe(true);
     });
 
@@ -66,7 +64,7 @@ describe('Backup System Tests', () => {
   });
 });
 
-describe('Backup API Endpoints (if implemented)', () => {
+test.describe('Backup API Endpoints (if implemented)', () => {
   
   test('POST /api/v1/backup/start - starts backup', async ({ request }) => {
     const response = await request.post(`${API_URL}/api/v1/backup/start`, {
