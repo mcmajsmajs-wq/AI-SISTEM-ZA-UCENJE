@@ -156,7 +156,7 @@ jobs:
   # ============================================================================
   e2e:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     needs: [backend, frontend]
 
     services:
@@ -251,8 +251,14 @@ jobs:
 
       - name: Serve frontend
         run: |
-          npx serve frontend/dist -l 3000 &
+          cd frontend
+          npx vite preview --port 3000 &
           sleep 3
+          for i in 1 2 3 4 5; do
+            curl -s -o /dev/null -w "%{http_code}" http://localhost:3000/ && break
+            echo "Waiting for frontend (attempt $i)..."
+            sleep 3
+          done
 
       - name: Run Playwright E2E tests
         run: |
