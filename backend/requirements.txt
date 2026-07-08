@@ -8,8 +8,8 @@
 # ================================================================================
 # WEB FRAMEWORK
 # ================================================================================
-fastapi==0.104.1
-uvicorn[standard]==0.24.0
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
 python-multipart==0.0.6
 python-mimeparse==1.6.0
 
@@ -102,13 +102,6 @@ python-dateutil==2.8.2
 pytz==2023.3
 
 # ================================================================================
-# OCR - Tesseract (already included in Dockerfile)
-# srpski jezik: tesseract-ocr-srp
-# Surya OCR - modern ML-based OCR (fallback for better accuracy)
-# NOTE: surya-ocr requires Python 3.10+, not available for Python 3.8
-# surya-ocr  # Removed - requires Python 3.10+, not compatible with CI Python 3.8
-
-# ================================================================================
 # DEVELOPMENT & TESTING
 # ================================================================================
 pytest==7.4.3
@@ -138,7 +131,6 @@ mkdocs-material==9.4.14
 # ================================================================================
 # OPTIONAL (za produkciju)
 # ================================================================================
-# gunicorn==21.2.0
-# uvloop==0.19.0
-# hiredis==2.2.3
 slowapi==0.1.9
+crewai>=1.15.0
+bcrypt<4.1.0

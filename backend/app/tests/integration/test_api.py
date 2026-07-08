@@ -11,7 +11,7 @@ Pokretanje:
 """
 
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 from unittest.mock import patch
 
 
@@ -23,7 +23,7 @@ class TestHealthEndpoints:
         """Test /health endpoint-a."""
         from app.main import app
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/health")
 
         assert response.status_code == 200
@@ -35,7 +35,7 @@ class TestHealthEndpoints:
         """Test /live endpoint-a."""
         from app.main import app
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/live")
 
         assert response.status_code == 200
@@ -46,7 +46,7 @@ class TestHealthEndpoints:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=True):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         assert response.status_code == 200
@@ -60,7 +60,7 @@ class TestHealthEndpoints:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=False):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         assert response.status_code == 503
@@ -77,7 +77,7 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/api/v1/auth/register",
                 json={
@@ -102,7 +102,7 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/api/v1/auth/register",
                 json={
@@ -124,7 +124,7 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/api/v1/auth/login",
                 data={  # Login endpoint koristi Form() parametre (OAuth2)
@@ -149,7 +149,7 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/api/v1/auth/login",
                 data={  # Login endpoint koristi Form() parametre (OAuth2)
@@ -170,7 +170,7 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/api/v1/auth/me",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -190,7 +190,7 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/api/v1/auth/me")
 
         assert response.status_code == 401
@@ -205,7 +205,7 @@ class TestAuthEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.post(
                 "/api/v1/auth/refresh", params={"refresh_token": test_refresh_token}
             )
@@ -229,7 +229,7 @@ class TestUserEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/api/v1/users/me",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -249,7 +249,7 @@ class TestUserEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.put(
                 "/api/v1/users/me",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -272,7 +272,7 @@ class TestUserEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.put(
                 "/api/v1/users/me/password",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -294,7 +294,7 @@ class TestUserEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.put(
                 "/api/v1/users/me/password",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -321,7 +321,7 @@ class TestDocumentEndpoints:
         app.dependency_overrides[get_db] = lambda: db
 
         async with AsyncClient(
-            app=app, base_url="http://test", follow_redirects=True
+            transport=ASGITransport(app=app), base_url="http://test", follow_redirects=True
         ) as client:
             response = await client.get(
                 "/api/v1/documents/",
@@ -345,7 +345,7 @@ class TestDocumentEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 f"/api/v1/documents/{test_document.id}",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -366,7 +366,7 @@ class TestDocumentEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 "/api/v1/documents/00000000-0000-0000-0000-000000000000",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -386,7 +386,7 @@ class TestDocumentEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 f"/api/v1/documents/{test_document.id}/chunks",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -394,9 +394,12 @@ class TestDocumentEndpoints:
 
         assert response.status_code == 200
         data = response.json()
-        # chunks endpoint returns a list directly
-        assert isinstance(data, list)
-        assert len(data) >= 1
+        # chunks endpoint returns a paginated response
+        assert isinstance(data, dict)
+        assert "items" in data
+        assert isinstance(data["items"], list)
+        assert len(data["items"]) >= 1
+        assert data["total"] >= 1
 
         app.dependency_overrides.clear()
 
@@ -412,7 +415,7 @@ class TestDocumentEndpoints:
 
         chunk = test_chunks[0]
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.put(
                 f"/api/v1/documents/{test_document.id}/chunks/{chunk.id}",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -438,7 +441,7 @@ class TestFileEndpoints:
         app.dependency_overrides[get_db] = lambda: db
 
         async with AsyncClient(
-            app=app, base_url="http://test", follow_redirects=True
+            transport=ASGITransport(app=app), base_url="http://test", follow_redirects=True
         ) as client:
             response = await client.get(
                 "/api/v1/files/", headers={"Authorization": f"Bearer {test_user_token}"}
@@ -458,7 +461,7 @@ class TestFileEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get(
                 f"/api/v1/files/{test_file.id}",
                 headers={"Authorization": f"Bearer {test_user_token}"},
@@ -478,7 +481,7 @@ class TestFileEndpoints:
 
         app.dependency_overrides[get_db] = lambda: db
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.delete(
                 f"/api/v1/files/{test_file.id}",
                 headers={"Authorization": f"Bearer {test_user_token}"},

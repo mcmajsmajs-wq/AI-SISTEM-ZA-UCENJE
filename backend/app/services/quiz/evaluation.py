@@ -145,34 +145,9 @@ def _check_answer_static(
         except Exception:
             return False
 
-    elif q_type == "matching":
-        try:
-            correct_pairs = json.loads(correct_answer)
-            user_pairs = json.loads(user_answer)
-            return set(correct_pairs) == set(user_pairs)
-        except Exception:
-            return False
-
     elif q_type == "odd_one_out":
         correct_items = [i.strip().lower() for i in correct_answer.split(",")]
         return user_answer.strip().lower() in correct_items
-
-    elif q_type == "estimation":
-        try:
-            user_num = float(user_answer)
-            correct_num = float(correct_answer)
-            tolerance = float(extra_data.get("tolerance", 10)) if extra_data else 10
-            return abs(user_num - correct_num) <= tolerance
-        except Exception:
-            return False
-
-    elif q_type == "matrix":
-        try:
-            correct_answers = json.loads(correct_answer)
-            user_answers = json.loads(user_answer)
-            return correct_answers == user_answers
-        except Exception:
-            return False
 
     elif q_type == "hotspot":
         return user_answer == correct_answer

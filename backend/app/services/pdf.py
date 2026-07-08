@@ -225,6 +225,46 @@ class PDFService:
             logger.error(f"Error extracting text from page: {e}")
             return "" if not include_font_info else []
 
+    @staticmethod
+    def _preprocess_ocr_image(image):  # -> Image (PIL)
+        """
+        Preprocessing slike za bolji OCR.
+
+        Konvertuje u grayscale, primenjuje thresholding za binarizaciju,
+        povećava kontrast i uklanja šum.
+
+        Args:
+            image: PIL Image objekat
+
+        Returns:
+            Preprocessed PIL Image
+        """
+        try:
+            from PIL import Image as PILImage
+
+            # Konvertuj u grayscale
+            if image.mode != "L":
+                gray = image.convert("L")
+            else:
+                gray = image.copy()
+
+            # Povećaj kontrast (auto-level)
+            import numpy as np
+
+            arr = np.array(gray, dtype=np.float64)
+            if arr.max() - arr.min() > 10:
+                arr = (arr - arr.min()) / (arr.max() - arr.min()) * 255.0
+
+            # Binarizacija: Otsu-like threshold
+            arr_uint8 = arr.astype(np.uint8)
+            threshold = int(arr_uint8.mean() * 0.9)
+            binary = np.where(arr_uint8 < threshold, 0, 255).astype(np.uint8)
+
+            return PILImage.fromarray(binary, mode="L")
+        except Exception as e:
+            logger.warning(f"Image preprocessing failed (returning original): {e}")
+            return image
+
     def perform_ocr(
         self, pdf_bytes: bytes, page_numbers: List[int] = None, progress_callback=None
     ) -> Dict[int, str]:
@@ -261,7 +301,9 @@ class PDFService:
             for idx, image in enumerate(images):
                 page_num = page_numbers[idx] if page_numbers else idx
                 try:
-                    text = pytesseract.image_to_string(image, lang=self.ocr_language)
+                    # Preprocessing before OCR
+                    processed = self._preprocess_ocr_image(image)
+                    text = pytesseract.image_to_string(processed, lang=self.ocr_language)
                     ocr_results[page_num] = text.strip()
                 except Exception as e:
                     logger.error(f"OCR failed for page {page_num}: {e}")
@@ -318,26 +360,53 @@ class PDFService:
 
         return "\n".join(cleaned_lines)
 
+    @staticmethod
+    def _detect_ref_body_size(paragraphs: List[dict]) -> float:
+        """
+        Detektuje referentnu veličinu body teksta iz liste paragrafa.
+
+        Uzima median veličine svih ne-bold paragrafa (body text).
+        Ako nema dovoljno paragrafa, vraća 10.0 (default).
+
+        Args:
+            paragraphs: Lista diktova sa 'size' i 'is_bold' poljima
+
+        Returns:
+            Referentna veličina body fonta
+        """
+        sizes = [
+            p.get("size", 10)
+            for p in paragraphs
+            if not p.get("is_bold", False) and p.get("text", "").strip()
+        ]
+        if len(sizes) < 3:
+            return 10.0
+        sorted_sizes = sorted(sizes)
+        return sorted_sizes[len(sorted_sizes) // 2]
+
     def _detect_font_heading(
-        self, font: str, size: float, text: str
+        self,
+        font: str,
+        size: float,
+        text: str,
+        ref_body_size: Optional[float] = None,
     ) -> Tuple[int, Optional[str]]:
         """
         Detektuje heading na osnovu font informacija (veličina, bold).
 
+        Ako je dat ref_body_size, koristi relativne threshold-e umesto hardcodovanih.
+
         Args:
             font: Ime fonta
             size: Veličina fonta
-            text: Tekst段落
+            text: Tekst
+            ref_body_size: Referentna veličina body teksta (opciono)
 
         Returns:
             Tuple (heading_level, heading_text)
         """
         stripped = text.strip()
         if not stripped or len(stripped) < 3:
-            return 0, None
-
-        # Skip very short lines or single characters
-        if len(stripped) < 3:
             return 0, None
 
         # Skip lines with too many special characters (code blocks, etc)
@@ -349,17 +418,22 @@ class PDFService:
         is_bold = "bold" in font.lower() or "Bold" in font
         font_size = size
 
-        # Major headings: Bold + Size >= 14
-        if is_bold and font_size >= 14:
-            return 1, stripped
-
-        # Section headings: Bold + Size >= 11
-        if is_bold and font_size >= 11:
-            return 2, stripped
-
-        # Minor headings: Bold + Size >= 9
-        if is_bold and font_size >= 9:
-            return 3, stripped
+        if ref_body_size and ref_body_size > 0:
+            # Relativni threshold-i: H1 = 40% veci od body, H2 = 20%, H3 = 10%
+            if is_bold and font_size >= ref_body_size * 1.35:
+                return 1, stripped
+            if is_bold and font_size >= ref_body_size * 1.15:
+                return 2, stripped
+            if is_bold and font_size >= ref_body_size * 1.05:
+                return 3, stripped
+        else:
+            # Hardcodovani threshold-i (backward compat)
+            if is_bold and font_size >= 14:
+                return 1, stripped
+            if is_bold and font_size >= 11:
+                return 2, stripped
+            if is_bold and font_size >= 9:
+                return 3, stripped
 
         return 0, None
 
@@ -420,8 +494,84 @@ class PDFService:
 
         return paragraphs
 
+    def _detect_tables_on_page(self, page: fitz.Page) -> List[Dict]:
+        """
+        Detektuje tabele na stranici koristeći PyMuPDF find_tables().
+
+        Args:
+            page: fitz.Page objekat
+
+        Returns:
+            Lista dict-ova sa tabelama:
+            [{
+                "bbox": [x0, y0, x1, y1],
+                "rows": int,
+                "cols": int,
+                "header": [str, ...],
+                "data": [[str, ...], ...],
+                "markdown": str (tabela u markdown formatu)
+            }, ...]
+        """
+        tables = []
+        try:
+            found = page.find_tables()
+            for table in found.tables:
+                header = table.header.names if table.header else []
+                data = table.extract()
+                rows = len(data)
+                cols = len(data[0]) if data else 0
+
+                # Markdown reprezentacija
+                md_lines = []
+                if header:
+                    md_lines.append("| " + " | ".join(header) + " |")
+                    md_lines.append("| " + " | ".join(["---"] * len(header)) + " |")
+                for row in data:
+                    md_lines.append("| " + " | ".join(str(c) for c in row) + " |")
+
+                tables.append({
+                    "bbox": list(table.bbox) if hasattr(table, "bbox") else None,
+                    "rows": rows,
+                    "cols": cols,
+                    "header": header,
+                    "data": data,
+                    "markdown": "\n".join(md_lines),
+                })
+            return tables
+        except Exception as e:
+            logger.warning(f"Table detection failed: {e}")
+            return []
+
+    def detect_tables_on_pages(
+        self, pdf_document: fitz.Document, page_numbers: List[int] = None
+    ) -> Dict[int, List[Dict]]:
+        """
+        Detektuje tabele na zadatim stranicama PDF-a.
+
+        Args:
+            pdf_document: fitz.Document objekat
+            page_numbers: Lista brojeva stranica (None = sve)
+
+        Returns:
+            Dict mapping page_number -> [table_dict, ...]
+        """
+        result = {}
+        pages_to_check = page_numbers or range(len(pdf_document))
+        for page_num in pages_to_check:
+            if page_num < 0 or page_num >= len(pdf_document):
+                continue
+            page = pdf_document[page_num]
+            tables = self._detect_tables_on_page(page)
+            if tables:
+                result[page_num] = tables
+        return result
+
     def detect_heading(
-        self, text: str, font: str = None, size: float = None
+        self,
+        text: str,
+        font: str = None,
+        size: float = None,
+        ref_body_size: Optional[float] = None,
     ) -> Tuple[int, Optional[str]]:
         """
         Detektuje da li je tekst heading i vraća nivo.
@@ -430,6 +580,7 @@ class PDFService:
             text: Tekst za analizu
             font: Ime fonta (opciono)
             size: Veličina fonta (opciono)
+            ref_body_size: Referentna veličina body teksta (opciono)
 
         Returns:
             Tuple (level, heading_text)
@@ -441,7 +592,7 @@ class PDFService:
 
         # Prvo probaj font-based detection
         if font and size:
-            level, heading = self._detect_font_heading(font, size, stripped)
+            level, heading = self._detect_font_heading(font, size, stripped, ref_body_size)
             if level > 0:
                 return level, heading
 
@@ -586,6 +737,9 @@ class PDFService:
         if not paragraphs:
             return []
 
+        # Detektuj ref body size pre chunkovanja za adaptivne heading threshold-e
+        ref_body_size = self._detect_ref_body_size(paragraphs)
+
         chunks = []
         current_chunk_text = ""
         current_tokens = 0
@@ -635,8 +789,8 @@ class PDFService:
                 "is_bold": bool(is_bold),
             }
 
-            # Detektuj heading koristeći font info prvo
-            heading_level, heading_text = self.detect_heading(text, font, size)
+            # Detektuj heading koristeći font info i adaptivne threshold-e
+            heading_level, heading_text = self.detect_heading(text, font, size, ref_body_size)
 
             if heading_level > 0:
                 _flush_chunk()
@@ -663,6 +817,29 @@ class PDFService:
                 continue
 
             para_tokens = self.count_tokens(text)
+
+            # Ako je jedan pasus veći od chunk_size, podeli ga na rečeničnim granicama
+            if para_tokens > self.chunk_size and not current_chunk_text:
+                sentence_parts = self._split_at_sentence_boundary(
+                    text, self.chunk_size
+                )
+                for part_text, part_tokens in sentence_parts:
+                    chunks.append(
+                        ChunkData(
+                            sequence_number=sequence,
+                            content=part_text,
+                            token_count=part_tokens,
+                            heading_level=current_heading_level,
+                            parent_heading=current_parent_heading,
+                            page_number=page_number,
+                            layout_data={
+                                "paragraphs": [para_layout],
+                                "page_number": page_number,
+                            },
+                        )
+                    )
+                    sequence += 1
+                continue
 
             if current_tokens + para_tokens > self.chunk_size and current_chunk_text:
                 _flush_chunk()
@@ -703,6 +880,94 @@ class PDFService:
             )
 
         return chunks
+
+    def _split_at_sentence_boundary(
+        self, text: str, max_tokens: int
+    ) -> List[Tuple[str, int]]:
+        """
+        Deli tekst na rečeničnim granicama tako da svaki deo ima <= max_tokens.
+
+        Args:
+            text: Tekst za deljenje
+            max_tokens: Maksimalan broj tokena po delu
+
+        Returns:
+            Lista (text, token_count) tuples
+        """
+        if self.count_tokens(text) <= max_tokens:
+            return [(text, self.count_tokens(text))]
+
+        # Podeli na rečenice (tačka, !, ?, i srpski znaci)
+        sentences = re.split(
+            r"(?<=[.!?])\s+|(?<=[.!?])\n+|(?<=[.!?])\s*\n\s*", text
+        )
+        # Filtriraj prazne
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        parts = []
+        current_part = []
+        current_tokens = 0
+
+        for sentence in sentences:
+            sentence_tokens = self.count_tokens(sentence)
+
+            # Ako je jedna rečenica veca od max_tokens, moramo da je ostavimo (ne secimo rečenicu)
+            if (
+                sentence_tokens > max_tokens
+                and not current_part
+            ):
+                parts.append((sentence, sentence_tokens))
+                continue
+
+            if current_tokens + sentence_tokens > max_tokens and current_part:
+                part_text = " ".join(current_part)
+                parts.append((part_text, self.count_tokens(part_text)))
+                current_part = [sentence]
+                current_tokens = sentence_tokens
+            else:
+                current_part.append(sentence)
+                current_tokens += sentence_tokens
+
+        if current_part:
+            part_text = " ".join(current_part)
+            parts.append((part_text, self.count_tokens(part_text)))
+
+        return parts if parts else [(text, self.count_tokens(text))]
+
+    @staticmethod
+    def _deduplicate_chunks(chunks: List[ChunkData]) -> List[ChunkData]:
+        """
+        Uklanja duplikate chunk-ova na osnovu sadržaja.
+
+        Čuva prvi chunk, uklanja sve naredne sa istim ili sličnim sadržajem.
+        Heading chunkovi (heading_level > 0) se ne deduplikuju jer su
+        namerno na više mesta (heading + body). Samo body chunkovi.
+
+        Args:
+            chunks: Lista ChunkData objekata
+
+        Returns:
+            Lista ChunkData bez duplikata
+        """
+        seen: set = set()
+        result = []
+
+        for chunk in chunks:
+            if chunk.heading_level > 0:
+                result.append(chunk)
+                continue
+
+            normalized = re.sub(r"\s+", " ", chunk.content.strip().lower())
+            if not normalized:
+                continue
+
+            if normalized in seen:
+                continue
+
+            seen.add(normalized)
+            result.append(chunk)
+
+        return result
 
     def _get_overlap_text(self, text: str) -> str:
         """
@@ -824,6 +1089,15 @@ class PDFService:
                     progress_callback(
                         page_num + 1, metadata.total_pages, len(all_chunks)
                     )
+
+            # Deduplikacija chunk-ova (samo body, heading se čuvaju)
+            before_dedup = len(all_chunks)
+            all_chunks = self._deduplicate_chunks(all_chunks)
+            if before_dedup != len(all_chunks):
+                logger.info(
+                    f"Deduplication removed {before_dedup - len(all_chunks)} duplicate chunks "
+                    f"({before_dedup} -> {len(all_chunks)})"
+                )
 
             logger.info(
                 f"PDF processing completed: {metadata.total_pages} pages, "

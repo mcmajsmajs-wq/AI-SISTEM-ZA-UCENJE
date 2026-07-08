@@ -31,6 +31,7 @@ from app.db.models.knowledge import (
     KnowledgeDocumentSummary,
 )  # noqa
 from app.db.models.gamification import Badge, UserBadge  # noqa
+from app.db.models.flashcard import Deck, Flashcard, ReviewLog  # noqa
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.

@@ -14,7 +14,8 @@ import {
   BarChart2,
   Brain,
   Activity,
-  Trophy
+  Trophy,
+  GraduationCap
 } from 'lucide-react'
 import { useState } from 'react'
 import clsx from 'clsx'
@@ -24,6 +25,7 @@ const navigation = [
   { name: 'Dokumenti', href: '/documents', icon: FileText },
   { name: 'Pregled prevoda', href: '/review', icon: PenTool },
   { name: 'Kvizovi', href: '/quizzes', icon: BookOpen },
+  { name: 'Flash kartice', href: '/flashcards', icon: GraduationCap },
   { name: 'Test Inteligencije', href: '/intelligence-test', icon: Brain },
   { name: 'Baza Znanja', href: '/knowledge', icon: Brain },
   { name: 'Analitika', href: '/analytics', icon: BarChart2 },
@@ -37,6 +39,7 @@ const pageTitles: Record<string, string> = {
   '/documents': 'Dokumenti',
   '/review': 'Pregled prevoda',
   '/quizzes': 'Kvizovi',
+  '/flashcards': 'Flash kartice',
   '/intelligence-test': 'Test Inteligencije',
   '/knowledge': 'Baza Znanja',
   '/analytics': 'Analitika',
@@ -61,7 +64,9 @@ export default function Layout() {
      location.pathname.startsWith('/review/') ? 'Pregled prevoda' :
      location.pathname.includes('/play') ? 'Igraj kviz' :
      location.pathname.includes('/results') ? 'Rezultati kviza' :
-     location.pathname.startsWith('/quizzes/') ? 'Kviz' : 'AI Learning')
+      location.pathname.startsWith('/quizzes/') ? 'Kviz' :
+      location.pathname.startsWith('/flashcards') ? 'Flash kartice' :
+      location.pathname.startsWith('/decks/') ? 'Špil kartica' : 'AI Learning')
 
   const userInitial = (user?.full_name?.[0] || user?.email?.[0] || 'U').toUpperCase()
 

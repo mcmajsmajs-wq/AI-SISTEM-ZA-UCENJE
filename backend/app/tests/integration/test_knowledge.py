@@ -382,7 +382,7 @@ class TestKnowledgeBaseApiEndpoint:
         """POST /knowledge/query mora da vrati AI odgovor."""
         from app.main import app
         from app.db.session import get_db
-        from httpx import AsyncClient
+        from httpx import AsyncClient, ASGITransport
 
         app.dependency_overrides[get_db] = lambda: db
 
@@ -398,7 +398,7 @@ class TestKnowledgeBaseApiEndpoint:
                     "has_context": True,
                 }
 
-                async with AsyncClient(app=app, base_url="http://test") as client:
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                     response = await client.post(
                         "/api/v1/knowledge/query",
                         json={"query": "What is LightBurn?", "provider": "gemini"},
@@ -415,12 +415,12 @@ class TestKnowledgeBaseApiEndpoint:
         """POST /knowledge/query bez 'query' polja mora da vrati 422."""
         from app.main import app
         from app.db.session import get_db
-        from httpx import AsyncClient
+        from httpx import AsyncClient, ASGITransport
 
         app.dependency_overrides[get_db] = lambda: db
 
         try:
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/api/v1/knowledge/query",
                     json={},  # missing 'query' field

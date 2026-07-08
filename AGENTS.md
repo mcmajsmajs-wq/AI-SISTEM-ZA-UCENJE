@@ -919,6 +919,65 @@ PDF/DOCX export jeo je require-ovao translated content (`translated_content IS N
 - `docker-app` - Restartovan posle promena
 
 ---
+---
+
+## 🔧 FAZA 14 - Quiz Service Modularizacija — Phase 4 (2026-07-02)
+
+### Sta je uradjeno
+
+Extractovane funkcije za generisanje pitanja iz `service.py` u novi `generation.py`.
+
+### Izmenjeni fajlovi
+
+| Fajl | Promena |
+|------|---------|
+| `backend/app/services/quiz/generation.py` | **NOVI** — sadrzi generisanje pitanja + subject detection |
+| `backend/app/services/quiz/service.py` | Uklonjeno ~250 linija koda, ostavljeni thin wrapperi |
+
+### Extraction mapping
+
+| Funkcija | Stara lokacija | Nova lokacija |
+|----------|----------------|---------------|
+| `_auto_num_questions` | `service.py` (modul nivo) | `generation.py` (modul nivo) |
+| `_get_image_for_vision` | `QuizService` (metod) | `generation.py` (modul nivo) |
+| `generate_questions_with_ai` | `QuizService` (metod) | `generation.py` (modul nivo) |
+| `generate_quiz_questions` | `QuizService` (metod) | `generation.py` (modul nivo) + thin wrapper u `service.py` |
+| `detect_subject_area` | `service.py` (modul nivo) | `generation.py` (modul nivo) |
+| `_detect_subject_fallback` | `service.py` (modul nivo) | `generation.py` (modul nivo) |
+| `get_specialized_prompt` | `service.py` (modul nivo) | `generation.py` (modul nivo) |
+
+### Moduli fajlovi — trenutni status (Phase 1-4)
+
+```
+backend/app/services/quiz/
+├── __init__.py
+├── service.py          ← glavna klasa QuizService
+├── generation.py       ← NOVI: generisanje pitanja
+├── evaluation.py       ← Phase 3: evaluacija odgovora
+├── helpers/            ← Phase 2: helper funkcije
+├── clients/            ← Phase 1: AI klijenti
+└── prompts/            ← Phase 1: prompt template-ovi
+```
+
+### Modul zavisnosti
+
+```
+service.py → generation.py (generate_quiz_questions wrapper)
+            → evaluation.py (answer checking)
+            
+generation.py → helpers/ (subject_detection, structure detection)
+               → clients/ (AI providers)
+               → prompts/ (quiz prompts, subject prompts)
+```
+
+### Verifikacija
+
+- ✅ **111 testova** (test_quiz_prompts_helpers, test_quiz_modules, test_quiz_clients)
+- ✅ **Importi**: `QuizService`, `quiz_service`, `generation.py` svi rade
+- ✅ **Thin wrapper**: service.py `generate_quiz_questions` delegira u generation.py
+- ✅ **Backward compatibility**: nista nije polomljeno
+
+---
 
 ## Dokumentacija
 

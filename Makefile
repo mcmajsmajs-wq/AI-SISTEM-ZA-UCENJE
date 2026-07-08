@@ -62,7 +62,7 @@ build-frontend: ## Izgradi frontend Docker image
 .PHONY: build-mcp
 build-mcp: ## Izgradi MCP server Docker image
 	@echo "$(BOLD)Izgradnja MCP server image...$(NC)"
-	docker build -t ai-learning-mcp:$(TAG) ./$(BACKEND_DIR)/../mcp-server
+	docker build -t ai-learning-mcp:$(TAG) /home/dju/MCP_Servers/mcp-server
 	@echo "$(GREEN)✅ MCP server izgrađen!$(NC)"
 
 .PHONY: build-prod

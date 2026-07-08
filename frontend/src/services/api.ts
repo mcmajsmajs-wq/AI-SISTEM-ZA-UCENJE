@@ -9,7 +9,7 @@ const api = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  timeout: 30000,
+  timeout: 120000,
   maxRedirects: 5,
 })
 
@@ -322,6 +322,35 @@ export const quizzesApi = {
       provider?: string
     }
   ) => api.post(`/quizzes/${quizId}/chat`, data),
+}
+
+export const flashcardsApi = {
+  createDeck: (data: { name: string; description?: string | null; source_document_id?: string | null }) =>
+    api.post('/decks', data),
+
+  listDecks: () =>
+    api.get('/decks'),
+
+  getDeck: (id: string) =>
+    api.get(`/decks/${id}`),
+
+  deleteDeck: (id: string) =>
+    api.delete(`/decks/${id}`),
+
+  addCard: (deckId: string, data: { front: string; back: string }) =>
+    api.post(`/decks/${deckId}/cards`, data),
+
+  deleteCard: (deckId: string, cardId: string) =>
+    api.delete(`/decks/${deckId}/cards/${cardId}`),
+
+  getDueCards: (deckId?: string) =>
+    api.get('/flashcards/review', { params: { deck_id: deckId, limit: 100 } }),
+
+  reviewCard: (cardId: string, data: { quality: number }) =>
+    api.post(`/flashcards/${cardId}/review`, data),
+
+  generateFromDocument: (documentId: string, data?: { mode?: string; max_cards?: number; deck_name?: string | null; deck_id?: string | null }) =>
+    api.post(`/documents/${documentId}/generate-flashcards`, data || {}),
 }
 
 export const healthApi = {

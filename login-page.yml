@@ -1,0 +1,32 @@
+- generic [ref=e5]:
+  - generic [ref=e6]:
+    - img [ref=e8]
+    - heading "AI Learning" [level=1] [ref=e10]
+  - generic [ref=e11]:
+    - generic [ref=e12]:
+      - heading "Dobrodošli nazad" [level=2] [ref=e13]
+      - paragraph [ref=e14]: Prijavite se da nastavite učenje
+    - generic [ref=e15]:
+      - generic [ref=e16]:
+        - generic [ref=e17]: Email adresa
+        - generic [ref=e18]:
+          - img [ref=e19]
+          - textbox "Email adresa" [ref=e22]:
+            - /placeholder: vas@email.com
+      - generic [ref=e23]:
+        - generic [ref=e24]: Lozinka
+        - generic [ref=e25]:
+          - img [ref=e26]
+          - textbox "Lozinka" [ref=e29]:
+            - /placeholder: ••••••••
+          - button [ref=e30] [cursor=pointer]:
+            - img [ref=e31]
+      - button "Prijavi se" [ref=e34] [cursor=pointer]:
+        - text: Prijavi se
+        - img [ref=e35]
+      - link "Zaboravili ste lozinku?" [ref=e38] [cursor=pointer]:
+        - /url: /forgot-password
+    - paragraph [ref=e40]:
+      - text: Nemate nalog?
+      - link "Registrujte se besplatno" [ref=e41] [cursor=pointer]:
+        - /url: /register

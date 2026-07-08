@@ -16,7 +16,7 @@ Pokretanje:
 
 import pytest
 from unittest.mock import patch
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 
 
 class TestReadyEndpointWithMocks:
@@ -28,7 +28,7 @@ class TestReadyEndpointWithMocks:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=True):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         assert response.status_code == 200
@@ -43,7 +43,7 @@ class TestReadyEndpointWithMocks:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=False):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         assert response.status_code == 503
@@ -57,7 +57,7 @@ class TestReadyEndpointWithMocks:
             "app.db.session.check_database_connection",
             side_effect=Exception("Connection failed"),
         ):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         assert response.status_code == 503
@@ -68,7 +68,7 @@ class TestReadyEndpointWithMocks:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=True):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         data = response.json()
@@ -93,7 +93,7 @@ class TestReadyEndpointEdgeCases:
         with patch(
             "app.db.session.check_database_connection", side_effect=slow_connection
         ):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 try:
                     response = await client.get("/ready", timeout=1.0)
                 except Exception:
@@ -108,7 +108,7 @@ class TestReadyEndpointEdgeCases:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=None):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         assert response.status_code == 503
@@ -123,7 +123,7 @@ class TestReadyEndpointContract:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=True):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         data = response.json()
@@ -135,7 +135,7 @@ class TestReadyEndpointContract:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=True):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         data = response.json()
@@ -147,7 +147,7 @@ class TestReadyEndpointContract:
         from app.main import app
 
         with patch("app.db.session.check_database_connection", return_value=True):
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.get("/ready")
 
         data = response.json()

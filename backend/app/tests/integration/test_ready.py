@@ -19,7 +19,7 @@ ILI CI/CD pipeline:
 """
 
 import pytest
-from httpx import AsyncClient
+from httpx import AsyncClient, ASGITransport
 
 
 class TestReadyEndpointIntegration:
@@ -42,7 +42,7 @@ class TestReadyEndpointIntegration:
         """
         from app.main import app
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             response = await client.get("/ready")
 
         # Sada testira PRAVU konekciju
@@ -69,7 +69,7 @@ class TestReadyEndpointIntegration:
 
         try:
             async with AsyncClient(
-                app=app,
+                transport=ASGITransport(app=app),
                 base_url="http://test",
                 timeout=5.0,  # 5 sekundi timeout
             ) as client:
@@ -90,7 +90,7 @@ class TestReadyEndpointIntegration:
         """
         from app.main import app
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             # /health uvek radi
             health_response = await client.get("/health")
             assert health_response.status_code == 200
@@ -115,7 +115,7 @@ class TestReadyEndpointDatabaseConnection:
         """
         from app.main import app
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             responses = []
             for _ in range(5):
                 response = await client.get("/ready")
@@ -137,7 +137,7 @@ class TestReadyEndpointDatabaseConnection:
         from app.main import app
         import time
 
-        async with AsyncClient(app=app, base_url="http://test") as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             start = time.time()
 
             # 10 paralelnih zahteva

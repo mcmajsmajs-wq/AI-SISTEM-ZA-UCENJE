@@ -58,9 +58,9 @@ WORKDIR /app
 # ================================================================================
 # INSTALL PYTHON DEPENDENCIES
 # ================================================================================
-COPY requirements.txt .
-RUN pip install --no-cache-dir --upgrade pip && \
-    pip install --no-cache-dir -r requirements.txt
+COPY requirements*.txt .
+RUN pip install --no-cache-dir -r requirements.txt && \
+    pip install --no-cache-dir -r requirements-crewai.txt
 
 # ================================================================================
 # COPY APPLICATION CODE

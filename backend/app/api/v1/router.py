@@ -24,6 +24,7 @@ from app.api.endpoints import intelligence_test
 from app.api.endpoints import chat
 from app.api.endpoints import providers
 from app.api.endpoints import gamification
+from app.api.endpoints import flashcards
 
 # ================================================================================
 # GLAVNI API ROUTER
@@ -119,6 +120,13 @@ api_router.include_router(
     gamification.router,
     prefix="/gamification",
     tags=["Gamification"]
+)
+
+# Flashcards
+api_router.include_router(
+    flashcards.router,
+    prefix="",
+    tags=["Flashcards"]
 )
 
 # TODO: Dodati ostale endpoint-e kada se implementiraju:

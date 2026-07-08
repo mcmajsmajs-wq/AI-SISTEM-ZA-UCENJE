@@ -192,7 +192,7 @@ async def get_quiz_providers_list(
     db: Session = Depends(get_db),
 ):
     """Dohvata listu svih dostupnih quiz providera."""
-    from app.services.quiz.quiz_validator import get_available_providers
+    from app.services.quiz.clients import get_available_providers
 
     providers = get_available_providers()
     return {"providers": providers}

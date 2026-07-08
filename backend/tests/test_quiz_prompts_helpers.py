@@ -246,7 +246,7 @@ class TestChunkQuality:
         """Test da validan chunk prolazi."""
         from app.services.quiz.helpers import is_chunk_quality
 
-        text = "Ovo je validan tekst chunka koji ima dovoljno sadrzaja za quiz."
+        text = "Ovo je validan tekst chunka koji ima dovoljno sadrzaja za generisanje pitanja i dalju obradu u sistemu za ucenje."
         result = is_chunk_quality(text)
 
         assert result is True
@@ -279,6 +279,60 @@ class TestChunkQuality:
         assert result is False
 
 
+class TestChunkQualityScore:
+    """Testovi za chunk_quality_score."""
+
+    def test_score_empty_text(self):
+        """Prazan tekst vraca 0.0."""
+        from app.services.quiz.helpers import chunk_quality_score
+
+        assert chunk_quality_score("") == 0.0
+        assert chunk_quality_score("   ") == 0.0
+
+    def test_score_quality_text(self):
+        """Kvalitetan tekst ima visok score."""
+        from app.services.quiz.helpers import chunk_quality_score
+
+        text = "Ovo je kvalitetan chunk text koji ima dovoljno karaktera da bi bio visoko rangiran od strane sistema za skorovanje."
+        score = chunk_quality_score(text)
+        assert score >= 0.8
+
+    def test_score_low_quality_pattern(self):
+        """Low quality pattern smanjuje score."""
+        from app.services.quiz.helpers import chunk_quality_score
+
+        text = "All rights reserved. No part of this publication may be reproduced without permission of the publisher."
+        score = chunk_quality_score(text)
+        assert score == 0.8  # 1.0 - 0.3 (pattern) + 0.05 (uppercase) + 0.05 (period)
+
+    def test_score_heading_bonus(self):
+        """Heading daje bonus."""
+        from app.services.quiz.helpers import chunk_quality_score
+
+        text = "Chapter 1: Introduction\nThis is a long enough text that should get a bonus for having a clear heading at the start of the chunk and being well structured."
+        score = chunk_quality_score(text)
+        assert score > 0.5
+
+    def test_score_empty_returns_zero(self):
+        """Prazan chunk vraca 0.0."""
+        from app.services.quiz.helpers import chunk_quality_score
+
+        assert chunk_quality_score("") == 0.0
+
+    def test_score_is_float_between_0_and_1(self):
+        """Score je uvek float izmedju 0.0 i 1.0."""
+        from app.services.quiz.helpers import chunk_quality_score
+
+        texts = [
+            "",
+            "Short",
+            "Kvalitetan chunk text koji ima dovoljno karaktera za testiranje skorova i proveru opsega.",
+        ]
+        for t in texts:
+            s = chunk_quality_score(t)
+            assert 0.0 <= s <= 1.0, f"Score {s} out of range for text: {t!r}"
+
+
 class TestSelectChunksForQuiz:
     """Testovi za selekciju chunk-ova."""
 
@@ -307,9 +361,9 @@ class TestSelectChunksForQuiz:
         from app.services.quiz.helpers import select_chunks_for_quiz, is_chunk_quality
 
         chunks = [
-            {"text": "Valid content here with enough text to pass the quality check"},
+            {"text": "Valid content here with enough text to pass the quality check and be used for generating quiz questions in the learning system."},
             {"text": "Copyright 2024 all rights reserved"},
-            {"text": "Another valid content chunk with sufficient text"},
+            {"text": "Another valid content chunk with sufficient text for passing quality filters and generating educational content."},
         ]
         result = select_chunks_for_quiz(chunks)
 

@@ -30,7 +30,7 @@ export default function QuizResultsPage() {
   const resultFromState: AttemptResult | undefined = location.state?.result
 
   // Fetch specific attempt if attemptId provided, otherwise fetch latest
-  const { data: fetchedData, isLoading } = useQuery({
+  const { data: fetchedData, isLoading, isError } = useQuery({
     queryKey: ['attempt-result', quizId, attemptId ?? 'latest'],
     queryFn: () =>
       attemptId
@@ -40,6 +40,15 @@ export default function QuizResultsPage() {
   })
 
   const result: AttemptResult | null = resultFromState ?? (fetchedData as any)?.data ?? null
+
+  if (isError) {
+    return (
+      <div className="max-w-2xl mx-auto text-center py-24">
+        <p className="text-gray-600 font-semibold mb-4">Rezultat nije moguće učitati.</p>
+        <button onClick={() => navigate('/quizzes')} className="btn-primary">Svi kvizovi</button>
+      </div>
+    )
+  }
 
   if (isLoading) {
     return (
@@ -65,9 +74,10 @@ export default function QuizResultsPage() {
     )
   }
 
-  const correct = result.answers.filter((a) => a.is_correct).length
-  const total = result.answers.length
-  const passed = result.passed
+  const answers = result.answers ?? []
+  const correct = answers.filter((a) => a.is_correct).length
+  const total = answers.length
+  const passed = result.passed ?? false
 
   const scoreColor = passed ? 'text-green-600' : 'text-red-500'
   const scoreBg = passed
@@ -88,10 +98,10 @@ export default function QuizResultsPage() {
           {passed ? '🎉 Odlično! Položio si kviz!' : 'Nije uspelo ovog puta. Pokušaj ponovo!'}
         </p>
         <p className={clsx('text-6xl font-extrabold mt-2', scoreColor)}>
-          {result.percentage.toFixed(0)}%
+          {(result.percentage ?? 0).toFixed(0)}%
         </p>
         <p className="text-gray-500 text-sm mt-2">
-          {result.score} / {result.total_points} poena · {correct}/{total} tačnih
+          {result.score ?? 0} / {result.total_points ?? 0} poena · {correct}/{total} tačnih
         </p>
       </div>
 

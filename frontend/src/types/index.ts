@@ -259,3 +259,81 @@ export interface CostEstimate {
   currency: string
   character_count: number
 }
+
+export interface Deck {
+  id: string
+  user_id: string
+  name: string
+  description: string | null
+  source_document_id: string | null
+  total_cards: number
+  due_today: number
+  created_at: string
+  updated_at: string
+}
+
+export interface DeckCreate {
+  name: string
+  description?: string | null
+  source_document_id?: string | null
+}
+
+export interface Flashcard {
+  id: string
+  deck_id: string
+  front: string
+  back: string
+  source_chunk_id: string | null
+  order_index: number
+  created_at: string
+  updated_at: string
+}
+
+export interface ReviewLog {
+  id: string
+  card_id: string
+  user_id: string
+  quality: number
+  ease_factor: number
+  interval: number
+  repetitions: number
+  next_review_at: string
+  reviewed_at: string
+}
+
+export interface ReviewRequest {
+  quality: number
+}
+
+export interface ReviewResponse {
+  card_id: string
+  quality: number
+  next_review_at: string
+  interval: number
+  ease_factor: number
+  repetitions: number
+  xp_awarded: number
+  total_xp: number
+  level: number
+  leveled_up: boolean
+  new_badges: { slug: string; name: string; icon_name: string; xp_reward: number }[]
+}
+
+export interface DueCardsResponse {
+  cards: Flashcard[]
+  total: number
+  items: Flashcard[]
+}
+
+export interface GenerateFlashcardsRequest {
+  mode?: 'auto' | 'ai'
+  max_cards?: number
+  deck_name?: string | null
+}
+
+export interface GenerateFlashcardsResponse {
+  deck: Deck
+  cards_created: number
+  mode: string
+  provider_used?: string | null
+}

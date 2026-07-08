@@ -23,6 +23,9 @@ import TranslationsPage from '@/pages/TranslationsPage'
 import IntelligenceTestPage from '@/pages/IntelligenceTestPage'
 import ProviderHealthPage from '@/pages/ProviderHealthPage'
 import AchievementsPage from '@/pages/AchievementsPage'
+import FlashcardsPage from '@/pages/FlashcardsPage'
+import DeckDetailPage from '@/pages/DeckDetailPage'
+import FlashcardReviewPage from '@/pages/FlashcardReviewPage'
 import NotFoundPage from '@/pages/NotFoundPage'
 
 function App() {
@@ -82,6 +85,9 @@ function App() {
         <Route path="intelligence-test" element={<IntelligenceTestPage />} />
         <Route path="providers" element={<ProviderHealthPage />} />
         <Route path="achievements" element={<AchievementsPage />} />
+        <Route path="flashcards" element={<FlashcardsPage />} />
+        <Route path="decks/:deckId" element={<DeckDetailPage />} />
+        <Route path="flashcards/review/:deckId" element={<FlashcardReviewPage />} />
       </Route>
       
       <Route path="*" element={<NotFoundPage />} />

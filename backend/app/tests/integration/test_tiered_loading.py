@@ -517,7 +517,7 @@ class TestTieredApiEndpoint:
     async def test_tiered_endpoint_returns_answer(self, db):
         app = self._try_import_app()
         from app.db.session import get_db
-        from httpx import AsyncClient
+        from httpx import AsyncClient, ASGITransport
 
         app.dependency_overrides[get_db] = lambda: db
 
@@ -533,7 +533,7 @@ class TestTieredApiEndpoint:
                     "has_context": True,
                 }
 
-                async with AsyncClient(app=app, base_url="http://test") as client:
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                     response = await client.post(
                         "/api/v1/knowledge/query/tiered",
                         json={"query": "What is this?", "provider": "gemini"},
@@ -548,12 +548,12 @@ class TestTieredApiEndpoint:
     async def test_tiered_endpoint_requires_query_field(self, db):
         app = self._try_import_app()
         from app.db.session import get_db
-        from httpx import AsyncClient
+        from httpx import AsyncClient, ASGITransport
 
         app.dependency_overrides[get_db] = lambda: db
 
         try:
-            async with AsyncClient(app=app, base_url="http://test") as client:
+            async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                 response = await client.post(
                     "/api/v1/knowledge/query/tiered",
                     json={},
@@ -567,7 +567,7 @@ class TestTieredApiEndpoint:
     async def test_tiered_endpoint_returns_l0_l1_counts(self, db):
         app = self._try_import_app()
         from app.db.session import get_db
-        from httpx import AsyncClient
+        from httpx import AsyncClient, ASGITransport
 
         app.dependency_overrides[get_db] = lambda: db
 
@@ -583,7 +583,7 @@ class TestTieredApiEndpoint:
                     "has_context": True,
                 }
 
-                async with AsyncClient(app=app, base_url="http://test") as client:
+                async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
                     response = await client.post(
                         "/api/v1/knowledge/query/tiered",
                         json={"query": "test", "provider": "gemini"},

@@ -580,6 +580,251 @@ class TestProcessingResult:
         assert len(result.chunks) == 0
 
 
+class TestAdaptiveHeadingDetection:
+    """Testovi za adaptivne heading threshold-e."""
+
+    def test_detect_ref_body_size_standard(self):
+        """Detekcija ref body size sa normalnim paragrafima."""
+        paragraphs = [
+            {"text": "Normal text", "size": 10, "is_bold": False},
+            {"text": "More text", "size": 10, "is_bold": False},
+            {"text": "Even more", "size": 11, "is_bold": False},
+            {"text": "Short", "size": 9, "is_bold": False},
+        ]
+        ref = PDFService._detect_ref_body_size(paragraphs)
+        assert ref == 10.0
+
+    def test_detect_ref_body_size_few_paragraphs(self):
+        """Kad je manje od 3 paragrafa, vraća default 10."""
+        paragraphs = [
+            {"text": "Only one", "size": 8, "is_bold": False},
+        ]
+        ref = PDFService._detect_ref_body_size(paragraphs)
+        assert ref == 10.0
+
+    def test_detect_ref_body_size_ignores_bold(self):
+        """Bold paragrafi se ignorišu (to su heading-i)."""
+        paragraphs = [
+            {"text": "Body text", "size": 10, "is_bold": False},
+            {"text": "Bold heading", "size": 16, "is_bold": True},
+            {"text": "More body", "size": 10, "is_bold": False},
+            {"text": "More body", "size": 10, "is_bold": False},
+        ]
+        ref = PDFService._detect_ref_body_size(paragraphs)
+        assert ref == 10.0
+
+    def test_adaptive_heading_h1(self):
+        """H1 se detektuje sa relativnim threshold-om (1.35x body)."""
+        service = PDFService()
+        level, heading = service._detect_font_heading("BoldFont", 14, "Chapter 1", ref_body_size=10.0)
+        assert level == 1
+        assert heading == "Chapter 1"
+
+    def test_adaptive_heading_h2(self):
+        """H2 se detektuje sa 1.15x body."""
+        service = PDFService()
+        level, heading = service._detect_font_heading("BoldFont", 12, "Section 1.1", ref_body_size=10.0)
+        assert level == 2
+        assert heading == "Section 1.1"
+
+    def test_adaptive_heading_h3(self):
+        """H3 se detektuje sa 1.05x body."""
+        service = PDFService()
+        level, heading = service._detect_font_heading("BoldFont", 11, "Subsection", ref_body_size=10.0)
+        assert level == 3
+        assert heading == "Subsection"
+
+    def test_adaptive_heading_no_false_positive(self):
+        """Body text se ne detektuje kao heading."""
+        service = PDFService()
+        level, heading = service._detect_font_heading("RegularFont", 10, "This is normal body text", ref_body_size=10.0)
+        assert level == 0
+
+    def test_adaptive_heading_with_large_body(self):
+        """Kad je body text veci, threshold-i se skaliraju."""
+        service = PDFService()
+        # body = 14, H1 >= 18.9, H2 >= 16.1, H3 >= 14.7
+        level, heading = service._detect_font_heading("BoldFont", 19, "Big Chapter", ref_body_size=14.0)
+        assert level == 1
+        # Bold od 15: >= 14.7 (H3) ali < 16.1 (H2)
+        level2, _ = service._detect_font_heading("BoldFont", 15, "Small heading", ref_body_size=14.0)
+        assert level2 == 3
+
+    def test_backward_compat_without_ref_body(self):
+        """Bez ref_body_size, koristi stare hardcodovane threshold-e."""
+        service = PDFService()
+        level, heading = service._detect_font_heading("BoldFont", 14, "Chapter", ref_body_size=None)
+        assert level == 1
+
+    def test_detect_heading_with_ref_body(self):
+        """detect_heading prosledjuje ref_body_size u _detect_font_heading."""
+        service = PDFService()
+        level, heading = service.detect_heading("Section A", "BoldFont", 12, ref_body_size=10.0)
+        assert level == 2
+        assert heading == "Section A"
+
+
+class TestDeduplication:
+    """Testovi za deduplikaciju chunk-ova."""
+
+    def test_dedup_removes_exact_duplicates(self):
+        """Egzaktni duplikati body chunkova se uklanjaju."""
+        chunks = [
+            ChunkData(sequence_number=0, content="This is a chunk", token_count=10, heading_level=0),
+            ChunkData(sequence_number=1, content="This is a chunk", token_count=10, heading_level=0),
+        ]
+        result = PDFService._deduplicate_chunks(chunks)
+        assert len(result) == 1
+
+    def test_dedup_preserves_headings(self):
+        """Heading chunkovi se ne deduplikuju (namerno ponavljanje)."""
+        chunks = [
+            ChunkData(sequence_number=0, content="Chapter 1", token_count=5, heading_level=1),
+            ChunkData(sequence_number=1, content="Chapter 1", token_count=5, heading_level=1),
+        ]
+        result = PDFService._deduplicate_chunks(chunks)
+        assert len(result) == 2
+
+    def test_dedup_preserves_unique_body_chunks(self):
+        """Jedinstveni body chunkovi se čuvaju."""
+        chunks = [
+            ChunkData(sequence_number=0, content="First unique chunk content here", token_count=10, heading_level=0),
+            ChunkData(sequence_number=1, content="Second different chunk content here", token_count=10, heading_level=0),
+        ]
+        result = PDFService._deduplicate_chunks(chunks)
+        assert len(result) == 2
+
+    def test_dedup_normalizes_whitespace(self):
+        """Whitespace se normalizuje pre poređenja."""
+        chunks = [
+            ChunkData(sequence_number=0, content="This  is   a   chunk", token_count=10, heading_level=0),
+            ChunkData(sequence_number=1, content="This is a chunk", token_count=10, heading_level=0),
+        ]
+        result = PDFService._deduplicate_chunks(chunks)
+        assert len(result) == 1
+
+    def test_dedup_case_insensitive(self):
+        """Case-insensitive poređenje."""
+        chunks = [
+            ChunkData(sequence_number=0, content="This Is A Chunk", token_count=10, heading_level=0),
+            ChunkData(sequence_number=1, content="this is a chunk", token_count=10, heading_level=0),
+        ]
+        result = PDFService._deduplicate_chunks(chunks)
+        assert len(result) == 1
+
+    def test_dedup_empty_content(self):
+        """Prazan sadržaj se preskače."""
+        chunks = [
+            ChunkData(sequence_number=0, content="Valid content", token_count=10, heading_level=0),
+            ChunkData(sequence_number=1, content="", token_count=0, heading_level=0),
+            ChunkData(sequence_number=2, content="   ", token_count=0, heading_level=0),
+        ]
+        result = PDFService._deduplicate_chunks(chunks)
+        assert len(result) == 1
+
+    def test_dedup_mixed_heading_and_body(self):
+        """Mešani heading i body chunkovi."""
+        chunks = [
+            ChunkData(sequence_number=0, content="Chapter 1", token_count=3, heading_level=1),
+            ChunkData(sequence_number=1, content="Content of chapter one", token_count=10, heading_level=0),
+            ChunkData(sequence_number=2, content="Chapter 1", token_count=3, heading_level=1),
+            ChunkData(sequence_number=3, content="Content of chapter one", token_count=10, heading_level=0),
+        ]
+        result = PDFService._deduplicate_chunks(chunks)
+        assert len(result) == 3  # 2 headings (kept) + 1 body (deduped)
+
+
+class TestOCRPreprocessing:
+    """Testovi za OCR image preprocessing."""
+
+    def test_preprocess_grayscale_output(self):
+        """Izlaz je u grayscale modu (L)."""
+        from PIL import Image, ImageChops
+        img = Image.new("RGB", (100, 50), color=(200, 200, 200))
+        result = PDFService._preprocess_ocr_image(img)
+        assert result.mode == "L"
+
+    def test_preprocess_output_size(self):
+        """Dimenzije slike se ne menjaju."""
+        from PIL import Image
+        img = Image.new("RGB", (200, 100), color=(128, 128, 128))
+        result = PDFService._preprocess_ocr_image(img)
+        assert result.size == (200, 100)
+
+    def test_preprocess_grayscale_input(self):
+        """Grayscale ulaz se ne kvari."""
+        from PIL import Image
+        img = Image.new("L", (50, 50), color=100)
+        result = PDFService._preprocess_ocr_image(img)
+        assert result.mode == "L"
+
+    def test_preprocess_dark_image(self):
+        """Tamna slika ne crash-uje."""
+        from PIL import Image
+        img = Image.new("RGB", (100, 100), color=(10, 10, 10))
+        result = PDFService._preprocess_ocr_image(img)
+        assert result.mode == "L"
+
+    def test_preprocess_white_image(self):
+        """Bela slika ne crash-uje."""
+        from PIL import Image
+        img = Image.new("RGB", (100, 100), color=(255, 255, 255))
+        result = PDFService._preprocess_ocr_image(img)
+        assert result.mode == "L"
+
+
+class TestTableDetection:
+    """Testovi za detekciju tabela."""
+
+    def test_table_data_structure(self):
+        """Tabela ima ispravnu strukturu."""
+        import fitz
+        doc = fitz.open()
+        page = doc.new_page()
+        # Insert text so page has content
+        page.insert_text((50, 50), "Test table", fontsize=12)
+        result = PDFService()._detect_tables_on_page(page)
+        doc.close()
+        assert isinstance(result, list)
+
+    def test_table_on_empty_page(self):
+        """Prazna stranica vraca praznu listu."""
+        import fitz
+        doc = fitz.open()
+        page = doc.new_page()
+        result = PDFService()._detect_tables_on_page(page)
+        doc.close()
+        assert result == []
+
+    def test_detect_tables_on_pages_empty(self):
+        """detect_tables_on_pages na praznom dokumentu."""
+        import fitz
+        doc = fitz.open()
+        result = PDFService().detect_tables_on_pages(doc)
+        doc.close()
+        assert isinstance(result, dict)
+        assert len(result) == 0
+
+    def test_detect_tables_on_pages_specific(self):
+        """Detekcija na specificnim stranicama."""
+        import fitz
+        doc = fitz.open()
+        page = doc.new_page()
+        page.insert_text((50, 50), "Content", fontsize=12)
+        result = PDFService().detect_tables_on_pages(doc, page_numbers=[0])
+        doc.close()
+        assert isinstance(result, dict)
+        assert 0 in result or len(result) == 0
+
+    def test_detect_tables_on_pages_invalid_page(self):
+        """Invalidan broj stranice se preskace."""
+        import fitz
+        doc = fitz.open()
+        result = PDFService().detect_tables_on_pages(doc, page_numbers=[99])
+        doc.close()
+        assert result == {}
+
+
 class TestEdgeCases:
     """Testovi za edge cases."""
 
@@ -626,3 +871,84 @@ class TestEdgeCases:
         assert len(chunks) > 0
         assert any("English" in c.content for c in chunks)
         assert any("srpskom" in c.content for c in chunks)
+
+
+class TestSemanticChunking:
+    """Testovi za semantičko chunkovanje na rečeničnim granicama."""
+
+    def test_split_at_sentence_boundary_short_text(self):
+        """Kratak tekst se ne deli."""
+        service = PDFService(chunk_size=500)
+        text = "Ovo je kratak tekst."
+        parts = service._split_at_sentence_boundary(text, 100)
+        assert len(parts) == 1
+        assert parts[0][0] == text
+
+    def test_split_at_sentence_boundary_long_text(self):
+        """Dug tekst se deli na rečeničnim granicama."""
+        service = PDFService(chunk_size=50)
+        sentences = "Prva recenica. " * 5 + "Druga recenica. " * 5 + "Treca recenica. " * 5
+        parts = service._split_at_sentence_boundary(sentences, 60)
+        assert len(parts) >= 2
+        # Svaki deo osim poslednjeg treba da bude <= max_tokens
+        for part_text, part_tokens in parts:
+            assert part_tokens <= 60 * 1.5
+            assert len(part_text) > 0
+
+    def test_split_preserves_all_content(self):
+        """Sadržaj se ne gubi pri deljenju."""
+        service = PDFService(chunk_size=50)
+        sentences = "Prva recenica. " * 3 + "Druga recenica. " * 3 + "Treca recenica. " * 3
+        parts = service._split_at_sentence_boundary(sentences, 60)
+        combined = " ".join(p[0] for p in parts)
+        assert "Prva recenica" in combined
+        assert "Druga recenica" in combined
+        assert "Treca recenica" in combined
+
+    def test_no_split_within_sentence(self):
+        """Rečenice se ne smeju preseći."""
+        service = PDFService(chunk_size=50)
+        # Jedna duga rečenica - ne sme se preseći
+        text = "This is a single very long sentence that should not be split because sentence boundary splitting only happens at sentence ends. " * 2
+        text = text.strip()
+        if service.count_tokens(text) > 50:
+            parts = service._split_at_sentence_boundary(text, 50)
+            for part_text, _ in parts:
+                # Svaki deo mora da počne velikim slovom i završi se tačkom
+                assert part_text[0].isupper()
+                assert part_text.endswith(".")
+
+    def test_smart_chunk_with_fonts_oversized_paragraph(self):
+        """Oversized paragraph se deli na rečenične granice."""
+        service = PDFService(chunk_size=50)
+        paragraphs = [
+            {
+                "text": "Prva recenica. " * 20 + "Druga recenica. " * 20,
+                "font": "ArialMT",
+                "size": 10,
+                "is_bold": False,
+            }
+        ]
+        chunks = service.smart_chunk_with_fonts(paragraphs, page_number=1)
+        assert len(chunks) >= 2
+        for chunk in chunks:
+            assert chunk.token_count <= service.chunk_size * 1.5
+        # Ukupan sadržaj sačuvan
+        all_text = " ".join(c.content for c in chunks)
+        assert "Prva recenica" in all_text
+        assert "Druga recenica" in all_text
+
+    def test_smart_chunk_with_fonts_normal_paragraph(self):
+        """Normalan paragraph se ne deli."""
+        service = PDFService(chunk_size=500)
+        paragraphs = [
+            {
+                "text": "Ovo je normalan pasus koji staje u jedan chunk.",
+                "font": "ArialMT",
+                "size": 10,
+                "is_bold": False,
+            }
+        ]
+        chunks = service.smart_chunk_with_fonts(paragraphs)
+        assert len(chunks) == 1
+        assert "normalan pasus" in chunks[0].content
