@@ -286,8 +286,8 @@ async def complete_plan_item(
 
     if posthog_client:
         posthog_client.capture(
-            "study plan item completed",
             distinct_id=str(current_user.id),
+            event="study plan item completed",
             properties={
                 "quiz_id": str(item.quiz_id),
                 "priority": item.priority,

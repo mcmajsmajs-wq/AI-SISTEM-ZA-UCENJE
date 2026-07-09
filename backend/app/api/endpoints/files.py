@@ -132,8 +132,8 @@ async def upload_file(
 
     if posthog_client:
         posthog_client.capture(
-            "file uploaded",
             distinct_id=str(current_user.id),
+            event="file uploaded",
             properties={
                 "file_type": file_ext,
                 "file_size_kb": round(file_size / 1024, 1),
@@ -351,8 +351,8 @@ async def delete_file(
 
     if posthog_client:
         posthog_client.capture(
-            "file deleted",
             distinct_id=str(current_user.id),
+            event="file deleted",
             properties={"file_id": file_id},
         )
 

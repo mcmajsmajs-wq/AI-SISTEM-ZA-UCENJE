@@ -330,8 +330,8 @@ async def create_quiz(
 
     if posthog_client:
         posthog_client.capture(
-            "quiz created",
             distinct_id=str(current_user.id),
+            event="quiz created",
             properties={
                 "num_questions": data.num_questions,
                 "ai_provider": user_provider or "auto",
@@ -481,8 +481,8 @@ async def start_attempt(
 
     if posthog_client:
         posthog_client.capture(
-            "quiz attempt started",
             distinct_id=str(current_user.id),
+            event="quiz attempt started",
             properties={"quiz_id": quiz_id},
         )
 
@@ -574,7 +574,10 @@ async def submit_attempt(
     db.commit()
     db.refresh(attempt)
 
-    from app.services.gamification import award_xp, xp_for_quiz, xp_for_quiz_pass, update_streak, check_milestone_badges, check_streak_badges
+    from app.services.gamification import (
+        award_xp, xp_for_quiz, xp_for_quiz_pass,
+        update_streak, check_milestone_badges, check_streak_badges,
+    )
 
     try:
         update_streak(current_user, db)
@@ -593,8 +596,8 @@ async def submit_attempt(
 
     if posthog_client:
         posthog_client.capture(
-            "quiz attempt completed",
             distinct_id=str(current_user.id),
+            event="quiz attempt completed",
             properties={
                 "quiz_id": quiz_id,
                 "score": attempt.score,

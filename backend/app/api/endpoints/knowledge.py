@@ -103,8 +103,8 @@ async def query_knowledge(
 
     if posthog_client:
         posthog_client.capture(
-            "knowledge queried",
             distinct_id=str(current_user.id),
+            event="knowledge queried",
             properties={
                 "chunks_used": result.get("chunks_used", 0),
                 "top_k": body.top_k,
@@ -138,8 +138,8 @@ async def query_knowledge_tiered(
 
     if posthog_client:
         posthog_client.capture(
-            "knowledge tiered query",
             distinct_id=str(current_user.id),
+            event="knowledge tiered query",
             properties={
                 "chunks_used": result.get("chunks_used", 0),
                 "l0_used": result.get("l0_used", 0),
